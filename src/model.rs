@@ -158,6 +158,11 @@ impl<B: Backend> MinGRULM<B> {
             // Get previous hidden state for this layer if available
             let prev_hidden = hidden_states.as_ref()
                 .and_then(|states| states.get(idx).cloned());
+                
+            // Debug hidden state dimensions
+            if let Some(ref h) = prev_hidden {
+                println!("Layer {} prev_hidden shape: {:?}", idx, h.dims());
+            }
         
             // MinGRU with residual connection
             let x_norm = norm1.forward(x.clone());

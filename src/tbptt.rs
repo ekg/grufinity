@@ -173,8 +173,24 @@ fn process_batch<B: AutodiffBackend>(
         let chunk_input = batch.input.clone().slice([0..batch_size, start..end]);
         let chunk_target = batch.target.clone().slice([0..batch_size, start..end]);
         
+        // Debug tensor shapes
+        println!("Chunk input shape: {:?}", chunk_input.dims());
+        if let Some(ref hidden_states) = state.hidden_states {
+            println!("Hidden states count: {}", hidden_states.len());
+            if !hidden_states.is_empty() {
+                println!("Hidden state shape: {:?}", hidden_states[0].dims());
+            }
+        }
+        
         // Forward pass with hidden state passing
         let (logits, next_hidden_states) = state.model.forward(chunk_input.clone(), state.hidden_states.clone());
+        
+        // Debug output shapes
+        println!("Output logits shape: {:?}", logits.dims());
+        println!("Next hidden states count: {}", next_hidden_states.len());
+        if !next_hidden_states.is_empty() {
+            println!("Next hidden state shape: {:?}", next_hidden_states[0].dims());
+        }
         
         // Calculate loss
         let [batch_size, seq_len, vocab_size] = logits.dims();
