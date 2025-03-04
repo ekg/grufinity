@@ -4,13 +4,12 @@ use burn::{
     nn::loss::CrossEntropyLossConfig,
     optim::{Adam, AdamConfig, GradientsAccumulator},
     record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::{backend::AutodiffBackend, Tensor},
+    tensor::{backend::{AutodiffBackend, Backend}, Tensor},
     train::ClassificationOutput,
 };
 
 use crate::dataset::{CharVocab, TextBatcher, TextDataset};
 use crate::model::{MinGRULM, MinGRULMConfig, TextBatch};
-use crate::model::{MinGRULM, MinGRULMConfig};
 
 /// Configuration for TBPTT training
 #[derive(Config, Debug)]
@@ -62,7 +61,7 @@ struct TBPTTState<B: AutodiffBackend> {
     hidden_states: Option<Vec<Tensor<B, 2>>>,
     
     /// Gradient accumulator for TBPTT
-    grad_accumulator: GradientsAccumulator<MinGRULM<B>, B>,
+    grad_accumulator: GradientsAccumulator<MinGRULM<B>>,
     
     /// Current chunk in the sequence
     current_chunk: usize,
