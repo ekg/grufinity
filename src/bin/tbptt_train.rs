@@ -9,6 +9,7 @@ use grufinity::{
     model::MinGRULMConfig,
     dataset::CharVocab,
     tbptt::{TBPTTConfig, train_with_tbptt},
+    Module,
 };
 
 use std::fs;
