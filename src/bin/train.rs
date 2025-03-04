@@ -196,31 +196,7 @@ fn main() {
     
     println!("Training complete! Model saved to {}", model_path);
     
-    // Generate a sample using the trained model
-    let seed = "Hello";
-    let n_chars = 100;
-    println!("\nGenerating sample text with seed: '{}'", seed);
-    
-    let seed_tokens: Vec<i64> = seed.as_bytes()
-        .iter()
-        .map(|&b| b as i64)
-        .collect();
-    
-    if !seed_tokens.is_empty() {
-        let seed_tensor = Tensor::<WgpuBackend, 1, Int>::from_data(&*seed_tokens, &device).unsqueeze::<2>();
-        
-        // Generate text using the trained model
-        let model_valid = model_trained.valid();
-        let (generated_tokens, _) = model_valid.generate(seed_tensor, n_chars, 0.8, None);
-        
-        // Convert token IDs back to text
-        let reshaped = generated_tokens.clone().reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
-        let values: Vec<i32> = reshaped.to_data().into_vec().expect("Failed to convert tensor data to vector");
-        let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
-        
-        let generated_text = vocab.decode_text(&ids);
-        println!("Generated sample:\n{}", generated_text);
-    } else {
-        println!("Failed to tokenize seed text");
-    }
+    // NOTE: Sample generation disabled - use the generate binary instead
+    // To generate text with the trained model use:
+    // cargo run --release --bin generate -- --model artifacts_dir/model_final.bin --vocab artifacts_dir/vocab.txt
 }
