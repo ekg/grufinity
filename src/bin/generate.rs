@@ -125,7 +125,7 @@ fn main() {
     
     // Convert token IDs back to text
     let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
-    let values: Vec<i32> = reshaped.to_data().into_raw_vec();
+    let values: Vec<i32> = reshaped.to_data().into_vec();
     let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
     
     let generated_text = vocab.decode_text(&ids);
@@ -175,7 +175,7 @@ fn main() {
         
         // Convert token IDs back to text
         let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
-        let values: Vec<i32> = reshaped.to_data().into_raw_vec();
+        let values: Vec<i32> = reshaped.to_data().into_vec();
         let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
         
         let continuation = vocab.decode_text(&ids);
