@@ -1,0 +1,17 @@
+[package]
+name = "mingru"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+burn = { version = "0.16.0", features = ["ndarray", "wgpu", "train"] }
+rand = "0.8.5"
+indicatif = "0.17.0"
+
+[[bin]]
+name = "train"
+path = "src/bin/train.rs"
+
+[[bin]]
+name = "generate"
+path = "src/bin/generate.rs"
