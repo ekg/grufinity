@@ -6,7 +6,7 @@ use burn::{
 use grufinity::{
     model::MinGRULMConfig,
     dataset::CharVocab,
-    Config, Module,
+    Module,
 };
 
 type MyBackend = Wgpu<f32, i32>;
@@ -175,7 +175,7 @@ fn main() {
     
     // Convert to text
     println!("\nGenerated tokens:");
-    let reshaped = tokens.reshape([tokens.dims()[0] * tokens.dims()[1]]);
+    let reshaped = tokens.clone().reshape([tokens.dims()[0] * tokens.dims()[1]]);
     let values: Vec<i32> = reshaped.to_data().into_vec().unwrap();
     let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
     
