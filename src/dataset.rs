@@ -273,24 +273,41 @@ impl<B: Backend> Batcher<(String, String), TextBatch<B>> for TextBatcher<B> {
             };
         }
         
-        // Convert strings to token indices
+        // Find the maximum sequence length we'll use for all items
+        let sequence_length = items[0].0.len();
+        
+        // Convert strings to token indices with uniform length
         let mut inputs = Vec::with_capacity(items.len());
         let mut targets = Vec::with_capacity(items.len());
         
         for (input_str, target_str) in items {
-            let input_indices: Vec<i64> = input_str.chars()
-                .filter_map(|c| self.vocab.char_to_index(c).map(|idx| idx as i64))
+            // Process input sequence
+            let input_indices: Vec<i64> = input_str.as_bytes()
+                .iter()
+                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
                 .collect();
             
-            let target_indices: Vec<i64> = target_str.chars()
-                .filter_map(|c| self.vocab.char_to_index(c).map(|idx| idx as i64))
+            // Process target sequence
+            let target_indices: Vec<i64> = target_str.as_bytes()
+                .iter()
+                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
                 .collect();
-                
-            inputs.push(Tensor::<B, 1, Int>::from_data(input_indices.as_slice(), &self.device));
-            targets.push(Tensor::<B, 1, Int>::from_data(target_indices.as_slice(), &self.device));
+            
+            // Ensure all sequences have the same length by padding or truncating
+            let mut padded_input = Vec::with_capacity(sequence_length);
+            let mut padded_target = Vec::with_capacity(sequence_length);
+            
+            // Fill with valid indices (truncate if too long, pad with 0 if too short)
+            for i in 0..sequence_length {
+                padded_input.push(if i < input_indices.len() { input_indices[i] } else { 0 });
+                padded_target.push(if i < target_indices.len() { target_indices[i] } else { 0 });
+            }
+            
+            inputs.push(Tensor::<B, 1, Int>::from_data(&padded_input, &self.device));
+            targets.push(Tensor::<B, 1, Int>::from_data(&padded_target, &self.device));
         }
         
-        // Batch tensors
+        // Batch tensors (now all have the same shape)
         let input = Tensor::stack(inputs, 0);
         let target = Tensor::stack(targets, 0);
         
@@ -339,7 +356,14 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
         let chunk_indices: Vec<_> = items.iter().map(|chunk| chunk.chunk_idx).collect();
         let is_last_chunks: Vec<_> = items.iter().map(|chunk| chunk.is_last_chunk).collect();
         
-        // Convert strings to token indices
+        // Find maximum sequence length for this batch
+        // Each chunk should ideally have the same length, but let's be safe
+        let max_seq_len = items.iter()
+            .map(|chunk| chunk.text.len().saturating_sub(1))
+            .max()
+            .unwrap_or(0);
+        
+        // Convert strings to token indices with uniform length
         let mut inputs = Vec::with_capacity(items.len());
         let mut targets = Vec::with_capacity(items.len());
         
@@ -360,12 +384,21 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
             let target_indices: Vec<i64> = target_bytes.iter()
                 .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
                 .collect();
-                
-            inputs.push(Tensor::<B, 1, Int>::from_data(input_indices.as_slice(), &self.device));
-            targets.push(Tensor::<B, 1, Int>::from_data(target_indices.as_slice(), &self.device));
+            
+            // Create padded vectors with consistent length
+            let mut padded_input = Vec::with_capacity(max_seq_len);
+            let mut padded_target = Vec::with_capacity(max_seq_len);
+            
+            for i in 0..max_seq_len {
+                padded_input.push(if i < input_indices.len() { input_indices[i] } else { 0 });
+                padded_target.push(if i < target_indices.len() { target_indices[i] } else { 0 });
+            }
+            
+            inputs.push(Tensor::<B, 1, Int>::from_data(&padded_input, &self.device));
+            targets.push(Tensor::<B, 1, Int>::from_data(&padded_target, &self.device));
         }
         
-        // Batch tensors
+        // Batch tensors (now all have the same shape)
         let input = Tensor::stack(inputs, 0);
         let target = Tensor::stack(targets, 0);
         
