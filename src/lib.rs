@@ -1,7 +1,7 @@
-mod parallel_scan;
-mod mingru;
-mod model;
-mod dataset;
+pub mod parallel_scan;
+pub mod mingru;
+pub mod model;
+pub mod dataset;
 
 pub use parallel_scan::*;
 pub use mingru::*;

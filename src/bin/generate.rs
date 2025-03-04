@@ -1,18 +1,13 @@
 use burn::{
-    config::Config,
     record::{BinFileRecorder, FullPrecisionSettings, Recorder},
-    tensor::{backend::Backend, Tensor, Int},
-    module::Module,
+    tensor::{Tensor, Int},
     backend::wgpu::{Wgpu, WgpuDevice},
 };
 use mingru::{
     model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
 };
-use std::{
-    fs,
-    path::Path,
-};
+use std::fs;
 
 type MyBackend = Wgpu<f32, i32>;
 
@@ -127,7 +122,7 @@ fn main() {
     println!("Temperature: {}", temperature);
     
     // Process seed text in chunks for long-context support
-    let seed_tensor = Tensor::<MyBackend, 1, Int>::from_data(&seed_tokens, &device).unsqueeze::<2>();
+    let seed_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*seed_tokens, &device).unsqueeze::<2>();
     
     // Generate text
     let (generated_tokens, _) = model.generate(seed_tensor, num_chars, temperature, None);
@@ -166,7 +161,7 @@ fn main() {
             continue;
         }
         
-        let chunk_tensor = Tensor::<MyBackend, 1, Int>::from_data(&chunk_tokens, &device).unsqueeze::<2>();
+        let chunk_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*chunk_tokens, &device).unsqueeze::<2>();
         let (_, next_hidden) = model.forward(chunk_tensor, hidden_states);
         hidden_states = Some(next_hidden);
         
@@ -181,7 +176,7 @@ fn main() {
         .collect();
     
     if !last_tokens.is_empty() {
-        let last_tensor = Tensor::<MyBackend, 1, Int>::from_data(&last_tokens, &device).unsqueeze::<2>();
+        let last_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*last_tokens, &device).unsqueeze::<2>();
         
         // Generate continuing from the long context
         let (generated_tokens, _) = model.generate(last_tensor, 100, temperature, hidden_states);

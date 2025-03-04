@@ -1,14 +1,12 @@
 use burn::{
     config::Config,
-    data::{dataloader::{DataLoaderBuilder, batcher::Batcher}, dataset::Dataset},
-    optim::{AdamConfig, GradientsParams},
-    record::{BinFileRecorder, FullPrecisionSettings, Recorder},
-    tensor::{backend::Backend, Tensor, backend::AutodiffBackend, Int},
-    train::{LearnerBuilder, ClassificationOutput, TrainOutput, TrainStep, ValidStep, metric::{LossMetric}},
-    module::Module,
+    data::dataloader::DataLoaderBuilder,
+    optim::AdamConfig,
+    record::{BinFileRecorder, FullPrecisionSettings},
+    tensor::{backend::Backend, Tensor, Int},
+    train::{LearnerBuilder, metric::LossMetric},
     backend::wgpu::{Wgpu, WgpuDevice},
     backend::autodiff::Autodiff,
-    nn::loss::CrossEntropyLossConfig,
 };
 use mingru::{
     model::{MinGRULMConfig, MinGRULM, TextBatch, MinGRULM, TextBatch},
@@ -16,10 +14,9 @@ use mingru::{
 };
 use std::{
     fs,
-    path::{Path, PathBuf},
     time::Instant,
 };
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif;
 
 type WgpuBackend = Wgpu<f32, i32>;
 type MyBackend = Autodiff<WgpuBackend>;
@@ -207,7 +204,7 @@ fn main() {
         .collect();
     
     if !seed_tokens.is_empty() {
-        let seed_tensor = Tensor::<WgpuBackend, 1, Int>::from_data(&seed_tokens, &device).unsqueeze::<2>();
+        let seed_tensor = Tensor::<WgpuBackend, 1, Int>::from_data(&*seed_tokens, &device).unsqueeze::<2>();
         
         // Generate text using the trained model
         let model_valid = model_trained.valid();
