@@ -2,10 +2,9 @@ use burn::{
     config::Config,
     module::Module,
     nn::loss::CrossEntropyLossConfig,
-    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
-    optim::adaptor::OptimizerAdaptor,
+    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams},
     record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::{backend::{AutodiffBackend, Backend}, Tensor},
+    tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::ClassificationOutput,
 };
 
@@ -90,9 +89,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
-    let optimizer = Adam::new(
-        config.optimizer.init()
-    );
+    let optimizer = config.optimizer.init();
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
@@ -188,8 +185,8 @@ fn process_batch<B: AutodiffBackend>(
         let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
         // Convert scalar to f32 (works with any backend's float type)
         let scalar_value = loss.clone().into_scalar();
-        // Use a safe way to convert to f32 without direct casting
-        let loss_value = scalar_value.to_f32().unwrap_or(0.0);
+        // Use ToElement trait to safely convert to f32
+        let loss_value = scalar_value.to_f32();
         total_loss += loss_value;
         
         // Create output for gradient calculation
@@ -210,8 +207,7 @@ fn process_batch<B: AutodiffBackend>(
         // Update model if we've accumulated enough chunks
         if state.current_chunk >= state.tbptt_chunks {
             let acc_grads = state.grad_accumulator.grads();
-            state.model = Optimizer::step(
-                &mut state.optimizer,
+            state.model = state.optimizer.step(
                 state.learning_rate,
                 state.model.clone(),
                 acc_grads
