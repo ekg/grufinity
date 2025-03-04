@@ -12,13 +12,64 @@ use grufinity::{
 type MyBackend = Wgpu<f32, i32>;
 
 fn main() {
-    // Parse arguments (simplified)
-    let model_path = "out.small/model_final.bin";
-    let vocab_path = "out.small/vocab.txt";
-    let seed_text = "Hello world";
-    let num_chars = 50;
-    let temperature = 0.8;
-    let config_path = "out.small/config.json";
+    // Parse command-line arguments
+    let args: Vec<String> = std::env::args().collect();
+    
+    // Default values
+    let mut model_path = String::from("out.small/model_final.bin");
+    let mut vocab_path = String::from("out.small/vocab.txt");
+    let mut seed_text = String::from("Hello world");
+    let mut num_chars = 50;
+    let mut temperature = 0.8;
+    let mut config_path = String::from("out.small/config.json");
+    
+    // Parse arguments
+    for i in 1..args.len() {
+        match args[i].as_str() {
+            "--model" => {
+                if i + 1 < args.len() {
+                    model_path = args[i + 1].clone();
+                    
+                    // Extract directory from model path for vocab and config
+                    if let Some(last_slash) = model_path.rfind('/') {
+                        let dir = &model_path[..last_slash];
+                        vocab_path = format!("{}/vocab.txt", dir);
+                        config_path = format!("{}/config.json", dir);
+                    }
+                }
+            },
+            "--vocab" => {
+                if i + 1 < args.len() {
+                    vocab_path = args[i + 1].clone();
+                }
+            },
+            "--seed" => {
+                if i + 1 < args.len() {
+                    seed_text = args[i + 1].clone();
+                }
+            },
+            "--length" => {
+                if i + 1 < args.len() {
+                    if let Ok(n) = args[i + 1].parse() {
+                        num_chars = n;
+                    }
+                }
+            },
+            "--temperature" => {
+                if i + 1 < args.len() {
+                    if let Ok(t) = args[i + 1].parse() {
+                        temperature = t;
+                    }
+                }
+            },
+            "--config" => {
+                if i + 1 < args.len() {
+                    config_path = args[i + 1].clone();
+                }
+            },
+            _ => {}
+        }
+    }
     
     // Use the GPU-capable backend
     let device = WgpuDevice::default();
