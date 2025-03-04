@@ -55,7 +55,7 @@ struct TBPTTState<B: AutodiffBackend> {
     model: MinGRULM<B>,
     
     /// The optimizer
-    optimizer: Adam,
+    optimizer: OptimizerAdaptor<Adam, MinGRULM<B>, B>,
     
     /// Hidden states carried between chunks
     hidden_states: Option<Vec<Tensor<B, 2>>>,
@@ -89,7 +89,10 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
-    let optimizer = config.optimizer.init();
+    let optimizer = burn::optim::adaptor::OptimizerAdaptor::new(
+        config.optimizer.init(), 
+        &model
+    );
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
@@ -185,7 +188,7 @@ fn process_batch<B: AutodiffBackend>(
         let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
         // Convert scalar to f32 (works with any backend's float type)
         let scalar_value = loss.clone().into_scalar();
-        total_loss += f32::from(scalar_value);
+        total_loss += scalar_value as f32;
         
         // Create output for gradient calculation
         let output = ClassificationOutput::new(loss.clone(), logits_reshaped, targets_reshaped);
@@ -206,10 +209,10 @@ fn process_batch<B: AutodiffBackend>(
         if state.current_chunk >= state.tbptt_chunks {
             let acc_grads = state.grad_accumulator.grads();
             state.model = Optimizer::step(
-                &state.optimizer,
+                &mut state.optimizer,
                 state.learning_rate,
                 state.model.clone(),
-                &acc_grads
+                acc_grads
             );
             state.grad_accumulator = GradientsAccumulator::new();
             state.current_chunk = 0;
