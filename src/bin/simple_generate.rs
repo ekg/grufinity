@@ -23,6 +23,10 @@ fn main() {
     // Use the GPU-capable backend
     let device = WgpuDevice::default();
     
+    println!("Model path: {}", model_path);
+    println!("Vocab path: {}", vocab_path);
+    println!("Config path: {}", config_path);
+    
     // Load vocabulary
     let mut vocab = CharVocab::new();
     match vocab.load_from_file(&vocab_path) {

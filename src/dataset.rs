@@ -32,7 +32,7 @@ impl CharVocab {
         self.idx_to_byte.get(&idx).copied()
     }
 
-    pub fn build_from_text(&mut self, text: &str) {
+    pub fn build_from_text(&mut self, _text: &str) {
         // Use all 256 possible byte values for a true byte-level model
         for i in 0..=255u8 {
             self.byte_to_idx.insert(i, i as usize);
