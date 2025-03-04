@@ -19,3 +19,7 @@ path = "src/bin/generate.rs"
 [[bin]]
 name = "simple_generate"
 path = "src/bin/simple_generate.rs"
+
+[[bin]]
+name = "debug_generate"
+path = "src/bin/debug_generate.rs"
