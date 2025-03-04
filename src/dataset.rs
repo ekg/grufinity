@@ -33,16 +33,12 @@ impl CharVocab {
     }
 
     pub fn build_from_text(&mut self, text: &str) {
-        let bytes = text.as_bytes();
-        let mut unique_bytes = bytes.to_vec();
-        unique_bytes.sort_unstable();
-        unique_bytes.dedup();
-        
-        for (i, &b) in unique_bytes.iter().enumerate() {
-            self.byte_to_idx.insert(b, i);
-            self.idx_to_byte.insert(i, b);
+        // Use all 256 possible byte values for a true byte-level model
+        for i in 0..=255u8 {
+            self.byte_to_idx.insert(i, i as usize);
+            self.idx_to_byte.insert(i as usize, i);
         }
-        self.size = self.byte_to_idx.len();
+        self.size = 256; // Fixed size for all possible bytes
     }
 
     pub fn char_to_index(&self, c: char) -> Option<usize> {
@@ -64,7 +60,7 @@ impl CharVocab {
     pub fn encode_text(&self, text: &str) -> Vec<usize> {
         text.as_bytes()
             .iter()
-            .filter_map(|&b| self.byte_to_idx.get(&b).copied())
+            .map(|&b| b as usize)
             .collect()
     }
     
@@ -72,7 +68,7 @@ impl CharVocab {
         // Convert indices to bytes and then to a valid UTF-8 string
         // If any bytes are invalid UTF-8, they'll be replaced with the replacement character
         let bytes: Vec<u8> = indices.iter()
-            .filter_map(|&idx| self.idx_to_byte.get(&idx).copied())
+            .map(|&idx| idx.min(255) as u8)
             .collect();
         
         String::from_utf8_lossy(&bytes).into_owned()
@@ -281,16 +277,16 @@ impl<B: Backend> Batcher<(String, String), TextBatch<B>> for TextBatcher<B> {
         let mut targets = Vec::with_capacity(items.len());
         
         for (input_str, target_str) in items {
-            // Process input sequence
+            // Process input sequence - direct byte to index mapping
             let input_indices: Vec<i64> = input_str.as_bytes()
                 .iter()
-                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
+                .map(|&b| b as i64)
                 .collect();
             
-            // Process target sequence
+            // Process target sequence - direct byte to index mapping
             let target_indices: Vec<i64> = target_str.as_bytes()
                 .iter()
-                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
+                .map(|&b| b as i64)
                 .collect();
             
             // Ensure all sequences have the same length by padding or truncating
@@ -378,11 +374,11 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
             let target_bytes = &bytes[1..];
             
             let input_indices: Vec<i64> = input_bytes.iter()
-                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
+                .map(|&b| b as i64)
                 .collect();
             
             let target_indices: Vec<i64> = target_bytes.iter()
-                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
+                .map(|&b| b as i64)
                 .collect();
             
             // Create padded vectors with consistent length

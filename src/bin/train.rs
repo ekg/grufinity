@@ -94,7 +94,7 @@ fn main() {
     
     // Configure the model and training
     let model_config = MinGRULMConfig::new(
-        vocab.size(),  // num_tokens
+        256,           // num_tokens (all possible byte values)
         96             // dimension (reduced from 256)
     )
     .with_depth(2)     // reduced from 3
@@ -203,7 +203,7 @@ fn main() {
     
     let seed_tokens: Vec<i64> = seed.as_bytes()
         .iter()
-        .filter_map(|&b| vocab.byte_to_index(b).map(|idx| idx as i64))
+        .map(|&b| b as i64)
         .collect();
     
     if !seed_tokens.is_empty() {

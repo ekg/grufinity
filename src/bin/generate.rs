@@ -81,7 +81,7 @@ fn main() {
         Err(e) => {
             eprintln!("Failed to load model config: {}", e);
             // Create a default config
-            MinGRULMConfig::new(vocab.size(), 96)
+            MinGRULMConfig::new(256, 96)
                 .with_depth(2)
                 .with_ff_mult(2.0)
                 .with_expansion_factor(1.2)
@@ -105,10 +105,10 @@ fn main() {
         }
     }
     
-    // Encode seed text to tokens
+    // Encode seed text to tokens - direct byte mapping
     let seed_tokens: Vec<i64> = seed_text.as_bytes()
         .iter()
-        .filter_map(|&b| vocab.byte_to_index(b).map(|idx| idx as i64))
+        .map(|&b| b as i64)
         .collect();
     
     if seed_tokens.is_empty() {
@@ -147,8 +147,9 @@ fn main() {
         let end = (i + chunk_size).min(current_text.len());
         let chunk = &current_text[i..end];
         
-        let chunk_tokens: Vec<i64> = chunk.chars()
-            .filter_map(|c| vocab.char_to_index(c).map(|idx| idx as i64))
+        let chunk_tokens: Vec<i64> = chunk.as_bytes()
+            .iter()
+            .map(|&b| b as i64)
             .collect();
         
         if chunk_tokens.is_empty() {
@@ -165,8 +166,9 @@ fn main() {
     // Now generate with the accumulated hidden state
     let last_chunk = &current_text[current_text.len().saturating_sub(10)..];
     
-    let last_tokens: Vec<i64> = last_chunk.chars()
-        .filter_map(|c| vocab.char_to_index(c).map(|idx| idx as i64))
+    let last_tokens: Vec<i64> = last_chunk.as_bytes()
+        .iter()
+        .map(|&b| b as i64)
         .collect();
     
     if !last_tokens.is_empty() {
