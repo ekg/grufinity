@@ -1,4 +1,5 @@
 use std::{collections::HashMap, path::Path, fs::File, io::{self, BufRead, BufReader, Write}};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use burn::{
     data::{dataloader::batcher::Batcher, dataset::Dataset},
     tensor::{backend::Backend, Int, Tensor},
@@ -109,16 +110,70 @@ impl CharVocab {
 pub struct TextDataset {
     text: String,
     sequence_length: usize,
-    step_size: usize,
+    start_positions: Vec<usize>,
     chunk_size: usize, // For long context processing
 }
 
 impl TextDataset {
+    /// Legacy constructor with fixed step size (for backward compatibility)
     pub fn new(text: String, sequence_length: usize, step_size: usize, chunk_size: usize) -> Self {
+        // Generate start positions using the old method
+        let bytes = text.as_bytes();
+        let num_positions = if bytes.len() <= sequence_length {
+            0
+        } else {
+            (bytes.len() - sequence_length - 1) / step_size + 1
+        };
+        
+        let mut start_positions = Vec::with_capacity(num_positions);
+        for i in 0..num_positions {
+            start_positions.push(i * step_size);
+        }
+        
         Self {
             text,
             sequence_length,
-            step_size,
+            start_positions,
+            chunk_size,
+        }
+    }
+    
+    /// New constructor with random sampling for better coverage
+    pub fn new_with_random_sampling(
+        text: String, 
+        sequence_length: usize, 
+        coverage_factor: f64, 
+        seed: u64,
+        chunk_size: usize
+    ) -> Self {
+        let bytes = text.as_bytes();
+        if bytes.len() <= sequence_length {
+            return Self {
+                text,
+                sequence_length,
+                start_positions: Vec::new(),
+                chunk_size,
+            };
+        }
+        
+        // Determine number of samples based on coverage
+        let valid_range = bytes.len() - sequence_length;
+        let num_samples = (valid_range as f64 * coverage_factor).max(1.0) as usize;
+        
+        // Initialize RNG with seed for reproducibility
+        let mut rng = StdRng::seed_from_u64(seed);
+        
+        // Generate random start positions
+        let mut start_positions = Vec::with_capacity(num_samples);
+        for _ in 0..num_samples {
+            let pos = rng.gen_range(0..valid_range);
+            start_positions.push(pos);
+        }
+        
+        Self {
+            text,
+            sequence_length,
+            start_positions,
             chunk_size,
         }
     }
@@ -160,8 +215,12 @@ impl TextDataset {
 
 impl Dataset<(String, String)> for TextDataset {
     fn get(&self, index: usize) -> Option<(String, String)> {
+        if index >= self.start_positions.len() {
+            return None;
+        }
+        
+        let start_idx = self.start_positions[index];
         let bytes = self.text.as_bytes();
-        let start_idx = index * self.step_size;
         
         if start_idx + self.sequence_length + 1 > bytes.len() {
             return None;
@@ -179,11 +238,7 @@ impl Dataset<(String, String)> for TextDataset {
     }
     
     fn len(&self) -> usize {
-        let bytes = self.text.as_bytes();
-        if bytes.len() <= self.sequence_length {
-            return 0;
-        }
-        (bytes.len() - self.sequence_length - 1) / self.step_size + 1
+        self.start_positions.len()
     }
 }
 

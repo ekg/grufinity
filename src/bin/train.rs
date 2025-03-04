@@ -41,6 +41,8 @@ struct TrainingConfig {
     step_size: usize,
     #[config(default = "256")]
     chunk_size: usize,
+    #[config(default = "0.5")]
+    coverage_factor: f64,
     
     model: MinGRULMConfig,
     optimizer: AdamConfig,
@@ -122,31 +124,32 @@ fn main() {
              config.sequence_length, config.step_size);
     println!("Vocabulary size: {}", vocab.size());
     
-    // Set up the dataset
-    let dataset = TextDataset::new(
+    // Set up the dataset with random sampling
+    let dataset = TextDataset::new_with_random_sampling(
         text.clone(),
         config.sequence_length,
-        config.step_size,
+        config.coverage_factor,
+        config.seed,
         config.chunk_size,
     );
     
     println!("Dataset size: {} sequences", dataset.len());
+    println!("Using random sampling with coverage factor: {}", config.coverage_factor);
     
-    // Create training and validation splits (80/20)
-    let dataset_len = dataset.len();
-    let _train_len = (dataset_len as f64 * 0.8) as usize;
-    
-    let train_dataset = TextDataset::new(
+    // Create training and validation splits with different seeds
+    let train_dataset = TextDataset::new_with_random_sampling(
         text.clone(),
         config.sequence_length,
-        config.step_size,
+        config.coverage_factor,
+        config.seed,
         config.chunk_size,
     );
     
-    let valid_dataset = TextDataset::new(
+    let valid_dataset = TextDataset::new_with_random_sampling(
         text,
         config.sequence_length,
-        config.step_size,
+        config.coverage_factor / 5.0, // Less coverage for validation
+        config.seed + 1, // Different seed for validation
         config.chunk_size,
     );
     
