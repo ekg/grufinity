@@ -20,3 +20,7 @@ path = "src/bin/generate.rs"
 name = "simple_generate"
 path = "src/bin/simple_generate.rs"
 
+[[bin]]
+name = "tbptt_train"
+path = "src/bin/tbptt_train.rs"
+
