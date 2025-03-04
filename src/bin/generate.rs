@@ -124,7 +124,7 @@ fn main() {
     let (generated_tokens, _) = model.generate(seed_tensor, num_chars, temperature, None);
     
     // Convert token IDs back to text
-    let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
+    let reshaped = generated_tokens.clone().reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
     let values: Vec<i32> = reshaped.to_data().into_vec().expect("Failed to convert tensor data to vector");
     let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
     
@@ -136,7 +136,7 @@ fn main() {
     println!("\nDemonstrating long-context generation with hidden state passing:");
     let long_text = "This is a demonstration of long-context generation. The MinGRU model will pass hidden states between chunks, allowing it to maintain coherence across arbitrary sequence lengths. Let's see how well it can generate text while maintaining the context from earlier portions.";
     
-    let mut current_text = long_text.to_string();
+    let current_text = long_text.to_string();
     let mut hidden_states = None;
     
     // Process initial text in chunks
@@ -174,7 +174,7 @@ fn main() {
         let (generated_tokens, _) = model.generate(last_tensor, 100, temperature, hidden_states);
         
         // Convert token IDs back to text
-        let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
+        let reshaped = generated_tokens.clone().reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
         let values: Vec<i32> = reshaped.to_data().into_vec().expect("Failed to convert tensor data to vector");
         let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
         

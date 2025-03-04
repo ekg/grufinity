@@ -133,7 +133,7 @@ fn main() {
     
     // Create training and validation splits (80/20)
     let dataset_len = dataset.len();
-    let train_len = (dataset_len as f64 * 0.8) as usize;
+    let _train_len = (dataset_len as f64 * 0.8) as usize;
     
     let train_dataset = TextDataset::new(
         text.clone(),
@@ -212,7 +212,7 @@ fn main() {
         let (generated_tokens, _) = model_valid.generate(seed_tensor, n_chars, 0.8, None);
         
         // Convert token IDs back to text
-        let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
+        let reshaped = generated_tokens.clone().reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
         let values: Vec<i32> = reshaped.to_data().into_vec().expect("Failed to convert tensor data to vector");
         let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
         
