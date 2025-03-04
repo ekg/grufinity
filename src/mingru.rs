@@ -123,10 +123,10 @@ impl<B: Backend> MinGRU<B> {
     /// Forward pass in parallel mode using associative scan
     fn forward_parallel(&self, hidden: Tensor<B, 3>, gate: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> Tensor<B, 3> {
         // Log-space coefficients: log(1 - z_t)
-        let log_coeffs = -activation::softplus(gate.clone());
+        let log_coeffs = -activation::softplus(gate.clone(), 1.0);
         
         // Log-space values: log(z_t) + log(g(h_tilde))
-        let log_z = -activation::softplus(-gate);
+        let log_z = -activation::softplus(-gate, 1.0);
         let log_tilde_h = self.log_g_function(hidden);
         let log_values = log_z + log_tilde_h;
         
@@ -153,7 +153,7 @@ impl<B: Backend> MinGRU<B> {
         let x_negative = x.clone().lower(zeros).float();
         
         let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
-        let log_g_neg = -activation::softplus(-x);
+        let log_g_neg = -activation::softplus(-x, 1.0);
         
         (x_positive * log_g_pos) + (x_negative * log_g_neg)
     }

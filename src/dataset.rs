@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path, fs::File, io::{self, BufRead, BufReader, Write}};
 use burn::{
     data::{dataloader::batcher::Batcher, dataset::Dataset},
-    tensor::{backend::Backend, ElementConversion, Int, Tensor},
+    tensor::{backend::Backend, Int, Tensor},
 };
 use crate::model::TextBatch;
 

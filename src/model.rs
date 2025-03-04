@@ -133,7 +133,7 @@ impl<B: Backend> MinGRULM<B> {
         x: Tensor<B, 2, Int>, 
         hidden_states: Option<Vec<Tensor<B, 2>>>
     ) -> (Tensor<B, 3>, Vec<Tensor<B, 2>>) {
-        let [batch_size, seq_len] = x.dims();
+        let [_batch_size, seq_len] = x.dims();
     
         // Embed tokens
         let mut x = self.token_emb.forward(x);
@@ -180,7 +180,7 @@ impl<B: Backend> MinGRULM<B> {
     /// Process a sequence in chunks, carrying hidden states between chunks
     fn forward_chunked(&self, x: Tensor<B, 3>) -> (Tensor<B, 3>, Vec<Tensor<B, 2>>) {
         let [batch_size, seq_len, _] = x.dims();
-        let device = x.device();
+        let _device = x.device();
         
         // Calculate number of chunks
         let num_chunks = (seq_len + self.chunk_size - 1) / self.chunk_size;
@@ -287,7 +287,7 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Sample next token from logits with temperature
     fn sample_token(&self, logits: Tensor<B, 3>, temperature: f64) -> Tensor<B, 1, Int> {
-        let device = logits.device();
+        let _device = logits.device();
         let [batch_size, seq_len, vocab_size] = logits.dims();
         
         // Get logits for last position
