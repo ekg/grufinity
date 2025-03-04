@@ -129,7 +129,7 @@ fn main() {
         .to_data()
         .as_slice()
         .iter()
-        .map(|&x| x as i64 as usize)
+        .map(|x| *x as usize)
         .collect();
     
     let generated_text = vocab.decode_text(&ids);
@@ -183,7 +183,7 @@ fn main() {
             .to_data()
             .as_slice()
             .iter()
-            .map(|&x| x as i64 as usize)
+            .map(|x| *x as usize)
             .collect();
         
         let continuation = vocab.decode_text(&ids);
