@@ -54,6 +54,7 @@ fn main() {
     // Default values
     let mut data_path = "data/sample.txt".to_string();
     let mut artifact_dir = "mingru_artifacts".to_string();
+    let mut config_path = "".to_string();
     
     // Parse arguments
     for i in 1..args.len() {
@@ -66,6 +67,11 @@ fn main() {
             "--output" => {
                 if i + 1 < args.len() {
                     artifact_dir = args[i + 1].clone();
+                }
+            },
+            "--config" => {
+                if i + 1 < args.len() {
+                    config_path = args[i + 1].clone();
                 }
             },
             _ => {}
@@ -94,26 +100,20 @@ fn main() {
     vocab.save_to_file(&vocab_path).expect("Failed to save vocabulary");
     
     // Configure the model and training
-    let model_config = MinGRULMConfig::new(
-        256,           // num_tokens (all possible byte values)
-        96             // dimension (reduced from 256)
-    )
-    .with_depth(2)     // reduced from 3
-    .with_ff_mult(2.0) // reduced from 4.0
-    .with_expansion_factor(1.2) // reduced from 1.5
-    .with_chunk_size(256);
-    
-    let optimizer_config = AdamConfig::new();
-    
-    let config = TrainingConfig::new(
-        model_config,
-        optimizer_config,
-    )
-    .with_sequence_length(128)
-    .with_step_size(3)
-    .with_batch_size(32)
-    .with_num_epochs(10)
-    .with_learning_rate(1e-3);
+    let config = if !config_path.is_empty() {
+        match TrainingConfig::load(&config_path) {
+            Ok(cfg) => {
+                println!("Loaded configuration from {}", config_path);
+                cfg
+            },
+            Err(e) => {
+                println!("Error loading config: {}. Using default.", e);
+                create_default_config()
+            }
+        }
+    } else {
+        create_default_config()
+    };
     
     // Save config for reproducibility
     config.save(format!("{}/config.json", artifact_dir))
@@ -201,4 +201,28 @@ fn main() {
     // NOTE: Sample generation disabled - use the generate binary instead
     // To generate text with the trained model use:
     // cargo run --release --bin generate -- --model artifacts_dir/model_final.bin --vocab artifacts_dir/vocab.txt
+}
+
+fn create_default_config() -> TrainingConfig {
+    // Configure the model
+    let model_config = MinGRULMConfig::new(
+        256,           // num_tokens (all possible byte values)
+        96             // dimension (reduced from 256)
+    )
+    .with_depth(2)     // reduced from 3
+    .with_ff_mult(2.0) // reduced from 4.0
+    .with_expansion_factor(1.2) // reduced from 1.5
+    .with_chunk_size(256);
+    
+    let optimizer_config = AdamConfig::new();
+    
+    TrainingConfig::new(
+        model_config,
+        optimizer_config,
+    )
+    .with_sequence_length(128)
+    .with_step_size(3)
+    .with_batch_size(32)
+    .with_num_epochs(10)
+    .with_learning_rate(1e-3)
 }
