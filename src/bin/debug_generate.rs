@@ -149,7 +149,7 @@ fn main() {
         
         // Squeeze out the sequence dimension
         println!("Squeezing sequence dimension...");
-        let squeezed_logits = last_pos_logits.squeeze(1);
+        let squeezed_logits = last_pos_logits.squeeze::<2>(1);
         println!("Squeezed logits shape: {:?}", squeezed_logits.dims());
         
         // Apply softmax
@@ -164,7 +164,7 @@ fn main() {
         
         // Add sequence dimension back
         println!("Unsqueezing next token...");
-        let next_token_2d = next_token.unsqueeze();
+        let next_token_2d = next_token.unsqueeze::<2>();
         println!("Next token 2D shape: {:?}", next_token_2d.dims());
         
         // Concatenate

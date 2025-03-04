@@ -308,7 +308,7 @@ impl<B: Backend> MinGRULM<B> {
         }
         
         // Get logits for last position
-        let last_logits = logits.slice([0..batch_size, seq_len-1..seq_len, 0..vocab_size]).squeeze(1);
+        let last_logits = logits.slice([0..batch_size, seq_len-1..seq_len, 0..vocab_size]).squeeze::<2>(1);
         
         // Apply temperature
         let scaled_logits = if temperature != 1.0 {
