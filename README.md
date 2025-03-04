@@ -1,8 +1,8 @@
-# MinGRU: Efficient Long-Context RNN
+# GRUfinity: Efficient Long-Context RNN
 
 ## Overview
 
-MinGRU is a Rust implementation of the simplified Gated Recurrent Unit (GRU) architecture using the Burn machine learning framework. This implementation features two key innovations:
+GRUfinity is a Rust implementation of the simplified Gated Recurrent Unit (GRU) architecture using the Burn machine learning framework. This implementation features two key innovations:
 
 1. **Parallel Associative Scan** - Enables efficient parallel computation of recurrent networks
 2. **Hidden State Passing** - Provides unlimited context length with fixed memory requirements
@@ -206,19 +206,19 @@ Both training and generation support hidden state passing for unlimited context 
 
 ### Installation
 
-Add the MinGRU crate to your Cargo.toml:
+Add the GRUfinity crate to your Cargo.toml:
 
 ```toml
 [dependencies]
-mingru = { path = "path/to/mingru" }
+grufinity = { path = "path/to/grufinity" }
 burn = { version = "0.16.0", features = ["ndarray", "wgpu", "train"] }
 ```
 
 Or clone and build the repository:
 
 ```bash
-git clone https://github.com/yourusername/mingru.git
-cd mingru
+git clone https://github.com/yourusername/grufinity.git
+cd grufinity
 cargo build --release
 ```
 

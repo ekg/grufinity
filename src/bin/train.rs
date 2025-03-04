@@ -8,7 +8,7 @@ use burn::{
     backend::wgpu::{Wgpu, WgpuDevice},
     backend::autodiff::Autodiff,
 };
-use mingru::{
+use grufinity::{
     model::MinGRULMConfig,
     dataset::{CharVocab, TextDataset, TextBatcher},
     Module,

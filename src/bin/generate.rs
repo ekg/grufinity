@@ -3,7 +3,7 @@ use burn::{
     tensor::{Tensor, Int},
     backend::wgpu::{Wgpu, WgpuDevice},
 };
-use mingru::{
+use grufinity::{
     model::MinGRULMConfig,
     dataset::CharVocab,
     Config, Module,
