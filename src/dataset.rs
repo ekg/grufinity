@@ -179,8 +179,13 @@ impl TextDataset {
     }
     
     /// Get all chunks that form a single document
-    pub fn get_document_chunks(&self, doc_id: usize) -> Vec<(String, String, usize, bool)> {
-        let start_idx = doc_id * self.step_size;
+    pub fn get_document_chunks(&self, index: usize) -> Vec<(String, String, usize, bool)> {
+        // Ensure the index is within the range of start positions
+        if index >= self.start_positions.len() {
+            return Vec::new();
+        }
+        
+        let start_idx = self.start_positions[index];
         if start_idx + self.sequence_length > self.text.len() {
             return Vec::new();
         }
