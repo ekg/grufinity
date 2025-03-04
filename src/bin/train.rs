@@ -212,13 +212,9 @@ fn main() {
         let (generated_tokens, _) = model_valid.generate(seed_tensor, n_chars, 0.8, None);
         
         // Convert token IDs back to text
-        let ids: Vec<usize> = generated_tokens
-            .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
-            .to_data()
-            .as_slice()
-            .iter()
-            .map(|x| *x as usize)
-            .collect();
+        let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
+        let values: Vec<i32> = reshaped.to_data().into_raw_vec();
+        let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
         
         let generated_text = vocab.decode_text(&ids);
         println!("Generated sample:\n{}", generated_text);

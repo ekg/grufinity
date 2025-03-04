@@ -124,13 +124,9 @@ fn main() {
     let (generated_tokens, _) = model.generate(seed_tensor, num_chars, temperature, None);
     
     // Convert token IDs back to text
-    let ids: Vec<usize> = generated_tokens
-        .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
-        .to_data()
-        .as_slice()
-        .iter()
-        .map(|x| *x as usize)
-        .collect();
+    let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
+    let values: Vec<i32> = reshaped.to_data().into_raw_vec();
+    let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
     
     let generated_text = vocab.decode_text(&ids);
     println!("\nGenerated text:");
@@ -178,13 +174,9 @@ fn main() {
         let (generated_tokens, _) = model.generate(last_tensor, 100, temperature, hidden_states);
         
         // Convert token IDs back to text
-        let ids: Vec<usize> = generated_tokens
-            .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
-            .to_data()
-            .as_slice()
-            .iter()
-            .map(|x| *x as usize)
-            .collect();
+        let reshaped = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
+        let values: Vec<i32> = reshaped.to_data().into_raw_vec();
+        let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
         
         let continuation = vocab.decode_text(&ids);
         println!("\nLong-context continuation:");
