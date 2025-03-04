@@ -124,9 +124,12 @@ fn main() {
     let (generated_tokens, _) = model.generate(seed_tensor, num_chars, temperature, None);
     
     // Convert token IDs back to text
-    let tensor = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
-    let ids: Vec<usize> = (0..tensor.dims()[0])
-        .map(|i| tensor.get([i]).into_scalar() as usize)
+    let ids: Vec<usize> = generated_tokens
+        .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
+        .to_data()
+        .as_slice()
+        .iter()
+        .map(|x| *x as usize)
         .collect();
     
     let generated_text = vocab.decode_text(&ids);
@@ -175,9 +178,12 @@ fn main() {
         let (generated_tokens, _) = model.generate(last_tensor, 100, temperature, hidden_states);
         
         // Convert token IDs back to text
-        let tensor = generated_tokens.reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
-        let ids: Vec<usize> = (0..tensor.dims()[0])
-            .map(|i| tensor.get([i]).into_scalar() as usize)
+        let ids: Vec<usize> = generated_tokens
+            .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
+            .to_data()
+            .as_slice()
+            .iter()
+            .map(|x| *x as usize)
             .collect();
         
         let continuation = vocab.decode_text(&ids);
