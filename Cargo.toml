@@ -20,6 +20,3 @@ path = "src/bin/generate.rs"
 name = "simple_generate"
 path = "src/bin/simple_generate.rs"
 
-[[bin]]
-name = "debug_generate"
-path = "src/bin/debug_generate.rs"
