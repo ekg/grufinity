@@ -95,10 +95,11 @@ fn main() {
     // Configure the model and training
     let model_config = MinGRULMConfig::new(
         vocab.size(),  // num_tokens
-        256            // dimension
+        96             // dimension (reduced from 256)
     )
-    .with_ff_mult(4.0)
-    .with_expansion_factor(1.5)
+    .with_depth(2)     // reduced from 3
+    .with_ff_mult(2.0) // reduced from 4.0
+    .with_expansion_factor(1.2) // reduced from 1.5
     .with_chunk_size(256);
     
     let optimizer_config = AdamConfig::new();

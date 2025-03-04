@@ -81,9 +81,10 @@ fn main() {
         Err(e) => {
             eprintln!("Failed to load model config: {}", e);
             // Create a default config
-            MinGRULMConfig::new(vocab.size(), 256)
-                .with_ff_mult(4.0)
-                .with_expansion_factor(1.5)
+            MinGRULMConfig::new(vocab.size(), 96)
+                .with_depth(2)
+                .with_ff_mult(2.0)
+                .with_expansion_factor(1.2)
                 .with_chunk_size(256)
         }
     };

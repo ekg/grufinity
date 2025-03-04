@@ -47,11 +47,11 @@ impl<B: Backend> FeedForward<B> {
 pub struct MinGRULMConfig {
     num_tokens: usize,
     dim: usize,
-    #[config(default = "3")]
+    #[config(default = "2")]
     depth: usize,
-    #[config(default = "4.0")]
+    #[config(default = "2.0")]
     ff_mult: f64,
-    #[config(default = "1.5")]
+    #[config(default = "1.2")]
     expansion_factor: f64,
     #[config(default = "256")]
     chunk_size: usize,
