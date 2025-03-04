@@ -5,41 +5,46 @@ use burn::{
 };
 use crate::model::TextBatch;
 
-/// Character vocabulary for text processing
+/// Byte vocabulary for text processing
 #[derive(Debug, Clone)]
 pub struct CharVocab {
-    char_to_idx: HashMap<char, usize>,
-    idx_to_char: HashMap<usize, char>,
+    byte_to_idx: HashMap<u8, usize>,
+    idx_to_byte: HashMap<usize, u8>,
     size: usize,
 }
 
 impl CharVocab {
     pub fn new() -> Self {
         Self {
-            char_to_idx: HashMap::new(),
-            idx_to_char: HashMap::new(),
+            byte_to_idx: HashMap::new(),
+            idx_to_byte: HashMap::new(),
             size: 0,
         }
     }
 
     pub fn build_from_text(&mut self, text: &str) {
-        let mut chars: Vec<char> = text.chars().collect();
-        chars.sort_unstable();
-        chars.dedup();
+        let bytes = text.as_bytes();
+        let mut unique_bytes = bytes.to_vec();
+        unique_bytes.sort_unstable();
+        unique_bytes.dedup();
         
-        for (i, c) in chars.into_iter().enumerate() {
-            self.char_to_idx.insert(c, i);
-            self.idx_to_char.insert(i, c);
+        for (i, &b) in unique_bytes.iter().enumerate() {
+            self.byte_to_idx.insert(b, i);
+            self.idx_to_byte.insert(i, b);
         }
-        self.size = self.char_to_idx.len();
+        self.size = self.byte_to_idx.len();
     }
 
     pub fn char_to_index(&self, c: char) -> Option<usize> {
-        self.char_to_idx.get(&c).copied()
+        // Convert char to bytes and use the first byte
+        let mut buf = [0u8; 4];
+        c.encode_utf8(&mut buf);
+        self.byte_to_idx.get(&buf[0]).copied()
     }
 
     pub fn index_to_char(&self, idx: usize) -> Option<char> {
-        self.idx_to_char.get(&idx).copied()
+        // Convert byte to char (for backward compatibility)
+        self.idx_to_byte.get(&idx).map(|&b| b as char)
     }
 
     pub fn size(&self) -> usize {
@@ -47,21 +52,26 @@ impl CharVocab {
     }
     
     pub fn encode_text(&self, text: &str) -> Vec<usize> {
-        text.chars()
-            .filter_map(|c| self.char_to_index(c))
+        text.as_bytes()
+            .iter()
+            .filter_map(|&b| self.byte_to_idx.get(&b).copied())
             .collect()
     }
     
     pub fn decode_text(&self, indices: &[usize]) -> String {
-        indices.iter()
-            .filter_map(|&idx| self.index_to_char(idx))
-            .collect()
+        // Convert indices to bytes and then to a valid UTF-8 string
+        // If any bytes are invalid UTF-8, they'll be replaced with the replacement character
+        let bytes: Vec<u8> = indices.iter()
+            .filter_map(|&idx| self.idx_to_byte.get(&idx).copied())
+            .collect();
+        
+        String::from_utf8_lossy(&bytes).into_owned()
     }
 
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         let mut file = File::create(path)?;
-        for (c, idx) in &self.char_to_idx {
-            writeln!(file, "{} {}", *c as u32, idx)?;
+        for (&b, &idx) in &self.byte_to_idx {
+            writeln!(file, "{} {}", b, idx)?;
         }
         Ok(())
     }
@@ -70,22 +80,20 @@ impl CharVocab {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         
-        self.char_to_idx.clear();
-        self.idx_to_char.clear();
+        self.byte_to_idx.clear();
+        self.idx_to_byte.clear();
         
         for line in reader.lines() {
             let line = line?;
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() == 2 {
-                if let (Ok(char_code), Ok(idx)) = (parts[0].parse::<u32>(), parts[1].parse::<usize>()) {
-                    if let Some(c) = std::char::from_u32(char_code) {
-                        self.char_to_idx.insert(c, idx);
-                        self.idx_to_char.insert(idx, c);
-                    }
+                if let (Ok(byte), Ok(idx)) = (parts[0].parse::<u8>(), parts[1].parse::<usize>()) {
+                    self.byte_to_idx.insert(byte, idx);
+                    self.idx_to_byte.insert(idx, byte);
                 }
             }
         }
-        self.size = self.char_to_idx.len();
+        self.size = self.byte_to_idx.len();
         Ok(())
     }
 }
@@ -146,22 +154,30 @@ impl TextDataset {
 
 impl Dataset<(String, String)> for TextDataset {
     fn get(&self, index: usize) -> Option<(String, String)> {
+        let bytes = self.text.as_bytes();
         let start_idx = index * self.step_size;
-        if start_idx + self.sequence_length + 1 > self.text.len() {
+        
+        if start_idx + self.sequence_length + 1 > bytes.len() {
             return None;
         }
         
-        let input = &self.text[start_idx..start_idx + self.sequence_length];
-        let target = &self.text[start_idx + 1..start_idx + self.sequence_length + 1];
+        // Use byte slices instead of character slices
+        let input_bytes = &bytes[start_idx..start_idx + self.sequence_length];
+        let target_bytes = &bytes[start_idx + 1..start_idx + self.sequence_length + 1];
         
-        Some((input.to_string(), target.to_string()))
+        // Convert bytes to strings (needed for the return type)
+        let input = String::from_utf8_lossy(input_bytes).into_owned();
+        let target = String::from_utf8_lossy(target_bytes).into_owned();
+        
+        Some((input, target))
     }
     
     fn len(&self) -> usize {
-        if self.text.len() <= self.sequence_length {
+        let bytes = self.text.as_bytes();
+        if bytes.len() <= self.sequence_length {
             return 0;
         }
-        (self.text.len() - self.sequence_length - 1) / self.step_size + 1
+        (bytes.len() - self.sequence_length - 1) / self.step_size + 1
     }
 }
 
@@ -318,21 +334,21 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
         let mut targets = Vec::with_capacity(items.len());
         
         for chunk in items {
-            // For simplicity, use the chunk text as input and shift by one for target
-            let chars: Vec<char> = chunk.text.chars().collect();
-            if chars.len() < 2 {
+            // Use byte slices instead of character slices
+            let bytes = chunk.text.as_bytes();
+            if bytes.len() < 2 {
                 continue;
             }
             
-            let input_chars = &chars[..chars.len()-1];
-            let target_chars = &chars[1..];
+            let input_bytes = &bytes[..bytes.len()-1];
+            let target_bytes = &bytes[1..];
             
-            let input_indices: Vec<i64> = input_chars.iter()
-                .filter_map(|&c| self.vocab.char_to_index(c).map(|idx| idx as i64))
+            let input_indices: Vec<i64> = input_bytes.iter()
+                .filter_map(|&b| self.vocab.byte_to_idx.get(&b).map(|&idx| idx as i64))
                 .collect();
             
-            let target_indices: Vec<i64> = target_chars.iter()
-                .filter_map(|&c| self.vocab.char_to_index(c).map(|idx| idx as i64))
+            let target_indices: Vec<i64> = target_bytes.iter()
+                .filter_map(|&b| self.vocab.byte_to_idx.get(&b).map(|&idx| idx as i64))
                 .collect();
                 
             inputs.push(Tensor::<B, 1, Int>::from_data(input_indices.as_slice(), &self.device));

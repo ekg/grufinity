@@ -105,8 +105,9 @@ fn main() {
     }
     
     // Encode seed text to tokens
-    let seed_tokens: Vec<i64> = seed_text.chars()
-        .filter_map(|c| vocab.char_to_index(c).map(|idx| idx as i64))
+    let seed_tokens: Vec<i64> = seed_text.as_bytes()
+        .iter()
+        .filter_map(|&b| vocab.byte_to_idx.get(&b).map(|&idx| idx as i64))
         .collect();
     
     if seed_tokens.is_empty() {

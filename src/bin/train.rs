@@ -200,8 +200,9 @@ fn main() {
     let n_chars = 100;
     println!("\nGenerating sample text with seed: '{}'", seed);
     
-    let seed_tokens: Vec<i64> = seed.chars()
-        .filter_map(|c| vocab.char_to_index(c).map(|idx| idx as i64))
+    let seed_tokens: Vec<i64> = seed.as_bytes()
+        .iter()
+        .filter_map(|&b| vocab.byte_to_idx.get(&b).map(|&idx| idx as i64))
         .collect();
     
     if !seed_tokens.is_empty() {
