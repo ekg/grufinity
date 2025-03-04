@@ -2,7 +2,7 @@ use burn::{
     config::Config,
     module::Module,
     nn::loss::CrossEntropyLossConfig,
-    optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
+    optim::{AdamConfig, GradientsAccumulator, GradientsParams},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
 };
@@ -82,7 +82,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
-    let optimizer = config.optimizer.init();
+    let mut optimizer = config.optimizer.init::<B, MinGRULM<B>>();
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
