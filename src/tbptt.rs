@@ -2,7 +2,7 @@ use burn::{
     config::Config,
     module::Module,
     nn::loss::CrossEntropyLossConfig,
-    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams},
+    optim::{AdamConfig, GradientsAccumulator, GradientsParams, SimpleOptimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::ClassificationOutput,
@@ -55,7 +55,7 @@ struct TBPTTState<B: AutodiffBackend> {
     model: MinGRULM<B>,
     
     /// The optimizer
-    optimizer: Adam,
+    optimizer: burn::optim::OptimizerAdaptor<burn::optim::Adam>,
     
     /// Hidden states carried between chunks
     hidden_states: Option<Vec<Tensor<B, 2>>>,
@@ -113,7 +113,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         model,
         optimizer,
         hidden_states: None,
-        grad_accumulator: GradientsAccumulator::new(),
+        grad_accumulator: burn::optim::GradientsAccumulator::new(),
         current_chunk: 0,
         tbptt_chunks: config.tbptt_chunks,
         learning_rate: config.learning_rate,
@@ -207,12 +207,13 @@ fn process_batch<B: AutodiffBackend>(
         // Update model if we've accumulated enough chunks
         if state.current_chunk >= state.tbptt_chunks {
             let acc_grads = state.grad_accumulator.grads();
-            state.model = state.optimizer.step(
+            state.model = SimpleOptimizer::step(
+                &state.optimizer,
                 state.learning_rate,
                 state.model.clone(),
                 acc_grads
             );
-            state.grad_accumulator = GradientsAccumulator::new();
+            state.grad_accumulator = burn::optim::GradientsAccumulator::new();
             state.current_chunk = 0;
         }
     }
