@@ -197,7 +197,7 @@ fn main() {
         .save_file(&model_path, &BinFileRecorder::<FullPrecisionSettings>::new())
         .expect("Failed to save trained model");
     
-    println!("Training complete! Model saved to {}", model_path);
+    println!("Training complete! Model saved to {}\n\n\n", model_path);
     
     // NOTE: Sample generation disabled - use the generate binary instead
     // To generate text with the trained model use:
