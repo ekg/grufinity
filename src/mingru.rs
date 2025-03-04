@@ -1,7 +1,7 @@
 use burn::{
     module::Module,
     tensor::{backend::Backend, Tensor},
-    nn::{Linear, LinearConfig},
+    nn::{Linear, LinearConfig, activation},
     config::Config,
 };
 use crate::parallel_scan::{parallel_scan_log};
@@ -111,22 +111,22 @@ impl<B: Backend> MinGRU<B> {
         
         // Apply g and sigmoid functions
         let hidden = self.g_function(hidden.squeeze(1));
-        let gate = gate.squeeze(1).sigmoid();
+        let gate = activation::sigmoid(gate.squeeze(1));
         
         // h_t = (1 - z_t) * h_{t-1} + z_t * h_tilde
         let output = (Tensor::ones([batch_size, hidden_dim], &device) - gate.clone()) * prev_hidden + gate * hidden;
         
         // Add sequence dimension back
-        output.unsqueeze(1)
+        output.unsqueeze()
     }
     
     /// Forward pass in parallel mode using associative scan
     fn forward_parallel(&self, hidden: Tensor<B, 3>, gate: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> Tensor<B, 3> {
         // Log-space coefficients: log(1 - z_t)
-        let log_coeffs = -gate.clone().softplus();
+        let log_coeffs = -activation::softplus(gate.clone());
         
         // Log-space values: log(z_t) + log(g(h_tilde))
-        let log_z = -(-gate).softplus();
+        let log_z = -activation::softplus(-gate);
         let log_tilde_h = self.log_g_function(hidden);
         let log_values = log_z + log_tilde_h;
         
@@ -137,10 +137,10 @@ impl<B: Backend> MinGRU<B> {
     /// g(x) function: x + 0.5 for x >= 0, sigmoid(x) for x < 0
     fn g_function(&self, x: Tensor<B, 2>) -> Tensor<B, 2> {
         let zeros = Tensor::zeros_like(&x);
-        let x_positive = (x.clone() >= zeros.clone()).float();
-        let x_negative = (x.clone() < zeros).float();
+        let x_positive = x.clone().greater_equal(zeros.clone()).float();
+        let x_negative = x.clone().lower(zeros).float();
         
-        (x_positive * (x.clone() + 0.5)) + (x_negative * x.sigmoid())
+        (x_positive * (x.clone() + 0.5)) + (x_negative * activation::sigmoid(x))
     }
     
     /// log(g(x)) function: log(x + 0.5) for x >= 0, log(sigmoid(x)) for x < 0
@@ -149,11 +149,11 @@ impl<B: Backend> MinGRU<B> {
         let device = x.device();
         let zeros = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
         
-        let x_positive = (x.clone() >= zeros.clone()).float();
-        let x_negative = (x.clone() < zeros).float();
+        let x_positive = x.clone().greater_equal(zeros.clone()).float();
+        let x_negative = x.clone().lower(zeros).float();
         
-        let log_g_pos = (x.clone().relu() + 0.5).log();
-        let log_g_neg = -(-x).softplus();
+        let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
+        let log_g_neg = -activation::softplus(-x);
         
         (x_positive * log_g_pos) + (x_negative * log_g_neg)
     }
