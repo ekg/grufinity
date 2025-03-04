@@ -153,9 +153,9 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 }
 
 /// Process a single batch with TBPTT
-fn process_batch<B: AutodiffBackend, O: Optimizer<MinGRULM<B>>>(
+fn process_batch<B: AutodiffBackend>(
     state: &mut TBPTTState<B>,
-    optimizer: &mut O,
+    optimizer: &mut impl burn::optim::Optimizer<MinGRULM<B>, B>,
     learning_rate: f64,
     batch: TextBatch<B>,
     device: &B::Device,
