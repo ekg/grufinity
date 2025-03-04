@@ -78,11 +78,9 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     B::seed(config.seed);
     
     // Initialize model and optimizer
-    let model = config.model
+    let model = config.model.clone()
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
-    
-    let mut optimizer = config.optimizer.init::<B, MinGRULM<B>>();
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
@@ -110,8 +108,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         tbptt_chunks: config.tbptt_chunks,
     };
     
-    // Initialize optimizer separately
-    let mut optimizer = config.optimizer.init();
+    // Initialize optimizer
+    let mut optimizer = config.optimizer.init::<B, MinGRULM<B>>();
     
     // Training loop
     for epoch in 1..=config.num_epochs {
