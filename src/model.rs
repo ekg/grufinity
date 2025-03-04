@@ -259,16 +259,27 @@ impl<B: Backend> MinGRULM<B> {
         temperature: f64,
         hidden_states: Option<Vec<Tensor<B, 2>>>,
     ) -> (Tensor<B, 2, Int>, Vec<Tensor<B, 2>>) {
-        let [batch_size, _prompt_len] = prompt.dims();
-        let _device = prompt.device();
+        let [batch_size, prompt_len] = prompt.dims();
+        let device = prompt.device();
+        
+        // Guard against empty prompts
+        if prompt_len == 0 {
+            let empty_tensor = Tensor::zeros([batch_size, 0], &device);
+            return (empty_tensor, hidden_states.unwrap_or_default());
+        }
         
         let mut tokens = prompt.clone();
         let mut current_hidden_states = hidden_states;
         
         // Generate tokens one by one
         for _ in 0..max_tokens {
-            // Get the last token
-            let last_token = tokens.clone().slice([0..batch_size, tokens.dims()[1]-1..tokens.dims()[1]]);
+            // Get the last token - add a check to avoid issues with empty tensors
+            let token_len = tokens.dims()[1];
+            if token_len == 0 {
+                break;
+            }
+            
+            let last_token = tokens.clone().slice([0..batch_size, token_len-1..token_len]);
             
             // Forward pass with hidden state
             let (logits, new_hidden_states) = self.forward(last_token, current_hidden_states);
@@ -288,8 +299,13 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Sample next token from logits with temperature
     fn sample_token(&self, logits: Tensor<B, 3>, temperature: f64) -> Tensor<B, 1, Int> {
-        let _device = logits.device();
+        let device = logits.device();
         let [batch_size, seq_len, vocab_size] = logits.dims();
+        
+        // Safety check for empty tensors
+        if seq_len == 0 {
+            return Tensor::zeros([batch_size], &device);
+        }
         
         // Get logits for last position
         let last_logits = logits.slice([0..batch_size, seq_len-1..seq_len, 0..vocab_size]).squeeze(1);
