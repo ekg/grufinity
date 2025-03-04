@@ -2,8 +2,7 @@ use burn::{
     config::Config,
     module::Module,
     nn::loss::CrossEntropyLossConfig,
-    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams},
-    optim::adaptor::OptimizerAdaptor,
+    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor},
     train::ClassificationOutput,
@@ -56,7 +55,7 @@ struct TBPTTState<B: AutodiffBackend> {
     model: MinGRULM<B>,
     
     /// The optimizer
-    optimizer: OptimizerAdaptor<Adam, MinGRULM<B>, B>,
+    optimizer: Adam,
     
     /// Hidden states carried between chunks
     hidden_states: Option<Vec<Tensor<B, 2>>>,
@@ -90,7 +89,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
-    let optimizer = OptimizerAdaptor::new(config.optimizer.init(), &model);
+    let optimizer = config.optimizer.init();
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
@@ -184,7 +183,9 @@ fn process_batch<B: AutodiffBackend>(
         
         let loss_fn = CrossEntropyLossConfig::new().init(device);
         let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
-        total_loss += loss.clone().into_scalar() as f32;
+        // Convert scalar to f32 (works with any backend's float type)
+        let scalar_value = loss.clone().into_scalar();
+        total_loss += f32::from(scalar_value);
         
         // Create output for gradient calculation
         let output = ClassificationOutput::new(loss.clone(), logits_reshaped, targets_reshaped);
@@ -204,7 +205,8 @@ fn process_batch<B: AutodiffBackend>(
         // Update model if we've accumulated enough chunks
         if state.current_chunk >= state.tbptt_chunks {
             let acc_grads = state.grad_accumulator.grads();
-            state.model = state.optimizer.step(
+            state.model = Optimizer::step(
+                &state.optimizer,
                 state.learning_rate,
                 state.model.clone(),
                 &acc_grads
