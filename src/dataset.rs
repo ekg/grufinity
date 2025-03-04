@@ -303,8 +303,8 @@ impl<B: Backend> Batcher<(String, String), TextBatch<B>> for TextBatcher<B> {
                 padded_target.push(if i < target_indices.len() { target_indices[i] } else { 0 });
             }
             
-            inputs.push(Tensor::<B, 1, Int>::from_data(&padded_input, &self.device));
-            targets.push(Tensor::<B, 1, Int>::from_data(&padded_target, &self.device));
+            inputs.push(Tensor::<B, 1, Int>::from_data(&*padded_input, &self.device));
+            targets.push(Tensor::<B, 1, Int>::from_data(&*padded_target, &self.device));
         }
         
         // Batch tensors (now all have the same shape)
@@ -394,8 +394,8 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
                 padded_target.push(if i < target_indices.len() { target_indices[i] } else { 0 });
             }
             
-            inputs.push(Tensor::<B, 1, Int>::from_data(&padded_input, &self.device));
-            targets.push(Tensor::<B, 1, Int>::from_data(&padded_target, &self.device));
+            inputs.push(Tensor::<B, 1, Int>::from_data(&*padded_input, &self.device));
+            targets.push(Tensor::<B, 1, Int>::from_data(&*padded_target, &self.device));
         }
         
         // Batch tensors (now all have the same shape)
