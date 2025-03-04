@@ -43,7 +43,7 @@ impl<B: Backend> FeedForward<B> {
 }
 
 /// MinGRU Language Model config
-#[derive(Config)]
+#[derive(Config, Debug)]
 pub struct MinGRULMConfig {
     num_tokens: usize,
     dim: usize,

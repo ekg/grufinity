@@ -2,7 +2,7 @@ use burn::{
     config::Config,
     module::Module,
     nn::loss::CrossEntropyLossConfig,
-    optim::{Adam, AdamConfig, GradientsAccumulator},
+    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams, SimpleOptimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor},
     train::ClassificationOutput,
@@ -12,7 +12,7 @@ use crate::dataset::{CharVocab, TextBatcher, TextDataset};
 use crate::model::{MinGRULM, MinGRULMConfig, TextBatch};
 
 /// Configuration for TBPTT training
-#[derive(Config, Debug)]
+#[derive(Config)]
 pub struct TBPTTConfig {
     /// Model configuration
     pub model: MinGRULMConfig,
@@ -55,7 +55,7 @@ struct TBPTTState<B: AutodiffBackend> {
     model: MinGRULM<B>,
     
     /// The optimizer
-    optimizer: Adam,
+    optimizer: burn::optim::OptimizerAdaptor<Adam, MinGRULM<B>, B>,
     
     /// Hidden states carried between chunks
     hidden_states: Option<Vec<Tensor<B, 2>>>,
@@ -89,7 +89,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
-    let optimizer = config.optimizer.init();
+    let optimizer = config.optimizer.init_module::<MinGRULM<B>, B>();
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
@@ -183,7 +183,7 @@ fn process_batch<B: AutodiffBackend>(
         
         let loss_fn = CrossEntropyLossConfig::new().init(device);
         let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
-        total_loss += loss.clone().to_scalar();
+        total_loss += loss.clone().into_scalar();
         
         // Create output for gradient calculation
         let output = ClassificationOutput::new(loss.clone(), logits_reshaped, targets_reshaped);
@@ -195,14 +195,16 @@ fn process_batch<B: AutodiffBackend>(
         let grads = loss.backward();
         
         // Accumulate gradients
-        state.grad_accumulator.accumulate(&state.model, grads);
+        let grads_params = GradientsParams::from_grads(grads, &state.model);
+        state.grad_accumulator.accumulate(&state.model, grads_params);
         
         state.current_chunk += 1;
         
         // Update model if we've accumulated enough chunks
         if state.current_chunk >= state.tbptt_chunks {
-            let acc_grads = state.grad_accumulator.gradients();
-            state.model = state.optimizer.step(
+            let acc_grads = state.grad_accumulator.grads();
+            state.model = SimpleOptimizer::step(
+                &state.optimizer,
                 state.learning_rate,
                 state.model.clone(),
                 acc_grads
@@ -223,7 +225,7 @@ fn save_checkpoint<B: Backend>(
 ) {
     let checkpoint_path = format!("{}/model_epoch_{}.bin", artifact_dir, epoch);
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
-    model
+    model.clone()
         .save_file(checkpoint_path, &recorder)
         .expect("Failed to save checkpoint");
 }
