@@ -3,7 +3,7 @@ use burn::{
     data::dataloader::DataLoaderBuilder,
     optim::AdamConfig,
     record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::{backend::Backend, Tensor, Int},
+    tensor::backend::Backend,
     train::{LearnerBuilder, metric::LossMetric},
     backend::wgpu::{Wgpu, WgpuDevice},
     backend::autodiff::Autodiff,
@@ -14,7 +14,6 @@ use grufinity::{
     Module,
 };
 use burn::data::dataset::Dataset;
-use burn::module::AutodiffModule;
 use std::{
     fs,
     time::Instant,

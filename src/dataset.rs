@@ -309,6 +309,7 @@ impl Dataset<TextChunk> for ChunkedTextDataset {
 /// Batcher for text data
 #[derive(Clone)]
 pub struct TextBatcher<B: Backend> {
+    #[allow(dead_code)]
     vocab: CharVocab,
     device: B::Device,
 }
@@ -374,6 +375,7 @@ impl<B: Backend> Batcher<(String, String), TextBatch<B>> for TextBatcher<B> {
 /// Batcher for chunked text data that preserves document structure
 #[derive(Clone)]
 pub struct ChunkedTextBatcher<B: Backend> {
+    #[allow(dead_code)]
     vocab: CharVocab,
     device: B::Device,
 }
