@@ -9,9 +9,9 @@ use burn::{
     backend::autodiff::Autodiff,
 };
 use mingru::{
-    model::{MinGRULMConfig, MinGRULM, TextBatch},
+    model::MinGRULMConfig,
     dataset::{CharVocab, TextDataset, TextBatcher},
-    Config, Module,
+    Module,
 };
 use burn::data::dataset::Dataset;
 use burn::module::AutodiffModule;
@@ -19,7 +19,6 @@ use std::{
     fs,
     time::Instant,
 };
-use indicatif;
 
 type WgpuBackend = Wgpu<f32, i32>;
 type MyBackend = Autodiff<WgpuBackend>;
@@ -98,7 +97,6 @@ fn main() {
         vocab.size(),  // num_tokens
         256            // dimension
     )
-    .with_depth(3)
     .with_ff_mult(4.0)
     .with_expansion_factor(1.5)
     .with_chunk_size(256);

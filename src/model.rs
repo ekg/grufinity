@@ -47,6 +47,7 @@ impl<B: Backend> FeedForward<B> {
 pub struct MinGRULMConfig {
     num_tokens: usize,
     dim: usize,
+    #[config(default = "3")]
     depth: usize,
     #[config(default = "4.0")]
     ff_mult: f64,

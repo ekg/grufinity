@@ -4,11 +4,10 @@ use burn::{
     backend::wgpu::{Wgpu, WgpuDevice},
 };
 use mingru::{
-    model::{MinGRULMConfig, MinGRULM},
+    model::MinGRULMConfig,
     dataset::CharVocab,
     Config, Module,
 };
-use std::fs;
 
 type MyBackend = Wgpu<f32, i32>;
 
@@ -83,7 +82,6 @@ fn main() {
             eprintln!("Failed to load model config: {}", e);
             // Create a default config
             MinGRULMConfig::new(vocab.size(), 256)
-                .with_depth(3)
                 .with_ff_mult(4.0)
                 .with_expansion_factor(1.5)
                 .with_chunk_size(256)
