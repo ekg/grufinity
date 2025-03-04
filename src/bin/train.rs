@@ -9,9 +9,12 @@ use burn::{
     backend::autodiff::Autodiff,
 };
 use mingru::{
-    model::{MinGRULMConfig, MinGRULM, TextBatch, MinGRULM, TextBatch},
+    model::{MinGRULMConfig, MinGRULM, TextBatch},
     dataset::{CharVocab, TextDataset, TextBatcher},
+    Config, Module,
 };
+use burn::data::dataset::Dataset;
+use burn::module::AutodiffModule;
 use std::{
     fs,
     time::Instant,
@@ -93,12 +96,12 @@ fn main() {
     // Configure the model and training
     let model_config = MinGRULMConfig::new(
         vocab.size(),  // num_tokens
-        256,           // dimension
-        3,             // depth
-        4.0,           // ff_mult
-        1.5,           // expansion_factor
-        256,           // chunk_size
-    );
+        256            // dimension
+    )
+    .with_depth(3)
+    .with_ff_mult(4.0)
+    .with_expansion_factor(1.5)
+    .with_chunk_size(256);
     
     let optimizer_config = AdamConfig::new();
     
@@ -214,7 +217,7 @@ fn main() {
         let ids: Vec<usize> = generated_tokens
             .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
             .to_data()
-            .value
+            .as_slice()
             .iter()
             .map(|&x| x as usize)
             .collect();

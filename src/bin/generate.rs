@@ -6,6 +6,7 @@ use burn::{
 use mingru::{
     model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
+    Config, Module,
 };
 use std::fs;
 
@@ -81,14 +82,11 @@ fn main() {
         Err(e) => {
             eprintln!("Failed to load model config: {}", e);
             // Create a default config
-            MinGRULMConfig::new(
-                vocab.size(),
-                256,
-                3,
-                4.0,
-                1.5,
-                256,
-            )
+            MinGRULMConfig::new(vocab.size(), 256)
+                .with_depth(3)
+                .with_ff_mult(4.0)
+                .with_expansion_factor(1.5)
+                .with_chunk_size(256)
         }
     };
     
@@ -131,7 +129,7 @@ fn main() {
     let ids: Vec<usize> = generated_tokens
         .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
         .to_data()
-        .value
+        .as_slice()
         .iter()
         .map(|&x| x as usize)
         .collect();
@@ -185,7 +183,7 @@ fn main() {
         let ids: Vec<usize> = generated_tokens
             .reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]])
             .to_data()
-            .value
+            .as_slice()
             .iter()
             .map(|&x| x as usize)
             .collect();
