@@ -2,10 +2,9 @@ use burn::{
     config::Config,
     module::Module,
     nn::loss::CrossEntropyLossConfig,
-    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams},
+    optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
-    train::ClassificationOutput,
 };
 
 use crate::dataset::{CharVocab, TextBatcher, TextDataset};
@@ -54,9 +53,6 @@ struct TBPTTState<B: AutodiffBackend> {
     /// The model being trained
     model: MinGRULM<B>,
     
-    /// The optimizer
-    optimizer: Adam,
-    
     /// Hidden states carried between chunks
     hidden_states: Option<Vec<Tensor<B, 2>>>,
     
@@ -68,9 +64,6 @@ struct TBPTTState<B: AutodiffBackend> {
     
     /// Number of chunks to accumulate before update
     tbptt_chunks: usize,
-    
-    /// Learning rate
-    learning_rate: f64,
 }
 
 /// Train a language model using Truncated Backpropagation Through Time (TBPTT)
@@ -111,13 +104,14 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     // Initialize TBPTT state
     let mut tbptt_state = TBPTTState {
         model,
-        optimizer,
         hidden_states: None,
         grad_accumulator: GradientsAccumulator::new(),
         current_chunk: 0,
         tbptt_chunks: config.tbptt_chunks,
-        learning_rate: config.learning_rate,
     };
+    
+    // Initialize optimizer separately
+    let mut optimizer = config.optimizer.init();
     
     // Training loop
     for epoch in 1..=config.num_epochs {
@@ -131,7 +125,13 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         // Process each batch
         let mut batch_losses = Vec::new();
         for (batch_idx, batch) in dataloader.iter().enumerate() {
-            let batch_loss = process_batch(&mut tbptt_state, batch, device);
+            let batch_loss = process_batch(
+                &mut tbptt_state, 
+                &mut optimizer,
+                config.learning_rate,
+                batch, 
+                device
+            );
             batch_losses.push(batch_loss);
             
             if batch_idx % 10 == 0 {
@@ -153,8 +153,10 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 }
 
 /// Process a single batch with TBPTT
-fn process_batch<B: AutodiffBackend>(
+fn process_batch<B: AutodiffBackend, O: Optimizer<MinGRULM<B>>>(
     state: &mut TBPTTState<B>,
+    optimizer: &mut O,
+    learning_rate: f64,
     batch: TextBatch<B>,
     device: &B::Device,
 ) -> f32 {
@@ -189,9 +191,6 @@ fn process_batch<B: AutodiffBackend>(
         let loss_value = scalar_value.to_f32();
         total_loss += loss_value;
         
-        // Create output for gradient calculation
-        let output = ClassificationOutput::new(loss.clone(), logits_reshaped, targets_reshaped);
-        
         // Update hidden states for next chunk
         state.hidden_states = Some(next_hidden_states);
         
@@ -206,10 +205,13 @@ fn process_batch<B: AutodiffBackend>(
         
         // Update model if we've accumulated enough chunks
         if state.current_chunk >= state.tbptt_chunks {
+            // Get the accumulated gradients
             let acc_grads = state.grad_accumulator.grads();
-            let mut updated_model = state.model.clone();
-            state.optimizer.update(&mut updated_model, acc_grads);
-            state.model = updated_model;
+            
+            // Update the model with accumulated gradients
+            state.model = optimizer.step(learning_rate, state.model.clone(), acc_grads);
+            
+            // Reset gradient accumulator and chunk counter
             state.grad_accumulator = GradientsAccumulator::new();
             state.current_chunk = 0;
         }
