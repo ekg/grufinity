@@ -2,8 +2,7 @@ use burn::{
     config::Config,
     module::Module,
     nn::loss::CrossEntropyLossConfig,
-    optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
-    optim::adaptor::OptimizerAdaptor,
+    optim::{Adam, AdamConfig, GradientsAccumulator, GradientsParams},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::ClassificationOutput,
@@ -56,7 +55,7 @@ struct TBPTTState<B: AutodiffBackend> {
     model: MinGRULM<B>,
     
     /// The optimizer
-    optimizer: burn::optim::OptimizerAdaptor<burn::optim::Adam>,
+    optimizer: Adam,
     
     /// Hidden states carried between chunks
     hidden_states: Option<Vec<Tensor<B, 2>>>,
@@ -90,7 +89,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
-    let optimizer = OptimizerAdaptor::new(config.optimizer.init(), &model);
+    let optimizer = config.optimizer.init();
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
@@ -208,11 +207,9 @@ fn process_batch<B: AutodiffBackend>(
         // Update model if we've accumulated enough chunks
         if state.current_chunk >= state.tbptt_chunks {
             let acc_grads = state.grad_accumulator.grads();
-            state.model = state.optimizer.step(
-                state.learning_rate,
-                state.model.clone(),
-                acc_grads
-            );
+            let mut updated_model = state.model.clone();
+            state.optimizer.update(&mut updated_model, acc_grads);
+            state.model = updated_model;
             state.grad_accumulator = GradientsAccumulator::new();
             state.current_chunk = 0;
         }
