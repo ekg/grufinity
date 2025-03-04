@@ -322,7 +322,9 @@ impl<B: Backend> MinGRULM<B> {
         
         // For simplicity, just take argmax here
         // In a real implementation, you'd want to sample from the distribution
-        probs.argmax(1)
+        // Ensure we get a 1D tensor (shape [batch_size]) by reshaping
+        let result = probs.argmax(1);
+        result.reshape([batch_size])
     }
 }
 
