@@ -21,6 +21,16 @@ impl CharVocab {
             size: 0,
         }
     }
+    
+    // Public accessor to get a byte index
+    pub fn byte_to_index(&self, b: u8) -> Option<usize> {
+        self.byte_to_idx.get(&b).copied()
+    }
+    
+    // Public accessor to get a byte from an index
+    pub fn index_to_byte(&self, idx: usize) -> Option<u8> {
+        self.idx_to_byte.get(&idx).copied()
+    }
 
     pub fn build_from_text(&mut self, text: &str) {
         let bytes = text.as_bytes();
@@ -344,11 +354,11 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
             let target_bytes = &bytes[1..];
             
             let input_indices: Vec<i64> = input_bytes.iter()
-                .filter_map(|&b| self.vocab.byte_to_idx.get(&b).map(|&idx| idx as i64))
+                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
                 .collect();
             
             let target_indices: Vec<i64> = target_bytes.iter()
-                .filter_map(|&b| self.vocab.byte_to_idx.get(&b).map(|&idx| idx as i64))
+                .filter_map(|&b| self.vocab.byte_to_index(b).map(|idx| idx as i64))
                 .collect();
                 
             inputs.push(Tensor::<B, 1, Int>::from_data(input_indices.as_slice(), &self.device));
