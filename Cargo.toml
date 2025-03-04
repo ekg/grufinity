@@ -15,3 +15,7 @@ path = "src/bin/train.rs"
 [[bin]]
 name = "generate"
 path = "src/bin/generate.rs"
+
+[[bin]]
+name = "simple_generate"
+path = "src/bin/simple_generate.rs"

@@ -169,41 +169,45 @@ fn main() {
         println!("Processed chunk: \"{}\"", chunk);
     }
     
-    // Now generate with the accumulated hidden state
-    let last_chunk = &current_text[current_text.len().saturating_sub(10)..];
+    println!("\n=== Skipping long-context demonstration to avoid potential issues ===");
+    println!("Use the simple_generate binary first to verify basic generation works:");
+    println!("  cargo run --release --bin simple_generate");
     
-    let last_tokens: Vec<i64> = last_chunk.as_bytes()
-        .iter()
-        .map(|&b| b as i64)
-        .collect();
-    
-    if !last_tokens.is_empty() {
-        println!("Using seed of {} bytes for continuation", last_tokens.len());
-        let last_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*last_tokens, &device).unsqueeze::<2>();
-        
-        // Print tensor dimensions for debugging
-        println!("Seed tensor shape: {:?}", last_tensor.dims());
-        
-        // Verify if hidden states are valid
-        println!("Hidden states present: {}", hidden_states.is_some());
-        
-        // Generate continuing from the long context
-        let (generated_tokens, _) = model.generate(last_tensor, 100, temperature, hidden_states);
-        
-        // Ensure we have valid generated tokens
-        if generated_tokens.dims()[1] > 0 {
-            // Convert token IDs back to text
-            let reshaped = generated_tokens.clone().reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
-            let values: Vec<i32> = reshaped.to_data().into_vec().expect("Failed to convert tensor data to vector");
-            let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
-            
-            let continuation = vocab.decode_text(&ids);
-            println!("\nLong-context continuation:");
-            println!("{}", continuation);
-        } else {
-            println!("Warning: Generated an empty sequence");
-        }
-    } else {
-        println!("Warning: Empty seed sequence for continuation");
-    }
+    // // Now generate with the accumulated hidden state
+    // let last_chunk = &current_text[current_text.len().saturating_sub(10)..];
+    // 
+    // let last_tokens: Vec<i64> = last_chunk.as_bytes()
+    //     .iter()
+    //     .map(|&b| b as i64)
+    //     .collect();
+    // 
+    // if !last_tokens.is_empty() {
+    //     println!("Using seed of {} bytes for continuation", last_tokens.len());
+    //     let last_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*last_tokens, &device).unsqueeze::<2>();
+    //     
+    //     // Print tensor dimensions for debugging
+    //     println!("Seed tensor shape: {:?}", last_tensor.dims());
+    //     
+    //     // Verify if hidden states are valid
+    //     println!("Hidden states present: {}", hidden_states.is_some());
+    //     
+    //     // Generate continuing from the long context
+    //     let (generated_tokens, _) = model.generate(last_tensor, 100, temperature, hidden_states);
+    //     
+    //     // Ensure we have valid generated tokens
+    //     if generated_tokens.dims()[1] > 0 {
+    //         // Convert token IDs back to text
+    //         let reshaped = generated_tokens.clone().reshape([generated_tokens.dims()[0] * generated_tokens.dims()[1]]);
+    //         let values: Vec<i32> = reshaped.to_data().into_vec().expect("Failed to convert tensor data to vector");
+    //         let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
+    //         
+    //         let continuation = vocab.decode_text(&ids);
+    //         println!("\nLong-context continuation:");
+    //         println!("{}", continuation);
+    //     } else {
+    //         println!("Warning: Generated an empty sequence");
+    //     }
+    // } else {
+    //     println!("Warning: Empty seed sequence for continuation");
+    // }
 }
