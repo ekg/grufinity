@@ -1,7 +1,7 @@
 use burn::{
     module::Module,
-    tensor::{backend::Backend, Tensor},
-    nn::{Linear, LinearConfig, activation},
+    tensor::{backend::Backend, Tensor, activation},
+    nn::{Linear, LinearConfig},
     config::Config,
 };
 use crate::parallel_scan::{parallel_scan_log};
@@ -73,7 +73,7 @@ impl<B: Backend> MinGRU<B> {
     /// * `next_hidden` - Next hidden state [batch_size, hidden_size]
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
         let [batch_size, seq_len, _] = x.dims();
-        let device = x.device();
+        let _device = x.device();
         
         // Project input to get hidden and gate values
         let projected = self.to_hidden_and_gate.forward(x);

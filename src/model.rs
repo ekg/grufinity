@@ -1,7 +1,7 @@
 use burn::{
     module::Module,
-    tensor::{backend::Backend, Tensor, Int},
-    nn::{Embedding, EmbeddingConfig, Linear, LinearConfig, RmsNorm, RmsNormConfig, activation},
+    tensor::{backend::Backend, Tensor, Int, activation},
+    nn::{Embedding, EmbeddingConfig, Linear, LinearConfig, RmsNorm, RmsNormConfig},
     config::Config,
     train::{ClassificationOutput, TrainOutput, TrainStep, ValidStep},
 };
@@ -37,7 +37,7 @@ pub struct FeedForward<B: Backend> {
 impl<B: Backend> FeedForward<B> {
     pub fn forward(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
         let x = self.linear1.forward(x);
-        let x = x.gelu();
+        let x = activation::gelu(x);
         self.linear2.forward(x)
     }
 }
@@ -107,10 +107,10 @@ impl MinGRULMConfig {
 pub struct MinGRULM<B: Backend> {
     token_emb: Embedding<B>,
     mingru_layers: Vec<MinGRU<B>>,
-    norm1_layers: Vec<RMSNorm<B>>,
-    norm2_layers: Vec<RMSNorm<B>>,
+    norm1_layers: Vec<RmsNorm<B>>,
+    norm2_layers: Vec<RmsNorm<B>>,
     ff_layers: Vec<FeedForward<B>>,
-    norm: RMSNorm<B>,
+    norm: RmsNorm<B>,
     to_logits: Linear<B>,
     #[module(skip)]
     chunk_size: usize,
@@ -134,28 +134,19 @@ impl<B: Backend> MinGRULM<B> {
         hidden_states: Option<Vec<Tensor<B, 2>>>
     ) -> (Tensor<B, 3>, Vec<Tensor<B, 2>>) {
         let [batch_size, seq_len] = x.dims();
-        
+    
         // Embed tokens
         let mut x = self.token_emb.forward(x);
-        
+    
         // Initialize hidden states
         let mut next_hidden_states = Vec::with_capacity(self.mingru_layers.len());
-        let mut prev_hidden_states = Vec::new();
-        
-        if let Some(states) = hidden_states {
-            prev_hidden_states = states;
-        }
-        // Pad with None if needed
-        while prev_hidden_states.len() < self.mingru_layers.len() {
-            prev_hidden_states.push(None);
-        }
-        
+    
         // Check if we need to chunk the sequence
         if seq_len > self.chunk_size && hidden_states.is_none() {
             // Process in chunks and carry hidden states between them
             return self.forward_chunked(x);
         }
-        
+    
         // Process through layers
         for (idx, (((mingru, norm1), norm2), ff)) in self.mingru_layers.iter()
             .zip(self.norm1_layers.iter())
@@ -163,9 +154,13 @@ impl<B: Backend> MinGRULM<B> {
             .zip(self.ff_layers.iter())
             .enumerate()
         {
+            // Get previous hidden state for this layer if available
+            let prev_hidden = hidden_states.as_ref()
+                .and_then(|states| states.get(idx).cloned());
+        
             // MinGRU with residual connection
             let x_norm = norm1.forward(x.clone());
-            let (mingru_out, hidden) = mingru.forward(x_norm, prev_hidden_states.get(idx).cloned().flatten());
+            let (mingru_out, hidden) = mingru.forward(x_norm, prev_hidden);
             x = x + mingru_out;
             next_hidden_states.push(hidden);
             
@@ -224,7 +219,6 @@ impl<B: Backend> MinGRULM<B> {
         
         // Initialize hidden states
         let mut next_hidden_states = Vec::with_capacity(self.mingru_layers.len());
-        let hidden_states_iter = hidden_states.unwrap_or_default().into_iter();
         
         // Process through layers
         for (idx, (((mingru, norm1), norm2), ff)) in self.mingru_layers.iter()
@@ -233,13 +227,12 @@ impl<B: Backend> MinGRULM<B> {
             .zip(self.ff_layers.iter())
             .enumerate()
         {
+            // Get previous hidden state for this layer if available
+            let prev_hidden = hidden_states.as_ref()
+                .and_then(|states| states.get(idx).cloned());
+            
             // MinGRU with residual connection
             let x_norm = norm1.forward(x.clone());
-            let prev_hidden = if let Some(states) = &hidden_states {
-                states.get(idx).cloned()
-            } else {
-                None
-            };
             let (mingru_out, hidden) = mingru.forward(x_norm, prev_hidden);
             x = x + mingru_out;
             next_hidden_states.push(hidden);
@@ -265,8 +258,8 @@ impl<B: Backend> MinGRULM<B> {
         temperature: f64,
         hidden_states: Option<Vec<Tensor<B, 2>>>,
     ) -> (Tensor<B, 2, Int>, Vec<Tensor<B, 2>>) {
-        let [batch_size, prompt_len] = prompt.dims();
-        let device = prompt.device();
+        let [batch_size, _prompt_len] = prompt.dims();
+        let _device = prompt.device();
         
         let mut tokens = prompt.clone();
         let mut current_hidden_states = hidden_states;
