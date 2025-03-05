@@ -6,13 +6,14 @@ use burn::{
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::{
-        ClassificationOutput, LearnerBuilder, TrainOutput, TrainStep, 
+        ClassificationOutput, LearnerBuilder, TrainOutput, TrainStep, ValidStep,
         metric::{LossMetric, MetricEntry},
     },
     backend::wgpu::Wgpu,
 };
 use std::collections::HashMap;
-use std::sync::Mutex; // Removed unused Arc import
+use std::sync::Mutex;
+use std::cell::RefCell;
 
 use crate::dataset::{CharVocab, TextBatcher, TextDataset};
 use crate::model::{MinGRULM, MinGRULMConfig, TextBatch};
@@ -192,6 +193,11 @@ struct TBPTTTrainerMetrics {
 
 // Global state - normally not ideal but works for this training scenario
 static METRICS: Mutex<Option<TBPTTMetrics>> = Mutex::new(None);
+// Hidden state management - needs to be thread local for training
+thread_local! {
+    static HIDDEN_STATES: RefCell<Option<Vec<Vec<f32>>>> = RefCell::new(None);
+    static CURRENT_CHUNK: RefCell<usize> = RefCell::new(0);
+}
 
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
@@ -199,10 +205,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let metrics = TBPTTMetrics::new();
         *METRICS.lock().unwrap() = Some(metrics);
         
+        // Initialize thread locals
+        HIDDEN_STATES.with(|cell| { *cell.borrow_mut() = None; });
+        CURRENT_CHUNK.with(|cell| { *cell.borrow_mut() = 0; });
+        
         Self {
             model,
-            hidden_states: None,
-            current_chunk: 0,
+            hidden_states: None, // Keep this field for compatibility
+            current_chunk: 0,    // Keep this field for compatibility
             tbptt_chunks: config.tbptt_chunks,
             preserve_hidden_states: config.preserve_hidden_states,
             chunk_size: config.chunk_size,
@@ -211,7 +221,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
     }
     
     pub fn reset_hidden_states(&mut self) {
-        self.hidden_states = None;
+        // Reset thread local hidden states
+        HIDDEN_STATES.with(|cell| { *cell.borrow_mut() = None; });
     }
     
     pub fn metrics(&self) -> TBPTTMetrics {
@@ -236,7 +247,7 @@ impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TB
 where 
     <B as AutodiffBackend>::InnerBackend: AutodiffBackend
 {
-    fn step(&mut self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
+    fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let batch_size = batch.input.dims()[0];
         let device = batch.input.device();
         
@@ -249,6 +260,20 @@ where
         // Create a new accumulator for this batch if needed
         let mut grad_accumulator = GradientsAccumulator::new();
         
+        // Retrieve current hidden states from thread local storage
+        let current_hidden_states: Option<Vec<Tensor<B, 2>>> = HIDDEN_STATES.with(|cell| {
+            cell.borrow().as_ref().map(|vec_of_vecs| {
+                vec_of_vecs.iter().map(|vec| {
+                    // Reconstruct tensor from stored data
+                    let tensor_data: Vec<f32> = vec.clone();
+                    // Assuming hidden dim can be inferred from data length
+                    let hidden_dim = tensor_data.len() / batch_size;
+                    Tensor::<B, 2>::from_data(&tensor_data.into_iter().map(|x| x as f32).collect::<Vec<f32>>(), &batch.input.device())
+                        .reshape([batch_size, hidden_dim])
+                }).collect()
+            })
+        });
+        
         for chunk_idx in 0..self.tbptt_chunks {
             // Get chunk slice
             let start = chunk_idx * chunk_size;
@@ -258,7 +283,7 @@ where
             let chunk_target = batch.target.clone().slice([0..batch_size, start..end]);
             
             // Forward pass
-            let (logits, next_hidden_states) = self.model.forward(chunk_input.clone(), self.hidden_states.clone());
+            let (logits, next_hidden_states) = self.model.forward(chunk_input.clone(), current_hidden_states.clone());
             
             // Calculate loss
             let [batch_size, seq_len, vocab_size] = logits.dims();
@@ -277,7 +302,13 @@ where
             self.update_metrics(loss_value);
             
             // Update hidden states for next chunk - detach to prevent backprop through time
-            self.hidden_states = Some(next_hidden_states.iter().map(|h| h.clone().detach()).collect());
+            // Use thread local storage since we can't mutate self
+            let detached_states: Vec<Tensor<B, 2>> = next_hidden_states.iter().map(|h| h.clone().detach()).collect();
+            
+            // Store hidden states in thread local storage
+            HIDDEN_STATES.with(|cell| {
+                *cell.borrow_mut() = Some(detached_states.iter().map(|t| t.clone().to_data().into_vec().unwrap()).collect());
+            });
             
             // Backward pass and accumulate gradients
             let grads = loss.backward();
@@ -292,7 +323,11 @@ where
             };
             
             grad_accumulator.accumulate(&self.model, effective_grads);
-            self.current_chunk += 1;
+            
+            // Update current chunk counter
+            CURRENT_CHUNK.with(|cell| {
+                *cell.borrow_mut() += 1;
+            });
         }
         
         // Create output for the full batch
