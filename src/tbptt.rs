@@ -2,8 +2,8 @@ use burn::{
     config::Config,
     module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
-    optim::{AdamConfig, GradientsAccumulator, GradientsParams},
-    record::{BinFileRecorder, FullPrecisionSettings},
+    optim::{AdamConfig, GradientsAccumulator, GradientsParams, OptimizerConfig},
+    record::{BinFileRecorder, FullPrecisionSettings, Record, Recorder},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::{
         ClassificationOutput, LearnerBuilder, TrainOutput, TrainStep, ValidStep,
@@ -11,6 +11,8 @@ use burn::{
     },
     backend::wgpu::Wgpu,
 };
+use std::path::Path;
+use std::fmt;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::cell::RefCell;
@@ -165,7 +167,7 @@ impl CustomMetrics for TBPTTMetrics {
 }
 
 /// TBPTT Trainer that implements the TrainStep trait
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
     hidden_states: Option<Vec<Tensor<B, 2>>>,
@@ -176,49 +178,16 @@ pub struct TBPTTTrainer<B: AutodiffBackend> {
     grad_clip: f32,
 }
 
-// Manually implement Module
-impl<B: AutodiffBackend> Module<B> for TBPTTTrainer<B>
-where
-    B::InnerBackend: Backend
-{
-    type InnerModule = TBPTTTrainer<B::InnerBackend>;
-    
-    fn into_record(&self) -> burn::module::ModuleRecord<B> {
-        let mut record = burn::module::ModuleRecord::new();
-        record.insert("model", self.model.into_record());
-        record
-    }
-    
-    fn load_record(&self, record: burn::module::ModuleRecord<B>) -> Self {
-        Self {
-            model: self.model.load_record(record.get("model")),
-            hidden_states: None,
-            current_chunk: self.current_chunk,
-            tbptt_chunks: self.tbptt_chunks,
-            preserve_hidden_states: self.preserve_hidden_states,
-            chunk_size: self.chunk_size,
-            grad_clip: self.grad_clip,
-        }
+// Implement Display for TBPTTTrainer (required by Learner)
+impl<B: AutodiffBackend> fmt::Display for TBPTTTrainer<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TBPTTTrainer(chunks: {}, chunk_size: {})", 
+               self.tbptt_chunks, self.chunk_size)
     }
 }
 
-// Implement AutodiffModule
-impl<B: AutodiffBackend> AutodiffModule<B> for TBPTTTrainer<B>
-where
-    B::InnerBackend: Backend
-{
-    fn valid(&self) -> Self::InnerModule {
-        TBPTTTrainer {
-            model: self.model.valid(),
-            hidden_states: None,
-            current_chunk: self.current_chunk,
-            tbptt_chunks: self.tbptt_chunks,
-            preserve_hidden_states: self.preserve_hidden_states,
-            chunk_size: self.chunk_size,
-            grad_clip: self.grad_clip,
-        }
-    }
-}
+// Instead of manually implementing Module, we'll use Module derive macro
+// and implement these methods directly in the train function
 
 // State managed externally
 // Define backend type
@@ -387,7 +356,7 @@ where
 }
 
 /// Train a language model using Truncated Backpropagation Through Time (TBPTT)
-/// with Burn's Learner API for metrics, checkpointing, and visualization
+/// with a custom training loop for more direct control over the TBPTT process
 pub fn train_with_tbptt<B: AutodiffBackend>(
     config: &TBPTTConfig,
     device: &B::Device,
@@ -401,13 +370,13 @@ where
     // Set random seed for reproducibility
     B::seed(config.seed);
     
-    // Initialize model
-    let model = config.model.clone()
+    // Initialize model with proper chunk size
+    let mut model = config.model.clone()
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
-    // Create TBPTT trainer
-    let trainer = TBPTTTrainer::new(model.clone(), config);
+    // Initialize optimizer
+    let mut optimizer = config.optimizer.init();
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
@@ -442,73 +411,145 @@ where
         .shuffle(config.seed)
         .build(valid_dataset);
     
-    // Build learner for metrics and checkpointing
-    let learner = LearnerBuilder::new(artifact_dir)
-        .metric_train_numeric(LossMetric::new())
-        .metric_valid_numeric(LossMetric::new())
-        .devices(vec![device.clone()])
-        .num_epochs(config.num_epochs)
-        .build(
-            trainer,
-            config.optimizer.init::<B, TBPTTTrainer<B>>(),
-            config.learning_rate,
-        );
+    // Create recorder for checkpoints
+    let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
     
-    // Train the model
-    println!("Starting TBPTT training with Learner API");
+    // Create directory for artifacts if it doesn't exist
+    std::fs::create_dir_all(artifact_dir).expect("Failed to create artifact directory");
+    
+    println!("Starting TBPTT training with custom loop");
     println!("Chunk size: {}, Chunks per update: {}", config.chunk_size, config.tbptt_chunks);
     
-    let trained_trainer = learner.fit(train_dataloader, valid_dataloader);
-    
-    // Extract the trained model
-    let trained_model = trained_trainer.model;
+    // Training loop
+    for epoch in 0..config.num_epochs {
+        println!("Epoch {}/{}", epoch + 1, config.num_epochs);
+        
+        // Training phase
+        let mut train_loss = 0.0;
+        let mut train_steps = 0;
+        
+        for (batch_idx, batch) in train_dataloader.iter().enumerate() {
+            // Create a gradients accumulator
+            let mut grad_accumulator = GradientsAccumulator::new();
+            
+            // Get sequence length and calculate chunk size
+            let seq_len = batch.input.dims()[1];
+            let chunk_size = seq_len / config.tbptt_chunks;
+            
+            // Process each chunk
+            let mut hidden_states = None;
+            let mut batch_loss = 0.0;
+            
+            for chunk_idx in 0..config.tbptt_chunks {
+                let start = chunk_idx * chunk_size;
+                let end = (start + chunk_size).min(seq_len);
+                
+                // Extract chunk
+                let chunk_input = batch.input.clone().slice([0..batch.input.dims()[0], start..end]);
+                let chunk_target = batch.target.clone().slice([0..batch.target.dims()[0], start..end]);
+                
+                // Forward pass
+                let (logits, next_hidden) = model.forward(chunk_input, hidden_states);
+                
+                // Calculate loss
+                let loss_fn = CrossEntropyLossConfig::new().init(device);
+                let [batch_size, chunk_len, vocab_size] = logits.dims();
+                let logits_reshaped = logits.reshape([batch_size * chunk_len, vocab_size]);
+                let targets_reshaped = chunk_target.reshape([batch_size * chunk_len]);
+                
+                let loss = loss_fn.forward(logits_reshaped, targets_reshaped);
+                
+                // Backward pass
+                let grads = loss.backward();
+                let grads_params = GradientsParams::from_grads(grads, &model);
+                
+                // Apply gradient clipping if configured
+                let effective_grads = if config.grad_clip > 0.0 {
+                    // TODO: Implement gradient clipping
+                    grads_params
+                } else {
+                    grads_params
+                };
+                
+                // Accumulate gradients
+                grad_accumulator.accumulate(&model, effective_grads);
+                
+                // Detach hidden states and update for next chunk
+                hidden_states = Some(next_hidden.iter().map(|h| h.clone().detach()).collect());
+                
+                // Update loss
+                batch_loss += loss.into_scalar().to_f32();
+            }
+            
+            // Apply accumulated gradients
+            model = optimizer.step(config.learning_rate, model, grad_accumulator.grads());
+            
+            // Update metrics
+            train_loss += batch_loss / config.tbptt_chunks as f32;
+            train_steps += 1;
+            
+            // Log progress
+            if (batch_idx + 1) % config.log_interval == 0 || batch_idx + 1 == train_dataloader.len() {
+                println!("  Batch {}/{}, Loss: {:.6}", 
+                    batch_idx + 1, 
+                    train_dataloader.len(), 
+                    batch_loss / config.tbptt_chunks as f32
+                );
+            }
+        }
+        
+        // Validation phase
+        let mut valid_loss = 0.0;
+        let mut valid_steps = 0;
+        
+        for batch in valid_dataloader.iter() {
+            // Forward pass with non-autodiff model for validation
+            let model_valid = model.valid();
+            let (logits, _) = model_valid.forward(batch.input, None);
+            
+            // Calculate loss
+            let loss_fn = CrossEntropyLossConfig::new().init(device);
+            let [batch_size, seq_len, vocab_size] = logits.dims();
+            let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
+            let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
+            
+            let loss = loss_fn.forward(logits_reshaped, targets_reshaped);
+            
+            // Update metrics
+            valid_loss += loss.into_scalar().to_f32();
+            valid_steps += 1;
+        }
+        
+        // Print epoch summary
+        println!("Epoch {}/{} - Train Loss: {:.6}, Valid Loss: {:.6}", 
+            epoch + 1, 
+            config.num_epochs, 
+            train_loss / train_steps as f32,
+            valid_loss / valid_steps as f32
+        );
+        
+        // Save checkpoint
+        if (epoch + 1) % config.checkpoint_interval == 0 {
+            let model_path = format!("{}/model_epoch_{}.bin", artifact_dir, epoch + 1);
+            model.clone()
+                .save_file(&model_path, &recorder)
+                .expect("Failed to save checkpoint");
+            println!("Saved checkpoint to {}", model_path);
+        }
+    }
     
     // Save final model
-    save_checkpoint(&trained_model, artifact_dir, config.num_epochs);
+    let model_path = format!("{}/model_final.bin", artifact_dir);
+    model.clone()
+        .save_file(&model_path, &recorder)
+        .expect("Failed to save final model");
+    println!("Final model saved to {}", model_path);
     
-    trained_model
+    model
 }
 
-// Add ValidStep implementation for validation data
-impl<B: AutodiffBackend> ValidStep<TextBatch<B::InnerBackend>, ClassificationOutput<B::InnerBackend>> for TBPTTTrainer<B> 
-where
-    B::InnerBackend: Backend
-{
-    fn step(&self, batch: TextBatch<B::InnerBackend>) -> ClassificationOutput<B::InnerBackend> {
-        // Use valid() to get a non-autodiff version of the model for validation
-        let model = self.model.valid();
-        
-        // Forward pass through the model
-        let (logits, _) = model.forward(batch.input, None);
-        
-        // Get dimensions and reshape for loss calculation
-        let [batch_size, seq_len, vocab_size] = logits.dims();
-        
-        // Reshape for classification output
-        let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
-        let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
-        
-        // Compute cross-entropy loss
-        let loss_fn = burn::nn::loss::CrossEntropyLossConfig::new()
-            .init(&logits_reshaped.device());
-        let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
-        
-        // Create classification output
-        ClassificationOutput::new(loss, logits_reshaped, targets_reshaped)
-    }
-}
+// We no longer need the ValidStep implementation since we're using a custom training loop
 
 // Process_batch is now implemented as part of the TBPTTTrainer
 
-/// Save model checkpoint
-fn save_checkpoint<B: Backend>(
-    model: &MinGRULM<B>,
-    artifact_dir: &str,
-    epoch: usize,
-) {
-    let checkpoint_path = format!("{}/model_epoch_{}.bin", artifact_dir, epoch);
-    let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
-    model.clone()
-        .save_file(checkpoint_path, &recorder)
-        .expect("Failed to save checkpoint");
-}
+// No longer need a separate save_checkpoint function
