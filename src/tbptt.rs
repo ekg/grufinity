@@ -2,16 +2,15 @@ use burn::{
     config::Config,
     module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
-    optim::{AdamConfig, GradientsAccumulator, GradientsParams, OptimizerConfig},
-    record::{BinFileRecorder, FullPrecisionSettings, Record, Recorder},
+    optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
+    record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::{
-        ClassificationOutput, LearnerBuilder, TrainOutput, TrainStep, ValidStep,
-        metric::{LossMetric, MetricEntry},
+        ClassificationOutput, TrainOutput, TrainStep,
+        metric::MetricEntry,
     },
     backend::wgpu::Wgpu,
 };
-use std::path::Path;
 use std::fmt;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -167,7 +166,7 @@ impl CustomMetrics for TBPTTMetrics {
 }
 
 /// TBPTT Trainer that implements the TrainStep trait
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Module)]
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
     hidden_states: Option<Vec<Tensor<B, 2>>>,
@@ -176,6 +175,26 @@ pub struct TBPTTTrainer<B: AutodiffBackend> {
     preserve_hidden_states: bool,
     chunk_size: usize,
     grad_clip: f32,
+}
+
+/// Implementation of AutodiffModule for TBPTTTrainer
+impl<B: AutodiffBackend> AutodiffModule<B> for TBPTTTrainer<B> 
+where
+    B::InnerBackend: Backend
+{
+    type InnerModule = TBPTTTrainer<B::InnerBackend>;
+
+    fn valid(&self) -> Self::InnerModule {
+        TBPTTTrainer {
+            model: self.model.valid(),
+            hidden_states: None,
+            current_chunk: self.current_chunk,
+            tbptt_chunks: self.tbptt_chunks,
+            preserve_hidden_states: self.preserve_hidden_states,
+            chunk_size: self.chunk_size,
+            grad_clip: self.grad_clip,
+        }
+    }
 }
 
 // Implement Display for TBPTTTrainer (required by Learner)
@@ -489,10 +508,9 @@ where
             train_steps += 1;
             
             // Log progress
-            if (batch_idx + 1) % config.log_interval == 0 || batch_idx + 1 == train_dataloader.len() {
-                println!("  Batch {}/{}, Loss: {:.6}", 
+            if (batch_idx + 1) % config.log_interval == 0 {
+                println!("  Batch {}, Loss: {:.6}", 
                     batch_idx + 1, 
-                    train_dataloader.len(), 
                     batch_loss / config.tbptt_chunks as f32
                 );
             }
