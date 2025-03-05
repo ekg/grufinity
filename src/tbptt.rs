@@ -7,9 +7,11 @@ use burn::{
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::{
         ClassificationOutput, LearnerBuilder, TrainOutput, TrainStep, ValidStep, 
-        metric::{LossMetric, Metric, MetricEntry, Metrics}, MetricsConfig,
+        metric::{LossMetric, Metric, MetricEntry},
     },
 };
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -26,47 +28,43 @@ pub struct TBPTTConfig {
     pub optimizer: AdamConfig,
     
     /// Learning rate
-    #[config(default = "1e-3")]
+    #[config(default = 1e-3)]
     pub learning_rate: f64,
     
     /// Number of chunks to process before performing backpropagation
-    #[config(default = "4")]
+    #[config(default = 4)]
     pub tbptt_chunks: usize,
     
     /// Size of each chunk in tokens
-    #[config(default = "64")]
+    #[config(default = 64)]
     pub chunk_size: usize,
     
     /// Whether to preserve hidden states between batches
-    #[config(default = "true")]
+    #[config(default = true)]
     pub preserve_hidden_states: bool,
     
     /// Random seed for reproducibility
-    #[config(default = "42")]
+    #[config(default = 42)]
     pub seed: u64,
     
     /// Number of epochs to train
-    #[config(default = "10")]
+    #[config(default = 10)]
     pub num_epochs: usize,
     
     /// Batch size
-    #[config(default = "32")]
+    #[config(default = 32)]
     pub batch_size: usize,
     
     /// Log interval (in batches)
-    #[config(default = "10")]
+    #[config(default = 10)]
     pub log_interval: usize,
     
     /// Checkpoint interval (in epochs)
-    #[config(default = "1")]
+    #[config(default = 1)]
     pub checkpoint_interval: usize,
     
-    /// Metrics configuration
-    #[config(default)]
-    pub metrics: MetricsConfig,
-    
     /// Gradient clipping value (0.0 to disable)
-    #[config(default = "0.0")]
+    #[config(default = 0.0)]
     pub grad_clip: f32,
 }
 
@@ -146,7 +144,13 @@ impl TBPTTMetrics {
     }
 }
 
-impl Metrics for TBPTTMetrics {
+// Custom metrics interface
+trait CustomMetrics {
+    fn get(&self, key: &str) -> Option<&Vec<MetricEntry>>;
+    fn keys(&self) -> Vec<String>;
+}
+
+impl CustomMetrics for TBPTTMetrics {
     fn get(&self, key: &str) -> Option<&Vec<MetricEntry>> {
         self.metrics.get(key)
     }
@@ -156,91 +160,87 @@ impl Metrics for TBPTTMetrics {
     }
 }
 
-/// Struct for tracking the training state during TBPTT
-struct TBPTTState<B: AutodiffBackend> {
-    /// The model being trained
-    model: MinGRULM<B>,
-    
-    /// Hidden states carried between chunks
-    hidden_states: Option<Vec<Tensor<B, 2>>>,
-    
-    /// Gradient accumulator for TBPTT
-    grad_accumulator: GradientsAccumulator<MinGRULM<B>>,
-    
-    /// Current chunk in the sequence
-    current_chunk: usize,
-    
-    /// Number of chunks to accumulate before update
-    tbptt_chunks: usize,
-    
-    /// Metrics tracking
-    metrics: TBPTTMetrics,
-}
-
 /// TBPTT Trainer that implements the TrainStep trait
 #[derive(Module, Debug)]
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
     #[module(skip)]
-    state: Arc<Mutex<TBPTTTrainerState<B>>>,
-}
-
-struct TBPTTTrainerState<B: AutodiffBackend> {
     hidden_states: Option<Vec<Tensor<B, 2>>>,
-    grad_accumulator: GradientsAccumulator<MinGRULM<B>>,
+    #[module(skip)]
     current_chunk: usize,
+    #[module(skip)]
     tbptt_chunks: usize,
+    #[module(skip)]
     preserve_hidden_states: bool,
+    #[module(skip)]
     chunk_size: usize,
-    metrics: TBPTTMetrics,
+    #[module(skip)]
     grad_clip: f32,
 }
 
+// State managed externally
+struct TBPTTTrainerMetrics {
+    metrics: TBPTTMetrics,
+    grad_accumulator: Option<GradientsAccumulator<MinGRULM<AutodiffBackend<WgpuBackend>>>>,
+}
+
+// Global state - normally not ideal but works for this training scenario
+static METRICS: Mutex<Option<TBPTTMetrics>> = Mutex::new(None);
+
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
-        let state = TBPTTTrainerState {
+        // Initialize global metrics
+        let metrics = TBPTTMetrics::new();
+        *METRICS.lock().unwrap() = Some(metrics);
+        
+        Self {
+            model,
             hidden_states: None,
-            grad_accumulator: GradientsAccumulator::new(),
             current_chunk: 0,
             tbptt_chunks: config.tbptt_chunks,
             preserve_hidden_states: config.preserve_hidden_states,
             chunk_size: config.chunk_size,
-            metrics: TBPTTMetrics::new(),
             grad_clip: config.grad_clip,
-        };
-        
-        Self {
-            model,
-            state: Arc::new(Mutex::new(state)),
         }
     }
     
-    pub fn reset_hidden_states(&self) {
-        let mut state = self.state.lock().unwrap();
-        state.hidden_states = None;
+    pub fn reset_hidden_states(&mut self) {
+        self.hidden_states = None;
     }
     
     pub fn metrics(&self) -> TBPTTMetrics {
-        self.state.lock().unwrap().metrics.clone()
+        METRICS.lock().unwrap().clone().unwrap_or_else(TBPTTMetrics::new)
+    }
+    
+    fn update_metrics(&self, loss: f32) {
+        if let Some(metrics) = &mut *METRICS.lock().unwrap() {
+            metrics.update_chunk_loss(loss);
+        }
+    }
+    
+    fn update_batch_metrics(&self, loss: f32) {
+        if let Some(metrics) = &mut *METRICS.lock().unwrap() {
+            metrics.update_batch_loss(loss);
+            metrics.clear_chunk_losses();
+        }
     }
 }
 
 impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> {
-    fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
-        let mut state = self.state.lock().unwrap();
+    fn step(&mut self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let batch_size = batch.input.dims()[0];
         let device = batch.input.device();
         
-        // Debug batch shape
-        println!("Batch input shape: {:?}", batch.input.dims());
-        
         // Split the batch into chunks for TBPTT
         let seq_len = batch.input.dims()[1];
-        let chunk_size = seq_len / state.tbptt_chunks;
+        let chunk_size = seq_len / self.tbptt_chunks;
         
         let mut total_loss = 0.0;
         
-        for chunk_idx in 0..state.tbptt_chunks {
+        // Create a new accumulator for this batch if needed
+        let mut grad_accumulator = GradientsAccumulator::new();
+        
+        for chunk_idx in 0..self.tbptt_chunks {
             // Get chunk slice
             let start = chunk_idx * chunk_size;
             let end = start + chunk_size;
@@ -248,24 +248,8 @@ impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TB
             let chunk_input = batch.input.clone().slice([0..batch_size, start..end]);
             let chunk_target = batch.target.clone().slice([0..batch_size, start..end]);
             
-            // Debug tensor shapes
-            println!("Chunk input shape: {:?}", chunk_input.dims());
-            if let Some(ref hidden_states) = state.hidden_states {
-                println!("Hidden states count: {}", hidden_states.len());
-                if !hidden_states.is_empty() {
-                    println!("Hidden state shape: {:?}", hidden_states[0].dims());
-                }
-            }
-            
             // Forward pass
-            let (logits, next_hidden_states) = self.model.forward(chunk_input.clone(), state.hidden_states.clone());
-            
-            // Debug output shapes
-            println!("Output logits shape: {:?}", logits.dims());
-            println!("Next hidden states length: {}", next_hidden_states.len());
-            if !next_hidden_states.is_empty() {
-                println!("Next hidden state shape: {:?}", next_hidden_states[0].dims());
-            }
+            let (logits, next_hidden_states) = self.model.forward(chunk_input.clone(), self.hidden_states.clone());
             
             // Calculate loss
             let [batch_size, seq_len, vocab_size] = logits.dims();
@@ -281,45 +265,43 @@ impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TB
             total_loss += loss_value;
             
             // Record metrics
-            state.metrics.update_chunk_loss(loss_value);
+            self.update_metrics(loss_value);
             
             // Update hidden states for next chunk - detach to prevent backprop through time
-            state.hidden_states = Some(next_hidden_states.iter().map(|h| h.clone().detach()).collect());
+            self.hidden_states = Some(next_hidden_states.iter().map(|h| h.clone().detach()).collect());
             
             // Backward pass and accumulate gradients
             let grads = loss.backward();
             let grads_params = GradientsParams::from_grads(grads, &self.model);
             
             // Apply gradient clipping if configured
-            let effective_grads = if state.grad_clip > 0.0 {
+            let effective_grads = if self.grad_clip > 0.0 {
                 // TODO: Implement gradient clipping
                 grads_params
             } else {
                 grads_params
             };
             
-            state.grad_accumulator.accumulate(&self.model, effective_grads);
-            state.current_chunk += 1;
+            grad_accumulator.accumulate(&self.model, effective_grads);
+            self.current_chunk += 1;
         }
         
         // Create output for the full batch
         let output = ClassificationOutput::new(
-            Tensor::from_f32(total_loss / state.tbptt_chunks as f32, &device),
+            Tensor::from_f32(total_loss / self.tbptt_chunks as f32, &device),
             Tensor::zeros([1, 1], &device), // Dummy tensor
             Tensor::zeros([1], &device),    // Dummy tensor
         );
         
         // Record average batch loss
-        state.metrics.update_batch_loss(total_loss / state.tbptt_chunks as f32);
+        self.update_batch_metrics(total_loss / self.tbptt_chunks as f32);
         
-        // Get accumulated gradients but don't update yet - let the Learner handle it
-        let grads = state.grad_accumulator.grads();
+        // Get accumulated gradients
+        let grads = grad_accumulator.grads();
         
-        // Reset accumulator if we've processed all chunks
-        if state.current_chunk >= state.tbptt_chunks {
-            state.grad_accumulator = GradientsAccumulator::new();
-            state.current_chunk = 0;
-            state.metrics.clear_chunk_losses();
+        // Reset current chunk counter if we've processed all chunks
+        if self.current_chunk >= self.tbptt_chunks {
+            self.current_chunk = 0;
         }
         
         TrainOutput::new(self, grads, output)
@@ -344,7 +326,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .init::<B>(device);
     
     // Create TBPTT trainer
-    let trainer = TBPTTTrainer::new(model.clone(), config);
+    let mut trainer = TBPTTTrainer::new(model.clone(), config);
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
