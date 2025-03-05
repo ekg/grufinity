@@ -1,6 +1,6 @@
 use burn::{
     config::Config,
-    module::{Module, AutodiffModule},
+    module::{Module, AutodiffModule, ModuleDisplay},
     nn::loss::CrossEntropyLossConfig,
     optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
@@ -166,8 +166,12 @@ impl CustomMetrics for TBPTTMetrics {
 }
 
 /// TBPTT Trainer that implements the TrainStep trait
-#[derive(Debug, Clone, Module)]
-pub struct TBPTTTrainer<B: AutodiffBackend> {
+#[derive(Debug, Module)]
+#[module(custom_display)]
+pub struct TBPTTTrainer<B: AutodiffBackend> 
+where 
+    B::InnerBackend: AutodiffBackend
+{
     model: MinGRULM<B>,
     hidden_states: Option<Vec<Tensor<B, 2>>>,
     current_chunk: usize,
@@ -177,31 +181,16 @@ pub struct TBPTTTrainer<B: AutodiffBackend> {
     grad_clip: f32,
 }
 
-/// Implementation of AutodiffModule for TBPTTTrainer
-impl<B: AutodiffBackend> AutodiffModule<B> for TBPTTTrainer<B> 
-where
-    B::InnerBackend: Backend
+// Implement ModuleDisplay instead of Display directly
+impl<B: AutodiffBackend> burn::module::ModuleDisplay for TBPTTTrainer<B>
+where 
+    B::InnerBackend: AutodiffBackend
 {
-    type InnerModule = TBPTTTrainer<B::InnerBackend>;
-
-    fn valid(&self) -> Self::InnerModule {
-        TBPTTTrainer {
-            model: self.model.valid(),
-            hidden_states: None,
-            current_chunk: self.current_chunk,
-            tbptt_chunks: self.tbptt_chunks,
-            preserve_hidden_states: self.preserve_hidden_states,
-            chunk_size: self.chunk_size,
-            grad_clip: self.grad_clip,
-        }
-    }
-}
-
-// Implement Display for TBPTTTrainer (required by Learner)
-impl<B: AutodiffBackend> fmt::Display for TBPTTTrainer<B> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TBPTTTrainer(chunks: {}, chunk_size: {})", 
-               self.tbptt_chunks, self.chunk_size)
+    fn custom_content(&self, content: burn::module::Content) -> Option<burn::module::Content> {
+        content
+            .add("chunks", &self.tbptt_chunks)
+            .add("chunk_size", &self.chunk_size)
+            .optional()
     }
 }
 
@@ -271,7 +260,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
 impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> 
 where 
-    B::InnerBackend: Backend
+    B::InnerBackend: AutodiffBackend
 {
     fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let batch_size = batch.input.dims()[0];
