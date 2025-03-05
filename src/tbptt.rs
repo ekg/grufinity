@@ -12,7 +12,7 @@ use burn::{
     backend::wgpu::Wgpu,
 };
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex; // Removed unused Arc import
 
 use crate::dataset::{CharVocab, TextBatcher, TextDataset};
 use crate::model::{MinGRULM, MinGRULMConfig, TextBatch};
@@ -111,9 +111,8 @@ impl TBPTTMetrics {
         let entry = self.metrics.entry(name.to_string())
             .or_insert_with(Vec::new);
         entry.push(MetricEntry {
-            value: value.to_string(),
-            name: name.to_string(),
-            step: self.batch_losses.len() as u64,
+            formatted: format!("{:.6}", value),  // Formatted string value
+            serialize: value,                    // Raw value for serialization
         });
     }
     
@@ -232,7 +231,10 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
     }
 }
 
-impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> {
+impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> 
+where 
+    <B as AutodiffBackend>::InnerBackend: AutodiffBackend
+{
     fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let batch_size = batch.input.dims()[0];
         let device = batch.input.device();
@@ -302,8 +304,8 @@ impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TB
         // Record average batch loss
         self.update_batch_metrics(total_loss / self.tbptt_chunks as f32);
         
-        // Get accumulated gradients and perform backward pass through loss
-        let grads = loss.backward();
+        // Get the gradients from the output directly
+        let grads = output.loss.backward();
         
         // Create train output
         TrainOutput::new(self, grads, output)
@@ -318,7 +320,10 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     input_data: &str,
     vocab: &CharVocab,
     artifact_dir: &str,
-) -> MinGRULM<B> {
+) -> MinGRULM<B> 
+where 
+    <B as AutodiffBackend>::InnerBackend: AutodiffBackend
+{
     // Set random seed for reproducibility
     B::seed(config.seed);
     
