@@ -432,10 +432,16 @@ where
 }
 
 // Add ValidStep implementation for validation data
-impl<B: AutodiffBackend> ValidStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> {
-    fn step(&self, batch: TextBatch<B>) -> ClassificationOutput<B> {
+impl<B: AutodiffBackend> ValidStep<TextBatch<B::InnerBackend>, ClassificationOutput<B::InnerBackend>> for TBPTTTrainer<B> 
+where
+    B::InnerBackend: Backend
+{
+    fn step(&self, batch: TextBatch<B::InnerBackend>) -> ClassificationOutput<B::InnerBackend> {
+        // Use valid() to get a non-autodiff version of the model for validation
+        let model = self.model.valid();
+        
         // Forward pass through the model
-        let (logits, _) = self.model.forward(batch.input, None);
+        let (logits, _) = model.forward(batch.input, None);
         
         // Get dimensions and reshape for loss calculation
         let [batch_size, seq_len, vocab_size] = logits.dims();
