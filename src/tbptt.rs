@@ -1,6 +1,6 @@
 use burn::{
     config::Config,
-    module::Module,
+    module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
     optim::{AdamConfig, GradientsAccumulator, GradientsParams},
     record::{BinFileRecorder, FullPrecisionSettings},
@@ -165,21 +165,59 @@ impl CustomMetrics for TBPTTMetrics {
 }
 
 /// TBPTT Trainer that implements the TrainStep trait
-#[derive(Module, Debug)]
+#[derive(Debug)]
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
-    #[module(skip)]
     hidden_states: Option<Vec<Tensor<B, 2>>>,
-    #[module(skip)]
     current_chunk: usize,
-    #[module(skip)]
     tbptt_chunks: usize,
-    #[module(skip)]
     preserve_hidden_states: bool,
-    #[module(skip)]
     chunk_size: usize,
-    #[module(skip)]
     grad_clip: f32,
+}
+
+// Manually implement Module
+impl<B: AutodiffBackend> Module<B> for TBPTTTrainer<B>
+where
+    B::InnerBackend: Backend
+{
+    type InnerModule = TBPTTTrainer<B::InnerBackend>;
+    
+    fn into_record(&self) -> burn::module::ModuleRecord<B> {
+        let mut record = burn::module::ModuleRecord::new();
+        record.insert("model", self.model.into_record());
+        record
+    }
+    
+    fn load_record(&self, record: burn::module::ModuleRecord<B>) -> Self {
+        Self {
+            model: self.model.load_record(record.get("model")),
+            hidden_states: None,
+            current_chunk: self.current_chunk,
+            tbptt_chunks: self.tbptt_chunks,
+            preserve_hidden_states: self.preserve_hidden_states,
+            chunk_size: self.chunk_size,
+            grad_clip: self.grad_clip,
+        }
+    }
+}
+
+// Implement AutodiffModule
+impl<B: AutodiffBackend> AutodiffModule<B> for TBPTTTrainer<B>
+where
+    B::InnerBackend: Backend
+{
+    fn valid(&self) -> Self::InnerModule {
+        TBPTTTrainer {
+            model: self.model.valid(),
+            hidden_states: None,
+            current_chunk: self.current_chunk,
+            tbptt_chunks: self.tbptt_chunks,
+            preserve_hidden_states: self.preserve_hidden_states,
+            chunk_size: self.chunk_size,
+            grad_clip: self.grad_clip,
+        }
+    }
 }
 
 // State managed externally
@@ -245,7 +283,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
 impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> 
 where 
-    <B as AutodiffBackend>::InnerBackend: AutodiffBackend
+    B::InnerBackend: Backend
 {
     fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let batch_size = batch.input.dims()[0];
