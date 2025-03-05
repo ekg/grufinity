@@ -32,6 +32,9 @@ pub fn parallel_scan<B: Backend>(
         Some(h0) => {
             // Prepend h0 to values (handled as b_0)
             let mut all_values = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device);
+            println!("Tensor shape before slice_assign: {:?}", all_values.dims());
+            println!("Value tensor shape: {:?}", h0.unsqueeze::<3>().dims());
+            println!("Slice ranges: {:?}", [0..batch_size, 0..1, 0..hidden_dim]);
             all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], h0.unsqueeze::<3>());
             all_values = all_values.slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], values);
             all_values
@@ -113,6 +116,9 @@ pub fn parallel_scan_log<B: Backend>(
             // Add log(h0) term - need to handle zeros with care
             let epsilon = 1e-10;
             let log_h0 = h0.clamp(epsilon, f32::MAX).log().unsqueeze::<3>();  // Unsqueeze to 3D tensor
+            println!("Tensor shape before slice_assign: {:?}", all_values.dims());
+            println!("Value tensor shape: {:?}", log_h0.dims());
+            println!("Slice ranges: {:?}", [0..batch_size, 0..1, 0..hidden_dim]);
             all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], log_h0);
             all_values
         },

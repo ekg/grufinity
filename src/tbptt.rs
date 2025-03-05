@@ -161,6 +161,9 @@ fn process_batch<B: AutodiffBackend>(
     let mut total_loss = 0.0;
     let batch_size = batch.input.dims()[0];
     
+    // Print batch input shape for debugging
+    println!("Batch input shape: {:?}", batch.input.dims());
+    
     // Split the batch into chunks for TBPTT
     let seq_len = batch.input.dims()[1];
     let chunk_size = seq_len / state.tbptt_chunks;
@@ -187,7 +190,7 @@ fn process_batch<B: AutodiffBackend>(
         
         // Debug output shapes
         println!("Output logits shape: {:?}", logits.dims());
-        println!("Next hidden states count: {}", next_hidden_states.len());
+        println!("Next hidden states length: {}", next_hidden_states.len());
         if !next_hidden_states.is_empty() {
             println!("Next hidden state shape: {:?}", next_hidden_states[0].dims());
         }
@@ -199,9 +202,9 @@ fn process_batch<B: AutodiffBackend>(
         
         let loss_fn = CrossEntropyLossConfig::new().init(device);
         let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
-        // Convert scalar to f32 (works with any backend's float type)
+        
+        // Convert loss to f32
         let scalar_value = loss.clone().into_scalar();
-        // Use ToElement trait to safely convert to f32
         let loss_value = scalar_value.to_f32();
         total_loss += loss_value;
         

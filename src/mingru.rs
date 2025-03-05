@@ -74,15 +74,15 @@ impl<B: Backend> MinGRU<B> {
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
         let [batch_size, seq_len, _] = x.dims();
         let _device = x.device();
-        
+    
         // Project input to get hidden and gate values
         let projected = self.to_hidden_and_gate.forward(x);
         let hidden_dim = projected.dims()[2] / 2;
-        
+    
         // Split into hidden and gate components
         let hidden = projected.clone().slice([0..batch_size, 0..seq_len, 0..hidden_dim]);
         let gate = projected.slice([0..batch_size, 0..seq_len, hidden_dim..(hidden_dim*2)]);
-        
+    
         let output = if seq_len == 1 && prev_hidden.is_some() {
             // Sequential (recurrent) mode
             self.forward_sequential(hidden, gate, prev_hidden.unwrap())
@@ -90,17 +90,17 @@ impl<B: Backend> MinGRU<B> {
             // Parallel mode using log-space scan
             self.forward_parallel(hidden, gate, prev_hidden)
         };
-        
+    
         // Get the last hidden state for next iteration
         let next_hidden = output.clone().slice([0..batch_size, seq_len-1..seq_len, 0..hidden_dim]).squeeze(1);
-        
+    
         // Apply output projection if needed
         let output = if self.proj_out {
             self.to_out.forward(output)
         } else {
             output
         };
-        
+    
         (output, next_hidden)
     }
     
