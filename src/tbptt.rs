@@ -268,7 +268,7 @@ where
                     let tensor_data: Vec<f32> = vec.clone();
                     // Assuming hidden dim can be inferred from data length
                     let hidden_dim = tensor_data.len() / batch_size;
-                    Tensor::<B, 2>::from_data(&tensor_data.into_iter().map(|x| x as f32).collect::<Vec<f32>>(), &batch.input.device())
+                    Tensor::<B, 2>::from_data(&*tensor_data.into_iter().map(|x| x as f32).collect::<Vec<f32>>(), &batch.input.device())
                         .reshape([batch_size, hidden_dim])
                 }).collect()
             })
@@ -358,7 +358,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     artifact_dir: &str,
 ) -> MinGRULM<B> 
 where 
-    <B as AutodiffBackend>::InnerBackend: AutodiffBackend
+    B::InnerBackend: Backend
 {
     // Set random seed for reproducibility
     B::seed(config.seed);
@@ -391,13 +391,15 @@ where
     );
     
     // Create dataloaders
-    let batcher = TextBatcher::<B>::new(vocab.clone(), device.clone());
-    let train_dataloader = burn::data::dataloader::DataLoaderBuilder::new(batcher.clone())
+    let train_batcher = TextBatcher::<B>::new(vocab.clone(), device.clone());
+    let valid_batcher = TextBatcher::<B::InnerBackend>::new(vocab.clone(), device.clone());
+    
+    let train_dataloader = burn::data::dataloader::DataLoaderBuilder::new(train_batcher)
         .batch_size(config.batch_size)
         .shuffle(config.seed)
         .build(dataset);
         
-    let valid_dataloader = burn::data::dataloader::DataLoaderBuilder::new(batcher)
+    let valid_dataloader = burn::data::dataloader::DataLoaderBuilder::new(valid_batcher)
         .batch_size(config.batch_size)
         .shuffle(config.seed)
         .build(valid_dataset);
@@ -430,7 +432,7 @@ where
 }
 
 // Add ValidStep implementation for validation data
-impl<B: Backend> ValidStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> {
+impl<B: AutodiffBackend> ValidStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> {
     fn step(&self, batch: TextBatch<B>) -> ClassificationOutput<B> {
         // Forward pass through the model
         let (logits, _) = self.model.forward(batch.input, None);
