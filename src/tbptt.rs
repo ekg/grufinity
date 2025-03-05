@@ -111,8 +111,9 @@ impl TBPTTMetrics {
         let entry = self.metrics.entry(name.to_string())
             .or_insert_with(Vec::new);
         entry.push(MetricEntry {
+            name: name.to_string(),
             formatted: format!("{:.6}", value),  // Formatted string value
-            serialize: value,                    // Raw value for serialization
+            serialize: value.to_string(),        // Raw value for serialization
         });
     }
     
@@ -235,7 +236,7 @@ impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TB
 where 
     <B as AutodiffBackend>::InnerBackend: AutodiffBackend
 {
-    fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
+    fn step(&mut self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let batch_size = batch.input.dims()[0];
         let device = batch.input.device();
         
@@ -391,6 +392,29 @@ where
     save_checkpoint(&trained_model, artifact_dir, config.num_epochs);
     
     trained_model
+}
+
+// Add ValidStep implementation for validation data
+impl<B: Backend> ValidStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> {
+    fn step(&self, batch: TextBatch<B>) -> ClassificationOutput<B> {
+        // Forward pass through the model
+        let (logits, _) = self.model.forward(batch.input, None);
+        
+        // Get dimensions and reshape for loss calculation
+        let [batch_size, seq_len, vocab_size] = logits.dims();
+        
+        // Reshape for classification output
+        let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
+        let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
+        
+        // Compute cross-entropy loss
+        let loss_fn = burn::nn::loss::CrossEntropyLossConfig::new()
+            .init(&logits_reshaped.device());
+        let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
+        
+        // Create classification output
+        ClassificationOutput::new(loss, logits_reshaped, targets_reshaped)
+    }
 }
 
 // Process_batch is now implemented as part of the TBPTTTrainer
