@@ -6,12 +6,11 @@ use burn::{
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
     train::{
-        ClassificationOutput, LearnerBuilder, TrainOutput, TrainStep, ValidStep, 
-        metric::{LossMetric, Metric, MetricEntry},
+        ClassificationOutput, LearnerBuilder, TrainOutput, TrainStep, 
+        metric::{LossMetric, MetricEntry},
     },
+    backend::wgpu::Wgpu,
 };
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -111,7 +110,11 @@ impl TBPTTMetrics {
     fn record_metric(&mut self, name: &str, value: f32) {
         let entry = self.metrics.entry(name.to_string())
             .or_insert_with(Vec::new);
-        entry.push(MetricEntry::new(value));
+        entry.push(MetricEntry {
+            value: value.to_string(),
+            name: name.to_string(),
+            step: self.batch_losses.len() as u64,
+        });
     }
     
     fn update_lr(&mut self, lr: f64) {
@@ -179,9 +182,12 @@ pub struct TBPTTTrainer<B: AutodiffBackend> {
 }
 
 // State managed externally
+// Define backend type
+type WgpuBackend = Wgpu<f32, i32>;
+
+#[derive(Clone)]
 struct TBPTTTrainerMetrics {
     metrics: TBPTTMetrics,
-    grad_accumulator: Option<GradientsAccumulator<MinGRULM<AutodiffBackend<WgpuBackend>>>>,
 }
 
 // Global state - normally not ideal but works for this training scenario
@@ -227,7 +233,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 }
 
 impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> {
-    fn step(&mut self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
+    fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
         let batch_size = batch.input.dims()[0];
         let device = batch.input.device();
         
@@ -288,7 +294,7 @@ impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TB
         
         // Create output for the full batch
         let output = ClassificationOutput::new(
-            Tensor::from_f32(total_loss / self.tbptt_chunks as f32, &device),
+            Tensor::full([], total_loss / self.tbptt_chunks as f32, &device),
             Tensor::zeros([1, 1], &device), // Dummy tensor
             Tensor::zeros([1], &device),    // Dummy tensor
         );
@@ -296,14 +302,10 @@ impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TB
         // Record average batch loss
         self.update_batch_metrics(total_loss / self.tbptt_chunks as f32);
         
-        // Get accumulated gradients
-        let grads = grad_accumulator.grads();
+        // Get accumulated gradients and perform backward pass through loss
+        let grads = loss.backward();
         
-        // Reset current chunk counter if we've processed all chunks
-        if self.current_chunk >= self.tbptt_chunks {
-            self.current_chunk = 0;
-        }
-        
+        // Create train output
         TrainOutput::new(self, grads, output)
     }
 }
@@ -326,7 +328,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .init::<B>(device);
     
     // Create TBPTT trainer
-    let mut trainer = TBPTTTrainer::new(model.clone(), config);
+    let trainer = TBPTTTrainer::new(model.clone(), config);
     
     // Create dataset with appropriate sequence length
     let seq_length = config.chunk_size * config.tbptt_chunks;
