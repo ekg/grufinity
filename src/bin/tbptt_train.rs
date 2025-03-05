@@ -93,7 +93,8 @@ fn main() {
              config.chunk_size, config.tbptt_chunks);
     println!("Vocabulary size: {}", vocab.size());
     
-    // Train the model using TBPTT
+    // Train the model using TBPTT with Learner API
+    println!("Training with TBPTT using Learner API");
     let model = train_with_tbptt::<MyBackend>(
         &config,
         &device,
