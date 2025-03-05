@@ -33,9 +33,13 @@ pub fn parallel_scan<B: Backend>(
             // Prepend h0 to values (handled as b_0)
             let mut all_values = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device);
             println!("Tensor shape before slice_assign: {:?}", all_values.dims());
-            println!("Value tensor shape: {:?}", h0.clone().unsqueeze::<3>().dims());
+            
+            // FIXED: Correctly reshape h0 to [batch_size, 1, hidden_dim]
+            // Use reshape instead of unsqueeze to ensure the correct dimensions
+            let h0_reshaped = h0.clone().reshape([batch_size, 1, hidden_dim]);
+            println!("Value tensor shape: {:?}", h0_reshaped.dims());
             println!("Slice ranges: {:?}", [0..batch_size, 0..1, 0..hidden_dim]);
-            all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], h0.clone().unsqueeze::<3>());
+            all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], h0_reshaped);
             all_values = all_values.slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], values);
             all_values
         },
@@ -115,7 +119,10 @@ pub fn parallel_scan_log<B: Backend>(
             
             // Add log(h0) term - need to handle zeros with care
             let epsilon = 1e-10;
-            let log_h0 = h0.clone().clamp(epsilon, f32::MAX).log().unsqueeze::<3>();  // Unsqueeze to 3D tensor
+            
+            // FIXED: Correctly reshape h0 to [batch_size, 1, hidden_dim]
+            // Apply log after reshaping to maintain the correct dimensions
+            let log_h0 = h0.clone().clamp(epsilon, f32::MAX).log().reshape([batch_size, 1, hidden_dim]);
             println!("Tensor shape before slice_assign: {:?}", all_values.dims());
             println!("Value tensor shape: {:?}", log_h0.dims());
             println!("Slice ranges: {:?}", [0..batch_size, 0..1, 0..hidden_dim]);

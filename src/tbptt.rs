@@ -209,7 +209,8 @@ fn process_batch<B: AutodiffBackend>(
         total_loss += loss_value;
         
         // Update hidden states for next chunk
-        state.hidden_states = Some(next_hidden_states);
+        // Ensures hidden states are detached to prevent backprop through the entire sequence
+        state.hidden_states = Some(next_hidden_states.iter().map(|h| h.clone().detach()).collect());
         
         // Backward pass and gradient accumulation
         let grads = loss.backward();
