@@ -3,7 +3,7 @@ use burn::{
     module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
     optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
-    record::{BinFileRecorder, FullPrecisionSettings, FileRecorder},
+    record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::AutodiffBackend, Tensor, cast::ToElement},
     train::{
         metric::MetricEntry,
@@ -199,8 +199,8 @@ impl<B: AutodiffBackend> std::fmt::Debug for TBPTTTrainer<B> {
 
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     // Helper method to save the model
-    pub fn save_file(&self, path: impl AsRef<Path>, recorder: &impl Recorder<MinGRULM<B>>) -> io::Result<()> {
-        self.model.clone().save(&path, recorder)
+    pub fn save_file<P: AsRef<Path>>(&self, path: P, recorder: &impl burn::record::Recorder) -> io::Result<()> {
+        self.model.clone().save_file(path, recorder)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
     
