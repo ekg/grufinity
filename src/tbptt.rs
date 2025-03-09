@@ -1,21 +1,20 @@
 use burn::{
     config::Config,
-    module::{Module, AutodiffModule, ModuleDisplay},
+    module::Module,
     nn::loss::CrossEntropyLossConfig,
     optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::{backend::{AutodiffBackend, Backend}, Tensor, cast::ToElement},
+    tensor::{backend::AutodiffBackend, Tensor, cast::ToElement},
     train::{
-        ClassificationOutput, TrainOutput, TrainStep,
+        ClassificationOutput, TrainOutput,
         metric::MetricEntry,
     },
-    backend::wgpu::Wgpu,
 };
-use std::fmt;
 use std::collections::HashMap;
-use std::sync::Mutex;
-use std::cell::RefCell;
+use std::fmt::Debug;
 use indicatif::{ProgressBar, ProgressStyle};
+use burn::data::dataset::Dataset;
+use burn::data::dataloader::batcher::Batcher;
 
 use crate::dataset::{CharVocab, TextBatcher, TextDataset, ChunkedTextDataset, ChunkedTextBatch};
 use crate::model::{MinGRULM, MinGRULMConfig, TextBatch};
@@ -75,7 +74,7 @@ pub struct TBPTTConfig {
 }
 
 /// TBPTT metrics for tracking training progress
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct TBPTTMetrics {
     /// Loss values for each batch
     batch_losses: Vec<f32>,
@@ -165,7 +164,7 @@ impl CustomMetrics for TBPTTMetrics {
 }
 
 /// Main TBPTT Trainer implementation
-#[derive(Module)]
+#[derive(Module, Debug)]
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
     #[module(skip)]
@@ -219,7 +218,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         &mut self,
         chunk: &ChunkedTextBatch<B>,
         optimizer: &mut O,
-        accumulator: &mut GradientsAccumulator,
+        accumulator: &mut GradientsAccumulator<MinGRULM<B>>,
         accumulation_current: &mut usize,
         do_update: bool
     ) -> f32 {
@@ -377,7 +376,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let batch_size = 32; // From config
         
         // Gradient accumulation state
-        let mut accumulator = GradientsAccumulator::new();
+        let mut accumulator = GradientsAccumulator::<MinGRULM<B>>::new();
         let mut accumulation_current = 0;
         
         // Process each item in dataset
