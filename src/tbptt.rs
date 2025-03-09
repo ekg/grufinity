@@ -199,7 +199,7 @@ impl<B: AutodiffBackend> std::fmt::Debug for TBPTTTrainer<B> {
 
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     // Helper method to save the model
-    pub fn save_file(&self, path: impl AsRef<Path>, recorder: &impl FileRecorder<B>) -> io::Result<()> {
+    pub fn save_file<P: AsRef<Path> + Into<std::path::PathBuf>>(&self, path: P, recorder: &impl FileRecorder<B>) -> io::Result<()> {
         self.model.clone().save_file(path, recorder)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
