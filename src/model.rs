@@ -333,7 +333,8 @@ impl<B: Backend> MinGRULM<B> {
         if result.dims()[0] != batch_size {
             return Tensor::zeros([batch_size], &device);
         }
-        result
+        // Squeeze to ensure we return a 1D tensor as required by the function signature
+        result.squeeze::<1>(0)
     }
 }
 
