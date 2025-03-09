@@ -1,12 +1,11 @@
 use burn::{
     config::Config,
-    module::Module,
+    module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
     optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::{backend::AutodiffBackend, Tensor, cast::ToElement},
+    tensor::{backend::AutodiffBackend, Tensor, cast::ToElement, Backend},
     train::{
-        ClassificationOutput, TrainOutput,
         metric::MetricEntry,
     },
 };
@@ -164,30 +163,27 @@ impl CustomMetrics for TBPTTMetrics {
 }
 
 /// Main TBPTT Trainer implementation
-#[derive(Module, Debug)]
+// No Module derive - we'll handle the model manually
+#[derive(Debug)]
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
-    #[module(skip)]
     optimizer: AdamConfig,
-    #[module(skip)]
     hidden_states: HashMap<usize, Vec<Tensor<B, 2>>>,
-    #[module(skip)]
     metrics: TBPTTMetrics,
-    #[module(skip)]
     tbptt_k1: usize,
-    #[module(skip)]
     tbptt_k2: usize,
-    #[module(skip)]
     preserve_hidden_states: bool,
-    #[module(skip)]
     chunk_size: usize,
-    #[module(skip)]
     grad_clip: f32,
-    #[module(skip)]
     learning_rate: f64,
 }
 
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
+    // Helper method to save the model
+    pub fn save_file<P: AsRef<std::path::Path>>(&self, path: P, recorder: &impl burn::record::Recorder<MinGRULM<B>>) -> std::io::Result<()> {
+        self.model.clone().save_file(path, recorder)
+    }
+    
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
         Self {
             model,
@@ -311,7 +307,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Calculate loss
         let [batch_size, seq_len, vocab_size] = logits.dims();
         let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
-        let targets_reshaped = chunk.target.reshape([batch_size * seq_len]);
+        let targets_reshaped = chunk.target.clone().reshape([batch_size * seq_len]);
         
         let loss_fn = CrossEntropyLossConfig::new().init(&device);
         let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
@@ -384,7 +380,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             if let Some(chunk) = dataloader.get(i) {
                 // Batch individual chunks
                 let chunks = vec![chunk];
-                let batch = batcher.batch(chunks);
+                // Create a ChunkedTextBatcher for the correct batching
+                let chunked_batcher = ChunkedTextBatcher::<B>::new(batcher.vocab.clone(), batcher.device.clone());
+                let batch = chunked_batcher.batch(chunks);
                 
                 // Process chunk and update model if needed
                 let do_update = (i + 1) % self.tbptt_k1 == 0 || i == dataloader.len() - 1;
@@ -433,7 +431,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 .progress_chars("#>-")
         );
         
-        let model = self.model.valid();
+        // AutodiffModule trait provides valid() method
+        let model = AutodiffModule::valid(&self.model);
         let mut total_loss = 0.0;
         let mut batch_count = 0;
         
@@ -442,7 +441,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             if let Some(chunk) = dataloader.get(i) {
                 // Batch individual chunks
                 let chunks = vec![chunk];
-                let batch = batcher.batch(chunks);
+                let chunked_batcher = ChunkedTextBatcher::<B::InnerBackend>::new(batcher.vocab.clone(), batcher.device.clone());
+                let batch = chunked_batcher.batch(chunks);
                 
                 // Forward pass (no gradients needed for validation)
                 let (logits, _) = model.forward(batch.input.clone(), None);
