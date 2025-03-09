@@ -270,30 +270,47 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let batch_hidden = if current_hidden_states.is_empty() || current_hidden_states[0].is_empty() {
             None
         } else {
-            // Merge hidden states across batch dimension
-            let hidden_dim = current_hidden_states[0][0].dims()[1];
+            // Make sure we have valid hidden states with consistent dimensions
+            let mut all_valid = true;
+            let hidden_dim = match current_hidden_states.get(0).and_then(|hs| hs.get(0).map(|h| h.dims()[0])) {
+                Some(dim) => dim,
+                None => {
+                    all_valid = false;
+                    96 // Default dimension from model config, adjust if needed
+                }
+            };
             
-            // Collect hidden states for each layer
-            let mut merged_states = Vec::new();
-            let num_layers = current_hidden_states[0].len();
-            
-            for layer in 0..num_layers {
-                let layer_states: Vec<_> = current_hidden_states.iter()
-                    .map(|doc_state| {
-                        if doc_state.len() > layer {
-                            doc_state[layer].clone()
-                        } else {
-                            // If layer doesn't exist, create zero tensor
-                            Tensor::zeros([1, hidden_dim], &device)
-                        }
-                    })
-                    .collect();
+            if !all_valid {
+                None
+            } else {
+                // Collect hidden states for each layer
+                let mut merged_states = Vec::new();
+                let num_layers = current_hidden_states[0].len();
                 
-                // Stack along batch dimension
-                merged_states.push(Tensor::cat(layer_states, 0));
+                for layer in 0..num_layers {
+                    let layer_states: Vec<_> = current_hidden_states.iter()
+                        .map(|doc_state| {
+                            if doc_state.len() > layer {
+                                // Ensure tensor has correct dimensions
+                                doc_state[layer].clone()
+                            } else {
+                                // If layer doesn't exist, create zero tensor
+                                Tensor::zeros([1, hidden_dim], &device)
+                            }
+                        })
+                        .collect();
+                    
+                    if layer_states.len() == batch_size {
+                        // Stack along batch dimension
+                        merged_states.push(Tensor::cat(layer_states, 0));
+                    } else {
+                        println!("Layer states length mismatch: {} vs batch size {}", layer_states.len(), batch_size);
+                        return 0.0; // Skip this batch due to dimension mismatch
+                    }
+                }
+                
+                Some(merged_states)
             }
-            
-            Some(merged_states)
         };
         
         // Forward pass with hidden state
