@@ -3,20 +3,22 @@ use burn::{
     module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
     optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
-    record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::{backend::AutodiffBackend, Tensor, cast::ToElement, Backend},
+    record::{BinFileRecorder, FullPrecisionSettings, FileRecorder, RecorderError},
+    tensor::{backend::AutodiffBackend, Tensor, cast::ToElement},
     train::{
         metric::MetricEntry,
     },
 };
+use std::io;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use burn::data::dataset::Dataset;
-use burn::data::dataloader::batcher::Batcher;
+use crate::Backend;
 
-use crate::dataset::{CharVocab, TextBatcher, TextDataset, ChunkedTextDataset, ChunkedTextBatch};
-use crate::model::{MinGRULM, MinGRULMConfig, TextBatch};
+use crate::dataset::{CharVocab, TextBatcher, ChunkedTextDataset, ChunkedTextBatch, ChunkedTextBatcher};
+use crate::model::{MinGRULM, MinGRULMConfig};
 
 /// Configuration for TBPTT training
 #[derive(Config)]
@@ -164,7 +166,6 @@ impl CustomMetrics for TBPTTMetrics {
 
 /// Main TBPTT Trainer implementation
 // No Module derive - we'll handle the model manually
-#[derive(Debug)]
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
     optimizer: AdamConfig,
@@ -178,10 +179,28 @@ pub struct TBPTTTrainer<B: AutodiffBackend> {
     learning_rate: f64,
 }
 
+// Implement Debug manually since AdamConfig doesn't implement Debug
+impl<B: AutodiffBackend> std::fmt::Debug for TBPTTTrainer<B> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TBPTTTrainer")
+            .field("model", &self.model)
+            .field("hidden_states", &self.hidden_states)
+            .field("metrics", &self.metrics)
+            .field("tbptt_k1", &self.tbptt_k1)
+            .field("tbptt_k2", &self.tbptt_k2)
+            .field("preserve_hidden_states", &self.preserve_hidden_states)
+            .field("chunk_size", &self.chunk_size)
+            .field("grad_clip", &self.grad_clip)
+            .field("learning_rate", &self.learning_rate)
+            .finish_non_exhaustive()
+    }
+}
+
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     // Helper method to save the model
-    pub fn save_file<P: AsRef<std::path::Path>>(&self, path: P, recorder: &impl burn::record::Recorder<MinGRULM<B>>) -> std::io::Result<()> {
+    pub fn save_file<P: AsRef<Path>>(&self, path: P, recorder: &impl FileRecorder<MinGRULM<B>>) -> io::Result<()> {
         self.model.clone().save_file(path, recorder)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
     
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
@@ -381,7 +400,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 // Batch individual chunks
                 let chunks = vec![chunk];
                 // Create a ChunkedTextBatcher for the correct batching
-                let chunked_batcher = ChunkedTextBatcher::<B>::new(batcher.vocab.clone(), batcher.device.clone());
+                let chunked_batcher = ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
                 let batch = chunked_batcher.batch(chunks);
                 
                 // Process chunk and update model if needed
@@ -441,7 +460,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             if let Some(chunk) = dataloader.get(i) {
                 // Batch individual chunks
                 let chunks = vec![chunk];
-                let chunked_batcher = ChunkedTextBatcher::<B::InnerBackend>::new(batcher.vocab.clone(), batcher.device.clone());
+                let chunked_batcher = ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
                 let batch = chunked_batcher.batch(chunks);
                 
                 // Forward pass (no gradients needed for validation)
