@@ -15,8 +15,9 @@ use std::fmt;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::cell::RefCell;
+use indicatif::{ProgressBar, ProgressStyle};
 
-use crate::dataset::{CharVocab, TextBatcher, TextDataset};
+use crate::dataset::{CharVocab, TextBatcher, TextDataset, ChunkedTextDataset, ChunkedTextBatch};
 use crate::model::{MinGRULM, MinGRULMConfig, TextBatch};
 
 /// Configuration for TBPTT training
@@ -32,9 +33,13 @@ pub struct TBPTTConfig {
     #[config(default = 1e-3)]
     pub learning_rate: f64,
     
-    /// Number of chunks to process before performing backpropagation
+    /// Frequency of parameter updates (k1 parameter)
     #[config(default = 4)]
-    pub tbptt_chunks: usize,
+    pub tbptt_k1: usize,
+    
+    /// Length of backpropagation window (k2 parameter)
+    #[config(default = 8)]
+    pub tbptt_k2: usize,
     
     /// Size of each chunk in tokens
     #[config(default = 64)]
@@ -70,8 +75,8 @@ pub struct TBPTTConfig {
 }
 
 /// TBPTT metrics for tracking training progress
-#[derive(Clone)]
-struct TBPTTMetrics {
+#[derive(Clone, Default)]
+pub struct TBPTTMetrics {
     /// Loss values for each batch
     batch_losses: Vec<f32>,
     
@@ -89,46 +94,40 @@ struct TBPTTMetrics {
 }
 
 impl TBPTTMetrics {
-    fn new() -> Self {
-        Self {
-            batch_losses: Vec::new(),
-            chunk_losses: Vec::new(),
-            current_lr: 0.0,
-            epoch_progress: 0.0,
-            metrics: HashMap::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
     
-    fn update_batch_loss(&mut self, loss: f32) {
+    pub fn update_batch_loss(&mut self, loss: f32) {
         self.batch_losses.push(loss);
         self.record_metric("batch_loss", loss);
     }
     
-    fn update_chunk_loss(&mut self, loss: f32) {
+    pub fn update_chunk_loss(&mut self, loss: f32) {
         self.chunk_losses.push(loss);
         self.record_metric("chunk_loss", loss);
     }
     
-    fn record_metric(&mut self, name: &str, value: f32) {
+    pub fn record_metric(&mut self, name: &str, value: f32) {
         let entry = self.metrics.entry(name.to_string())
             .or_insert_with(Vec::new);
         entry.push(MetricEntry {
             name: name.to_string(),
-            formatted: format!("{:.6}", value),  // Formatted string value
-            serialize: value.to_string(),        // Raw value for serialization
+            formatted: format!("{:.6}", value),
+            serialize: value.to_string(),
         });
     }
     
-    fn update_lr(&mut self, lr: f64) {
+    pub fn update_lr(&mut self, lr: f64) {
         self.current_lr = lr;
         self.record_metric("learning_rate", lr as f32);
     }
     
-    fn update_progress(&mut self, progress: f32) {
+    pub fn update_progress(&mut self, progress: f32) {
         self.epoch_progress = progress;
     }
     
-    fn avg_batch_loss(&self) -> f32 {
+    pub fn avg_batch_loss(&self) -> f32 {
         if self.batch_losses.is_empty() {
             0.0
         } else {
@@ -136,7 +135,7 @@ impl TBPTTMetrics {
         }
     }
     
-    fn avg_chunk_loss(&self) -> f32 {
+    pub fn avg_chunk_loss(&self) -> f32 {
         if self.chunk_losses.is_empty() {
             0.0
         } else {
@@ -144,13 +143,13 @@ impl TBPTTMetrics {
         }
     }
     
-    fn clear_chunk_losses(&mut self) {
+    pub fn clear_chunk_losses(&mut self) {
         self.chunk_losses.clear();
     }
 }
 
 // Custom metrics interface
-trait CustomMetrics {
+pub trait CustomMetrics {
     fn get(&self, key: &str) -> Option<&Vec<MetricEntry>>;
     fn keys(&self) -> Vec<String>;
 }
@@ -165,398 +164,432 @@ impl CustomMetrics for TBPTTMetrics {
     }
 }
 
-/// TBPTT Trainer that implements the TrainStep trait
-#[derive(Debug, Module)]
-#[module(custom_display)]
-pub struct TBPTTTrainer<B: AutodiffBackend> 
-where 
-    B::InnerBackend: AutodiffBackend
-{
+/// Main TBPTT Trainer implementation
+#[derive(Module)]
+pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
-    hidden_states: Option<Vec<Tensor<B, 2>>>,
-    current_chunk: usize,
-    tbptt_chunks: usize,
-    preserve_hidden_states: bool,
-    chunk_size: usize,
-    grad_clip: f32,
-}
-
-// Implement ModuleDisplay instead of Display directly
-impl<B: AutodiffBackend> burn::module::ModuleDisplay for TBPTTTrainer<B>
-where 
-    B::InnerBackend: AutodiffBackend
-{
-    fn custom_content(&self, content: burn::module::Content) -> Option<burn::module::Content> {
-        content
-            .add("chunks", &self.tbptt_chunks)
-            .add("chunk_size", &self.chunk_size)
-            .optional()
-    }
-}
-
-// Instead of manually implementing Module, we'll use Module derive macro
-// and implement these methods directly in the train function
-
-// State managed externally
-// Define backend type
-type WgpuBackend = Wgpu<f32, i32>;
-
-#[derive(Clone)]
-struct TBPTTTrainerMetrics {
+    #[module(skip)]
+    optimizer: AdamConfig,
+    #[module(skip)]
+    hidden_states: HashMap<usize, Vec<Tensor<B, 2>>>,
+    #[module(skip)]
     metrics: TBPTTMetrics,
-}
-
-// Global state - normally not ideal but works for this training scenario
-static METRICS: Mutex<Option<TBPTTMetrics>> = Mutex::new(None);
-// Hidden state management - needs to be thread local for training
-thread_local! {
-    static HIDDEN_STATES: RefCell<Option<Vec<Vec<f32>>>> = RefCell::new(None);
-    static CURRENT_CHUNK: RefCell<usize> = RefCell::new(0);
+    #[module(skip)]
+    tbptt_k1: usize,
+    #[module(skip)]
+    tbptt_k2: usize,
+    #[module(skip)]
+    preserve_hidden_states: bool,
+    #[module(skip)]
+    chunk_size: usize,
+    #[module(skip)]
+    grad_clip: f32,
+    #[module(skip)]
+    learning_rate: f64,
 }
 
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
-        // Initialize global metrics
-        let metrics = TBPTTMetrics::new();
-        *METRICS.lock().unwrap() = Some(metrics);
-        
-        // Initialize thread locals
-        HIDDEN_STATES.with(|cell| { *cell.borrow_mut() = None; });
-        CURRENT_CHUNK.with(|cell| { *cell.borrow_mut() = 0; });
-        
         Self {
             model,
-            hidden_states: None, // Keep this field for compatibility
-            current_chunk: 0,    // Keep this field for compatibility
-            tbptt_chunks: config.tbptt_chunks,
+            optimizer: config.optimizer.clone(),
+            hidden_states: HashMap::new(),
+            metrics: TBPTTMetrics::new(),
+            tbptt_k1: config.tbptt_k1,
+            tbptt_k2: config.tbptt_k2,
             preserve_hidden_states: config.preserve_hidden_states,
             chunk_size: config.chunk_size,
             grad_clip: config.grad_clip,
+            learning_rate: config.learning_rate,
         }
     }
     
+    /// Reset hidden states for all documents
     pub fn reset_hidden_states(&mut self) {
-        // Reset thread local hidden states
-        HIDDEN_STATES.with(|cell| { *cell.borrow_mut() = None; });
+        self.hidden_states.clear();
     }
     
-    pub fn metrics(&self) -> TBPTTMetrics {
-        METRICS.lock().unwrap().clone().unwrap_or_else(TBPTTMetrics::new)
+    /// Get metrics for external tracking
+    pub fn metrics(&self) -> &TBPTTMetrics {
+        &self.metrics
     }
     
-    fn update_metrics(&self, loss: f32) {
-        if let Some(metrics) = &mut *METRICS.lock().unwrap() {
-            metrics.update_chunk_loss(loss);
-        }
-    }
-    
-    fn update_batch_metrics(&self, loss: f32) {
-        if let Some(metrics) = &mut *METRICS.lock().unwrap() {
-            metrics.update_batch_loss(loss);
-            metrics.clear_chunk_losses();
-        }
-    }
-}
-
-impl<B: AutodiffBackend> TrainStep<TextBatch<B>, ClassificationOutput<B>> for TBPTTTrainer<B> 
-where 
-    B::InnerBackend: AutodiffBackend
-{
-    fn step(&self, batch: TextBatch<B>) -> TrainOutput<ClassificationOutput<B>> {
-        let batch_size = batch.input.dims()[0];
-        let device = batch.input.device();
+    /// Process a single document chunk with TBPTT
+    pub fn process_chunk<O: Optimizer<MinGRULM<B>, B>>(
+        &mut self,
+        chunk: &ChunkedTextBatch<B>,
+        optimizer: &mut O,
+        accumulator: &mut GradientsAccumulator,
+        accumulation_current: &mut usize,
+        do_update: bool
+    ) -> f32 {
+        let batch_size = chunk.input.dims()[0];
+        let seq_len = chunk.input.dims()[1];
+        let device = chunk.input.device();
         
-        // Split the batch into chunks for TBPTT
-        let seq_len = batch.input.dims()[1];
-        let chunk_size = seq_len / self.tbptt_chunks;
+        // Get current hidden states for this document if available
+        let mut current_hidden_states = Vec::new();
         
-        let mut total_loss = 0.0;
-        
-        // Create a new accumulator for this batch if needed
-        let mut grad_accumulator = GradientsAccumulator::new();
-        
-        // Retrieve current hidden states from thread local storage
-        let current_hidden_states: Option<Vec<Tensor<B, 2>>> = HIDDEN_STATES.with(|cell| {
-            cell.borrow().as_ref().map(|vec_of_vecs| {
-                vec_of_vecs.iter().map(|vec| {
-                    // Reconstruct tensor from stored data
-                    let tensor_data: Vec<f32> = vec.clone();
-                    // Assuming hidden dim can be inferred from data length
-                    let hidden_dim = tensor_data.len() / batch_size;
-                    Tensor::<B, 2>::from_data(&*tensor_data.into_iter().map(|x| x as f32).collect::<Vec<f32>>(), &batch.input.device())
-                        .reshape([batch_size, hidden_dim])
-                }).collect()
-            })
-        });
-        
-        for chunk_idx in 0..self.tbptt_chunks {
-            // Get chunk slice
-            let start = chunk_idx * chunk_size;
-            let end = start + chunk_size;
+        // Process each document in the batch
+        for i in 0..batch_size {
+            let doc_id = chunk.doc_ids[i];
+            let chunk_idx = chunk.chunk_indices[i];
             
-            let chunk_input = batch.input.clone().slice([0..batch_size, start..end]);
-            let chunk_target = batch.target.clone().slice([0..batch_size, start..end]);
-            
-            // Forward pass
-            let (logits, next_hidden_states) = self.model.forward(chunk_input.clone(), current_hidden_states.clone());
-            
-            // Calculate loss
-            let [batch_size, seq_len, vocab_size] = logits.dims();
-            let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
-            let targets_reshaped = chunk_target.reshape([batch_size * seq_len]);
-            
-            let loss_fn = CrossEntropyLossConfig::new().init(&device);
-            let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
-            
-            // Convert loss to f32
-            let scalar_value = loss.clone().into_scalar();
-            let loss_value = scalar_value.to_f32();
-            total_loss += loss_value;
-            
-            // Record metrics
-            self.update_metrics(loss_value);
-            
-            // Update hidden states for next chunk - detach to prevent backprop through time
-            // Use thread local storage since we can't mutate self
-            let detached_states: Vec<Tensor<B, 2>> = next_hidden_states.iter().map(|h| h.clone().detach()).collect();
-            
-            // Store hidden states in thread local storage
-            HIDDEN_STATES.with(|cell| {
-                *cell.borrow_mut() = Some(detached_states.iter().map(|t| t.clone().to_data().into_vec().unwrap()).collect());
-            });
-            
-            // Backward pass and accumulate gradients
-            let grads = loss.backward();
-            let grads_params = GradientsParams::from_grads(grads, &self.model);
-            
-            // Apply gradient clipping if configured
-            let effective_grads = if self.grad_clip > 0.0 {
-                // TODO: Implement gradient clipping
-                grads_params
+            // Retrieve or initialize hidden state for this document
+            let doc_hidden = if chunk_idx > 0 && self.hidden_states.contains_key(&doc_id) {
+                let state = self.hidden_states.get(&doc_id).unwrap().clone();
+                
+                // Detach if we're beyond the backprop window (tbptt_k2)
+                if chunk_idx % self.tbptt_k2 == 0 {
+                    // Detach to truncate backpropagation
+                    state.iter().map(|h| h.clone().detach()).collect()
+                } else {
+                    state
+                }
             } else {
-                grads_params
+                // No previous state, initialize with zeros
+                Vec::new()
             };
             
-            grad_accumulator.accumulate(&self.model, effective_grads);
-            
-            // Update current chunk counter
-            CURRENT_CHUNK.with(|cell| {
-                *cell.borrow_mut() += 1;
-            });
+            current_hidden_states.push(doc_hidden);
         }
         
-        // Create output for the full batch
-        let output = ClassificationOutput::new(
-            Tensor::full([], total_loss / self.tbptt_chunks as f32, &device),
-            Tensor::zeros([1, 1], &device), // Dummy tensor
-            Tensor::zeros([1], &device),    // Dummy tensor
+        // Flatten into vector of tensors for the batch
+        let batch_hidden = if current_hidden_states.is_empty() || current_hidden_states[0].is_empty() {
+            None
+        } else {
+            // Merge hidden states across batch dimension
+            let hidden_dim = current_hidden_states[0][0].dims()[1];
+            
+            // Collect hidden states for each layer
+            let mut merged_states = Vec::new();
+            let num_layers = current_hidden_states[0].len();
+            
+            for layer in 0..num_layers {
+                let layer_states: Vec<_> = current_hidden_states.iter()
+                    .map(|doc_state| {
+                        if doc_state.len() > layer {
+                            doc_state[layer].clone()
+                        } else {
+                            // If layer doesn't exist, create zero tensor
+                            Tensor::zeros([1, hidden_dim], &device)
+                        }
+                    })
+                    .collect();
+                
+                // Stack along batch dimension
+                merged_states.push(Tensor::cat(layer_states, 0));
+            }
+            
+            Some(merged_states)
+        };
+        
+        // Forward pass with hidden state
+        let (logits, next_hidden) = self.model.forward(chunk.input.clone(), batch_hidden);
+        
+        // Update hidden states for each document
+        for i in 0..batch_size {
+            let doc_id = chunk.doc_ids[i];
+            let is_last_chunk = chunk.is_last_chunks[i];
+            
+            // Extract this document's hidden state from the batch
+            let doc_next_hidden: Vec<Tensor<B, 2>> = next_hidden.iter()
+                .map(|h| {
+                    // Extract slice for this document
+                    h.clone().slice([i..i+1, 0..h.dims()[1]]).squeeze(0)
+                })
+                .collect();
+            
+            // Store unless this is the last chunk of a document
+            if !is_last_chunk && self.preserve_hidden_states {
+                self.hidden_states.insert(doc_id, doc_next_hidden);
+            } else if is_last_chunk {
+                // Remove hidden state for completed documents
+                self.hidden_states.remove(&doc_id);
+            }
+        }
+        
+        // Calculate loss
+        let [batch_size, seq_len, vocab_size] = logits.dims();
+        let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
+        let targets_reshaped = chunk.target.reshape([batch_size * seq_len]);
+        
+        let loss_fn = CrossEntropyLossConfig::new().init(&device);
+        let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
+        
+        // Get loss value for metrics
+        let scalar_value = loss.clone().into_scalar();
+        let loss_value = scalar_value.to_f32();
+        
+        // Record metrics
+        self.metrics.update_chunk_loss(loss_value);
+        
+        // Backward pass and accumulate gradients
+        let grads = loss.backward();
+        let grads_params = GradientsParams::from_grads(grads, &self.model);
+        
+        // Apply gradient clipping if configured
+        let effective_grads = if self.grad_clip > 0.0 {
+            // Implement gradient clipping here
+            // For simplicity, just using the original grads for now
+            grads_params
+        } else {
+            grads_params
+        };
+        
+        // Accumulate gradients
+        accumulator.accumulate(&self.model, effective_grads);
+        *accumulation_current += 1;
+        
+        // Apply gradients if needed
+        if do_update && *accumulation_current >= self.tbptt_k1 {
+            let grads = accumulator.grads();
+            self.model = optimizer.step(self.learning_rate, self.model.clone(), grads);
+            *accumulation_current = 0;
+        }
+        
+        loss_value
+    }
+    
+    /// Train the model for one epoch
+    pub fn train_epoch<O: Optimizer<MinGRULM<B>, B>>(
+        &mut self,
+        dataloader: &ChunkedTextDataset,
+        batcher: &TextBatcher<B>,
+        optimizer: &mut O,
+        epoch: usize,
+    ) -> f32 {
+        println!("Training epoch {}", epoch);
+        
+        // Progress bar for visualization
+        let progress_bar = ProgressBar::new(dataloader.len() as u64);
+        progress_bar.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) - {msg}")
+                .expect("Progress bar template error")
+                .progress_chars("#>-")
         );
         
-        // Record average batch loss
-        self.update_batch_metrics(total_loss / self.tbptt_chunks as f32);
+        let mut total_loss = 0.0;
+        let mut batch_count = 0;
         
-        // Get the gradients from the output directly
-        let grads = output.loss.backward();
+        // Create batches 
+        let batch_size = 32; // From config
         
-        // Create train output
-        TrainOutput::new(self, grads, output)
+        // Gradient accumulation state
+        let mut accumulator = GradientsAccumulator::new();
+        let mut accumulation_current = 0;
+        
+        // Process each item in dataset
+        for i in 0..dataloader.len() {
+            if let Some(chunk) = dataloader.get(i) {
+                // Batch individual chunks
+                let chunks = vec![chunk];
+                let batch = batcher.batch(chunks);
+                
+                // Process chunk and update model if needed
+                let do_update = (i + 1) % self.tbptt_k1 == 0 || i == dataloader.len() - 1;
+                let loss = self.process_chunk(&batch, optimizer, &mut accumulator, &mut accumulation_current, do_update);
+                
+                total_loss += loss;
+                batch_count += 1;
+                
+                // Update progress
+                progress_bar.inc(1);
+                progress_bar.set_message(format!("Loss: {:.6}", loss));
+                
+                // Update metrics
+                self.metrics.update_progress((i as f32) / (dataloader.len() as f32));
+            }
+        }
+        
+        // Ensure we apply any remaining gradients
+        if accumulation_current > 0 {
+            let grads = accumulator.grads();
+            self.model = optimizer.step(self.learning_rate, self.model.clone(), grads);
+        }
+        
+        // Finalize metrics
+        let epoch_loss = total_loss / batch_count as f32;
+        self.metrics.update_batch_loss(epoch_loss);
+        
+        progress_bar.finish_with_message(format!("Epoch complete - Avg loss: {:.6}", epoch_loss));
+        
+        epoch_loss
+    }
+    
+    /// Validate the model
+    pub fn validate(
+        &self,
+        dataloader: &ChunkedTextDataset,
+        batcher: &TextBatcher<B::InnerBackend>,
+    ) -> f32 {
+        println!("Validating model...");
+        
+        let progress_bar = ProgressBar::new(dataloader.len() as u64);
+        progress_bar.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.yellow/blue}] {pos}/{len} ({eta}) - {msg}")
+                .expect("Progress bar template error")
+                .progress_chars("#>-")
+        );
+        
+        let model = self.model.valid();
+        let mut total_loss = 0.0;
+        let mut batch_count = 0;
+        
+        // Process validation data
+        for i in 0..dataloader.len() {
+            if let Some(chunk) = dataloader.get(i) {
+                // Batch individual chunks
+                let chunks = vec![chunk];
+                let batch = batcher.batch(chunks);
+                
+                // Forward pass (no gradients needed for validation)
+                let (logits, _) = model.forward(batch.input.clone(), None);
+                
+                // Calculate loss
+                let [batch_size, seq_len, vocab_size] = logits.dims();
+                let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
+                let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
+                
+                let device = logits_reshaped.device();
+                let loss_fn = CrossEntropyLossConfig::new().init(&device);
+                let loss = loss_fn.forward(logits_reshaped, targets_reshaped);
+                
+                let loss_value = loss.into_scalar().to_f32();
+                total_loss += loss_value;
+                batch_count += 1;
+                
+                // Update progress
+                progress_bar.inc(1);
+                progress_bar.set_message(format!("Loss: {:.6}", loss_value));
+            }
+        }
+        
+        let avg_loss = total_loss / batch_count as f32;
+        progress_bar.finish_with_message(format!("Validation complete - Avg loss: {:.6}", avg_loss));
+        
+        avg_loss
     }
 }
 
 /// Train a language model using Truncated Backpropagation Through Time (TBPTT)
-/// with a custom training loop for more direct control over the TBPTT process
 pub fn train_with_tbptt<B: AutodiffBackend>(
     config: &TBPTTConfig,
     device: &B::Device,
     input_data: &str,
     vocab: &CharVocab,
     artifact_dir: &str,
-) -> MinGRULM<B> 
-where 
-    B::InnerBackend: Backend
-{
+) -> MinGRULM<B> {
     // Set random seed for reproducibility
     B::seed(config.seed);
     
-    // Initialize model with proper chunk size
-    let mut model = config.model.clone()
+    // Initialize model
+    let model = config.model.clone()
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
     
     // Initialize optimizer
     let mut optimizer = config.optimizer.init();
     
-    // Create dataset with appropriate sequence length
-    let seq_length = config.chunk_size * config.tbptt_chunks;
-    let dataset = TextDataset::new_with_random_sampling(
-        input_data.to_string(),
-        seq_length,
-        0.5, // Coverage factor
-        config.seed,
-        config.chunk_size,
+    // Create TBPTT trainer
+    let mut trainer = TBPTTTrainer::new(model, config);
+    
+    // Create chunked dataset for document-aware processing
+    let documents = prepare_documents(input_data, config.chunk_size);
+    let train_dataset = ChunkedTextDataset::new(
+        documents.clone(),
+        config.chunk_size * config.tbptt_k1,
+        config.chunk_size
     );
     
-    // Create validation dataset (smaller)
-    let valid_dataset = TextDataset::new_with_random_sampling(
-        input_data.to_string(),
-        seq_length,
-        0.1, // Smaller coverage for validation
-        config.seed + 1, // Different seed
-        config.chunk_size,
+    // Create validation dataset (smaller subset)
+    let valid_documents = documents.iter()
+        .take(documents.len() / 5)
+        .cloned()
+        .collect();
+    let valid_dataset = ChunkedTextDataset::new(
+        valid_documents,
+        config.chunk_size * config.tbptt_k1,
+        config.chunk_size
     );
     
-    // Create dataloaders
+    // Create batchers
     let train_batcher = TextBatcher::<B>::new(vocab.clone(), device.clone());
     let valid_batcher = TextBatcher::<B::InnerBackend>::new(vocab.clone(), device.clone());
     
-    let train_dataloader = burn::data::dataloader::DataLoaderBuilder::new(train_batcher)
-        .batch_size(config.batch_size)
-        .shuffle(config.seed)
-        .build(dataset);
-        
-    let valid_dataloader = burn::data::dataloader::DataLoaderBuilder::new(valid_batcher)
-        .batch_size(config.batch_size)
-        .shuffle(config.seed)
-        .build(valid_dataset);
-    
     // Create recorder for checkpoints
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
-    
-    // Create directory for artifacts if it doesn't exist
     std::fs::create_dir_all(artifact_dir).expect("Failed to create artifact directory");
     
-    println!("Starting TBPTT training with custom loop");
-    println!("Chunk size: {}, Chunks per update: {}", config.chunk_size, config.tbptt_chunks);
+    println!("Starting TBPTT training");
+    println!("Parameters: k1={}, k2={}, chunk_size={}", config.tbptt_k1, config.tbptt_k2, config.chunk_size);
     
     // Training loop
-    for epoch in 0..config.num_epochs {
-        println!("Epoch {}/{}", epoch + 1, config.num_epochs);
-        
+    let mut best_loss = f32::MAX;
+    let mut best_model = trainer.model.clone();
+    
+    for epoch in 1..=config.num_epochs {
         // Training phase
-        let mut train_loss = 0.0;
-        let mut train_steps = 0;
-        
-        for (batch_idx, batch) in train_dataloader.iter().enumerate() {
-            // Create a gradients accumulator
-            let mut grad_accumulator = GradientsAccumulator::new();
-            
-            // Get sequence length and calculate chunk size
-            let seq_len = batch.input.dims()[1];
-            let chunk_size = seq_len / config.tbptt_chunks;
-            
-            // Process each chunk
-            let mut hidden_states = None;
-            let mut batch_loss = 0.0;
-            
-            for chunk_idx in 0..config.tbptt_chunks {
-                let start = chunk_idx * chunk_size;
-                let end = (start + chunk_size).min(seq_len);
-                
-                // Extract chunk
-                let chunk_input = batch.input.clone().slice([0..batch.input.dims()[0], start..end]);
-                let chunk_target = batch.target.clone().slice([0..batch.target.dims()[0], start..end]);
-                
-                // Forward pass
-                let (logits, next_hidden) = model.forward(chunk_input, hidden_states);
-                
-                // Calculate loss
-                let loss_fn = CrossEntropyLossConfig::new().init(device);
-                let [batch_size, chunk_len, vocab_size] = logits.dims();
-                let logits_reshaped = logits.reshape([batch_size * chunk_len, vocab_size]);
-                let targets_reshaped = chunk_target.reshape([batch_size * chunk_len]);
-                
-                let loss = loss_fn.forward(logits_reshaped, targets_reshaped);
-                
-                // Backward pass
-                let grads = loss.backward();
-                let grads_params = GradientsParams::from_grads(grads, &model);
-                
-                // Apply gradient clipping if configured
-                let effective_grads = if config.grad_clip > 0.0 {
-                    // TODO: Implement gradient clipping
-                    grads_params
-                } else {
-                    grads_params
-                };
-                
-                // Accumulate gradients
-                grad_accumulator.accumulate(&model, effective_grads);
-                
-                // Detach hidden states and update for next chunk
-                hidden_states = Some(next_hidden.iter().map(|h| h.clone().detach()).collect());
-                
-                // Update loss
-                batch_loss += loss.into_scalar().to_f32();
-            }
-            
-            // Apply accumulated gradients
-            model = optimizer.step(config.learning_rate, model, grad_accumulator.grads());
-            
-            // Update metrics
-            train_loss += batch_loss / config.tbptt_chunks as f32;
-            train_steps += 1;
-            
-            // Log progress
-            if (batch_idx + 1) % config.log_interval == 0 {
-                println!("  Batch {}, Loss: {:.6}", 
-                    batch_idx + 1, 
-                    batch_loss / config.tbptt_chunks as f32
-                );
-            }
-        }
+        let train_loss = trainer.train_epoch(&train_dataset, &train_batcher, &mut optimizer, epoch);
         
         // Validation phase
-        let mut valid_loss = 0.0;
-        let mut valid_steps = 0;
+        let valid_loss = trainer.validate(&valid_dataset, &valid_batcher);
         
-        for batch in valid_dataloader.iter() {
-            // Forward pass with non-autodiff model for validation
-            let model_valid = model.valid();
-            let (logits, _) = model_valid.forward(batch.input, None);
-            
-            // Calculate loss
-            let loss_fn = CrossEntropyLossConfig::new().init(device);
-            let [batch_size, seq_len, vocab_size] = logits.dims();
-            let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
-            let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
-            
-            let loss = loss_fn.forward(logits_reshaped, targets_reshaped);
-            
-            // Update metrics
-            valid_loss += loss.into_scalar().to_f32();
-            valid_steps += 1;
-        }
-        
-        // Print epoch summary
         println!("Epoch {}/{} - Train Loss: {:.6}, Valid Loss: {:.6}", 
-            epoch + 1, 
-            config.num_epochs, 
-            train_loss / train_steps as f32,
-            valid_loss / valid_steps as f32
-        );
+            epoch, config.num_epochs, train_loss, valid_loss);
+        
+        // Save best model
+        if valid_loss < best_loss {
+            best_loss = valid_loss;
+            best_model = trainer.model.clone();
+            
+            // Save checkpoint
+            let model_path = format!("{}/model_best.bin", artifact_dir);
+            best_model.clone()
+                .save_file(&model_path, &recorder)
+                .expect("Failed to save best model");
+            println!("Saved new best model with loss {:.6}", best_loss);
+        }
         
         // Save checkpoint
-        if (epoch + 1) % config.checkpoint_interval == 0 {
-            let model_path = format!("{}/model_epoch_{}.bin", artifact_dir, epoch + 1);
-            model.clone()
+        if epoch % 1 == 0 {
+            let model_path = format!("{}/model_epoch_{}.bin", artifact_dir, epoch);
+            trainer.model.clone()
                 .save_file(&model_path, &recorder)
                 .expect("Failed to save checkpoint");
-            println!("Saved checkpoint to {}", model_path);
         }
+        
+        // Reset hidden states between epochs
+        trainer.reset_hidden_states();
     }
     
     // Save final model
     let model_path = format!("{}/model_final.bin", artifact_dir);
-    model.clone()
+    trainer.model.clone()
         .save_file(&model_path, &recorder)
         .expect("Failed to save final model");
-    println!("Final model saved to {}", model_path);
     
-    model
+    println!("Final model saved to {}", model_path);
+    println!("Best validation loss: {:.6}", best_loss);
+    
+    best_model
 }
 
-// We no longer need the ValidStep implementation since we're using a custom training loop
-
-// Process_batch is now implemented as part of the TBPTTTrainer
-
-// No longer need a separate save_checkpoint function
+/// Helper function to prepare documents from input text
+fn prepare_documents(input_text: &str, chunk_size: usize) -> Vec<String> {
+    // Simple document preparation - split by paragraphs
+    let paragraphs: Vec<String> = input_text
+        .split("\n\n")
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+    
+    // Ensure each document is large enough
+    let min_document_size = chunk_size * 2;
+    
+    paragraphs.into_iter()
+        .filter(|p| p.len() >= min_document_size)
+        .collect()
+}

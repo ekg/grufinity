@@ -89,8 +89,8 @@ fn main() {
     config.save(format!("{}/tbptt_config.json", artifact_dir))
         .expect("Failed to save config");
     
-    println!("Training with TBPTT - chunk size: {}, chunks per update: {}", 
-             config.chunk_size, config.tbptt_chunks);
+    println!("Training with TBPTT - chunk size: {}, k1: {}, k2: {}", 
+             config.chunk_size, config.tbptt_k1, config.tbptt_k2);
     println!("Vocabulary size: {}", vocab.size());
     
     // Train the model using TBPTT with Learner API
@@ -133,7 +133,8 @@ fn create_default_config() -> TBPTTConfig {
         optimizer_config,
     )
     .with_chunk_size(64)
-    .with_tbptt_chunks(4)
+    .with_tbptt_k1(4)   // Update frequency
+    .with_tbptt_k2(8)   // Backprop window length
     .with_batch_size(32)
     .with_num_epochs(10)
     .with_learning_rate(1e-3)

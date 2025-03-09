@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 burn = { version = "0.16.0", features = ["ndarray", "wgpu", "train"] }
 rand = "0.8.5"
-indicatif = "0.17.0"
+indicatif = "0.17.7"
 
 [[bin]]
 name = "train"
