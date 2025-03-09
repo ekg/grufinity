@@ -217,6 +217,11 @@ impl<B: Backend> MinGRULM<B> {
             .with_depth(self.mingru_layers.len())
             .with_chunk_size(self.chunk_size)
     }
+    
+    /// Accessor for mingru layers
+    pub fn mingru_layers(&self) -> &Vec<MinGRU<B>> {
+        &self.mingru_layers
+    }
 
     fn forward_no_chunking(
         &self, 
