@@ -206,7 +206,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Print model configuration for debugging
         println!("Initializing TBPTT trainer with:");
         println!("  Model layers: {}", model.mingru_layers().len());
-        println!("  Hidden dimension: {}", model.config().dim);
+        println!("  Hidden dimension: {}", model.dim());
         println!("  Chunk size: {}", config.chunk_size);
         println!("  TBPTT k1: {}, k2: {}", config.tbptt_k1, config.tbptt_k2);
         
@@ -342,15 +342,16 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                         
                     if h_dims.len() != 2 {
                         println!("WARNING: Hidden state has unexpected dimensions: {:?}", h_dims);
-                        return Tensor::zeros([self.model.config().dim], &device);
+                        return Tensor::zeros([self.model.dim()], &device);
                     }
                         
                     // Make sure we have valid dimensions for slicing
                     if i < h_dims[0] {
-                        // Instead of squeezing, explicitly reshape to ensure correct dimensions
+                        // Instead of squeezing, explicitly reshape to ensure correct 2D dimensions
                         let hidden_dim = h_dims[1];
                         let extracted = h.clone().slice([i..i+1, 0..hidden_dim]);
-                        extracted.reshape([hidden_dim])
+                        // Reshape to [1, hidden_dim] to maintain 2D tensor
+                        extracted
                     } else {
                         // Create a properly sized tensor if index is out of bounds
                         Tensor::zeros([h_dims[1]], &device)

@@ -73,7 +73,7 @@ impl<B: Backend> MinGRU<B> {
     /// * `next_hidden` - Next hidden state [batch_size, hidden_size]
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
         let [batch_size, seq_len, _] = x.dims();
-        let device = x.device();
+        let _device = x.device();
     
         // Print input dimensions for debugging
         println!("MinGRU input dimensions: {:?}", x.dims());
