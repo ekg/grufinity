@@ -169,8 +169,6 @@ impl CustomMetrics for TBPTTMetrics {
 // No Module derive - we'll handle the model manually
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
-    #[allow(dead_code)]  // Used to initialize the optimizer in train_with_tbptt
-    optimizer: AdamConfig,
     hidden_states: HashMap<usize, Vec<Tensor<B, 2>>>,
     metrics: TBPTTMetrics,
     tbptt_k1: usize,
@@ -181,7 +179,6 @@ pub struct TBPTTTrainer<B: AutodiffBackend> {
     learning_rate: f64,
 }
 
-// Implement Debug manually since AdamConfig doesn't implement Debug
 impl<B: AutodiffBackend> std::fmt::Debug for TBPTTTrainer<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TBPTTTrainer")
@@ -208,7 +205,6 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
         Self {
             model,
-            optimizer: config.optimizer.clone(),
             hidden_states: HashMap::new(),
             metrics: TBPTTMetrics::new(),
             tbptt_k1: config.tbptt_k1,
