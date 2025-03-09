@@ -19,7 +19,7 @@ use burn::data::dataloader::batcher::Batcher;
 
 use crate::dataset::{CharVocab, TextBatcher, ChunkedTextDataset, ChunkedTextBatch, ChunkedTextBatcher};
 use crate::model::{MinGRULM, MinGRULMConfig};
-use burn::record::Recorder;
+use burn::record::FileRecorder;
 
 /// Configuration for TBPTT training
 #[derive(Config)]
@@ -199,7 +199,7 @@ impl<B: AutodiffBackend> std::fmt::Debug for TBPTTTrainer<B> {
 
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     // Helper method to save the model
-    pub fn save_file<P: AsRef<Path>>(&self, path: P, recorder: &impl burn::record::Recorder) -> io::Result<()> {
+    pub fn save_file(&self, path: impl AsRef<Path>, recorder: &impl FileRecorder<B>) -> io::Result<()> {
         self.model.clone().save_file(path, recorder)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
@@ -389,7 +389,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let mut batch_count = 0;
         
         // Create batches 
-        let batch_size = 32; // From config
+        let _batch_size = 32; // From config
         
         // Gradient accumulation state
         let mut accumulator = GradientsAccumulator::<MinGRULM<B>>::new();
