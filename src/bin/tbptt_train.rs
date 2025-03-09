@@ -95,7 +95,7 @@ fn main() {
     
     // Train the model using TBPTT with Learner API
     println!("Training with TBPTT using Learner API");
-    let mut model = train_with_tbptt::<MyBackend>(
+    let model = train_with_tbptt::<MyBackend>(
         &config,
         &device,
         &text,
