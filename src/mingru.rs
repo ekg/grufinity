@@ -75,11 +75,7 @@ impl<B: Backend> MinGRU<B> {
         let [batch_size, seq_len, _] = x.dims();
         let _device = x.device();
     
-        // Print input dimensions for debugging
-        println!("MinGRU input dimensions: {:?}", x.dims());
-        if let Some(h) = &prev_hidden {
-            println!("Previous hidden state dimensions: {:?}", h.dims());
-        }
+        // Process input to get hidden and gate values
 
         // Project input to get hidden and gate values
         let projected = self.to_hidden_and_gate.forward(x);

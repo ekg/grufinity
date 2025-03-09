@@ -32,12 +32,7 @@ pub fn parallel_scan<B: Backend>(
         Some(h0) => {
             // Prepend h0 to values (handled as b_0)
             let mut all_values = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device);
-            // Safely reshape h0 with explicit dimension checking
-            let h0_dims = h0.clone().dims();
-            if h0_dims.len() != 2 || h0_dims[0] != batch_size {
-                println!("WARNING: h0 has incorrect dimensions: {:?}, expected [{}, {}]", 
-                         h0_dims, batch_size, hidden_dim);
-            }
+            // Reshape h0 to correct dimensions
             let h0_reshaped = h0.clone().reshape([batch_size, 1, hidden_dim]);
             all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], h0_reshaped);
             all_values = all_values.slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], values);

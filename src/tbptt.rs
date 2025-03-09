@@ -203,12 +203,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
     }
     
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
-        // Print model configuration for debugging
-        println!("Initializing TBPTT trainer with:");
-        println!("  Model layers: {}", model.mingru_layers().len());
-        println!("  Hidden dimension: {}", model.dim());
-        println!("  Chunk size: {}", config.chunk_size);
-        println!("  TBPTT k1: {}, k2: {}", config.tbptt_k1, config.tbptt_k2);
+        // Initialize the trainer
         
         Self {
             model,
@@ -311,8 +306,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                         // Stack along batch dimension
                         merged_states.push(Tensor::cat(layer_states, 0));
                     } else {
-                        println!("Layer states length mismatch: {} vs batch size {}", layer_states.len(), batch_size);
-                        return 0.0; // Skip this batch due to dimension mismatch
+                        // Skip this batch due to dimension mismatch
+                        return 0.0;
                     }
                 }
                 
@@ -328,11 +323,6 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             let doc_id = chunk.doc_ids[i];
             let is_last_chunk = chunk.is_last_chunks[i];
             
-            // Print dimensions for debugging
-            println!("Doc ID: {}, Chunk: {}, Next hidden dimensions:", doc_id, chunk.chunk_indices[i]);
-            for (idx, h) in next_hidden.iter().enumerate() {
-                println!("  Layer {}: {:?}", idx, h.dims());
-            }
 
             // Extract this document's hidden state from the batch with safe dimension handling
             let doc_next_hidden: Vec<Tensor<B, 2>> = next_hidden.iter()
@@ -341,7 +331,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                     let h_dims = h.dims();
                         
                     if h_dims.len() != 2 {
-                        println!("WARNING: Hidden state has unexpected dimensions: {:?}", h_dims);
+                        // Create a tensor with the expected dimensions
                         return Tensor::zeros([self.model.dim()], &device);
                     }
                         
@@ -456,7 +446,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 // Ensure we have valid input data
                 if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
                     progress_bar.inc(1);
-                    progress_bar.set_message("Skipped empty batch");
+                    progress_bar.set_message("Skipped batch");
                     continue;
                 }
                 

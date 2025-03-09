@@ -211,7 +211,7 @@ impl<B: Backend> MinGRULM<B> {
     }
     
     /// Forward pass without chunking, used by forward_chunked
-    /// Get model configuration for debugging
+    /// Get model configuration
     pub fn config(&self) -> MinGRULMConfig {
         // Use fixed dimensions since we can't directly access weight dimensions
         let vocab_size = 256; // num_tokens
@@ -244,8 +244,7 @@ impl<B: Backend> MinGRULM<B> {
     ) -> (Tensor<B, 3>, Vec<Tensor<B, 2>>) {
         let mut x = x;
         
-        // Print input dimensions for debugging
-        println!("Forward input dimensions: {:?}", x.dims());
+        // Initialize hidden states
         
         // Initialize hidden states
         let mut next_hidden_states = Vec::with_capacity(self.mingru_layers.len());
