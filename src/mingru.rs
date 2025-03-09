@@ -73,8 +73,14 @@ impl<B: Backend> MinGRU<B> {
     /// * `next_hidden` - Next hidden state [batch_size, hidden_size]
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
         let [batch_size, seq_len, _] = x.dims();
-        let _device = x.device();
+        let device = x.device();
     
+        // Print input dimensions for debugging
+        println!("MinGRU input dimensions: {:?}", x.dims());
+        if let Some(h) = &prev_hidden {
+            println!("Previous hidden state dimensions: {:?}", h.dims());
+        }
+
         // Project input to get hidden and gate values
         let projected = self.to_hidden_and_gate.forward(x);
         let hidden_dim = projected.dims()[2] / 2;

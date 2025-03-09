@@ -211,12 +211,22 @@ impl<B: Backend> MinGRULM<B> {
     }
     
     /// Forward pass without chunking, used by forward_chunked
+    /// Get model configuration for debugging
+    pub fn config(&self) -> MinGRULMConfig {
+        MinGRULMConfig::new(self.to_logits.weight().dims()[1], self.to_logits.weight().dims()[0])
+            .with_depth(self.mingru_layers.len())
+            .with_chunk_size(self.chunk_size)
+    }
+
     fn forward_no_chunking(
         &self, 
         x: Tensor<B, 3>, 
         hidden_states: Option<Vec<Tensor<B, 2>>>
     ) -> (Tensor<B, 3>, Vec<Tensor<B, 2>>) {
         let mut x = x;
+        
+        // Print input dimensions for debugging
+        println!("Forward input dimensions: {:?}", x.dims());
         
         // Initialize hidden states
         let mut next_hidden_states = Vec::with_capacity(self.mingru_layers.len());

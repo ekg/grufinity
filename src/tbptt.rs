@@ -203,6 +203,13 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
     }
     
     pub fn new(model: MinGRULM<B>, config: &TBPTTConfig) -> Self {
+        // Print model configuration for debugging
+        println!("Initializing TBPTT trainer with:");
+        println!("  Model layers: {}", model.mingru_layers().len());
+        println!("  Hidden dimension: {}", model.config().dim);
+        println!("  Chunk size: {}", config.chunk_size);
+        println!("  TBPTT k1: {}, k2: {}", config.tbptt_k1, config.tbptt_k2);
+        
         Self {
             model,
             hidden_states: HashMap::new(),
@@ -321,26 +328,31 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             let doc_id = chunk.doc_ids[i];
             let is_last_chunk = chunk.is_last_chunks[i];
             
-            // Extract this document's hidden state from the batch
+            // Print dimensions for debugging
+            println!("Doc ID: {}, Chunk: {}, Next hidden dimensions:", doc_id, chunk.chunk_indices[i]);
+            for (idx, h) in next_hidden.iter().enumerate() {
+                println!("  Layer {}: {:?}", idx, h.dims());
+            }
+
+            // Extract this document's hidden state from the batch with safe dimension handling
             let doc_next_hidden: Vec<Tensor<B, 2>> = next_hidden.iter()
                 .map(|h| {
                     // Check dimensions and ensure safe slicing
                     let h_dims = h.dims();
                         
+                    if h_dims.len() != 2 {
+                        println!("WARNING: Hidden state has unexpected dimensions: {:?}", h_dims);
+                        return Tensor::zeros([self.model.config().dim], &device);
+                    }
+                        
                     // Make sure we have valid dimensions for slicing
                     if i < h_dims[0] {
-                        // Extract slice for this document
-                        let sliced = h.clone().slice([i..i+1, 0..h_dims[1]]);
-                            
-                        // Validate dimensions before squeezing
-                        if sliced.dims()[0] == 1 {
-                            sliced.squeeze(0)
-                        } else {
-                            // If dimensions are wrong, create a valid tensor
-                            Tensor::zeros([h_dims[1]], &device)
-                        }
+                        // Instead of squeezing, explicitly reshape to ensure correct dimensions
+                        let hidden_dim = h_dims[1];
+                        let extracted = h.clone().slice([i..i+1, 0..hidden_dim]);
+                        extracted.reshape([hidden_dim])
                     } else {
-                        // Create a new zero tensor with matching dimensions if index is out of bounds
+                        // Create a properly sized tensor if index is out of bounds
                         Tensor::zeros([h_dims[1]], &device)
                     }
                 })
