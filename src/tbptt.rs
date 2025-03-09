@@ -3,7 +3,7 @@ use burn::{
     module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
     optim::{AdamConfig, GradientsAccumulator, GradientsParams, Optimizer},
-    record::{BinFileRecorder, FullPrecisionSettings, FileRecorder, RecorderError},
+    record::{BinFileRecorder, FullPrecisionSettings, FileRecorder},
     tensor::{backend::AutodiffBackend, Tensor, cast::ToElement},
     train::{
         metric::MetricEntry,
@@ -15,10 +15,11 @@ use std::fmt::Debug;
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use burn::data::dataset::Dataset;
-use crate::Backend;
+use burn::data::dataloader::batcher::Batcher;
 
 use crate::dataset::{CharVocab, TextBatcher, ChunkedTextDataset, ChunkedTextBatch, ChunkedTextBatcher};
 use crate::model::{MinGRULM, MinGRULMConfig};
+use burn::record::Recorder;
 
 /// Configuration for TBPTT training
 #[derive(Config)]
@@ -198,8 +199,8 @@ impl<B: AutodiffBackend> std::fmt::Debug for TBPTTTrainer<B> {
 
 impl<B: AutodiffBackend> TBPTTTrainer<B> {
     // Helper method to save the model
-    pub fn save_file<P: AsRef<Path>>(&self, path: P, recorder: &impl FileRecorder<MinGRULM<B>>) -> io::Result<()> {
-        self.model.clone().save_file(path, recorder)
+    pub fn save_file(&self, path: impl AsRef<Path>, recorder: &impl Recorder<MinGRULM<B>>) -> io::Result<()> {
+        self.model.clone().save(&path, recorder)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
     
@@ -238,7 +239,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         do_update: bool
     ) -> f32 {
         let batch_size = chunk.input.dims()[0];
-        let seq_len = chunk.input.dims()[1];
+        let _seq_len = chunk.input.dims()[1];
         let device = chunk.input.device();
         
         // Get current hidden states for this document if available
