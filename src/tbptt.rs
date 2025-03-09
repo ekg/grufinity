@@ -307,8 +307,17 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // Extract this document's hidden state from the batch
             let doc_next_hidden: Vec<Tensor<B, 2>> = next_hidden.iter()
                 .map(|h| {
-                    // Extract slice for this document
-                    h.clone().slice([i..i+1, 0..h.dims()[1]]).squeeze(0)
+                    // Check dimensions and ensure safe slicing
+                    let h_dims = h.dims();
+                        
+                    // Make sure we have valid dimensions for slicing
+                    if i < h_dims[0] {
+                        // Extract slice for this document
+                        h.clone().slice([i..i+1, 0..h_dims[1]]).squeeze(0)
+                    } else {
+                        // Create a new zero tensor with matching dimensions if index is out of bounds
+                        Tensor::zeros([h_dims[1]], &device)
+                    }
                 })
                 .collect();
             
@@ -395,11 +404,23 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Process each item in dataset
         for i in 0..dataloader.len() {
             if let Some(chunk) = dataloader.get(i) {
+                // Validate chunk has minimum required data
+                if chunk.text.len() < 2 {
+                    continue; // Skip chunks that are too small
+                }
+                
                 // Batch individual chunks
                 let chunks = vec![chunk];
                 // Create a ChunkedTextBatcher for the correct batching
                 let chunked_batcher = ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
                 let batch = chunked_batcher.batch(chunks);
+                
+                // Ensure we have valid input data
+                if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
+                    progress_bar.inc(1);
+                    progress_bar.set_message("Skipped empty batch");
+                    continue;
+                }
                 
                 // Process chunk and update model if needed
                 let do_update = (i + 1) % self.tbptt_k1 == 0 || i == dataloader.len() - 1;
