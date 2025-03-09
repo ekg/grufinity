@@ -330,7 +330,15 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                     // Make sure we have valid dimensions for slicing
                     if i < h_dims[0] {
                         // Extract slice for this document
-                        h.clone().slice([i..i+1, 0..h_dims[1]]).squeeze(0)
+                        let sliced = h.clone().slice([i..i+1, 0..h_dims[1]]);
+                            
+                        // Validate dimensions before squeezing
+                        if sliced.dims()[0] == 1 {
+                            sliced.squeeze(0)
+                        } else {
+                            // If dimensions are wrong, create a valid tensor
+                            Tensor::zeros([h_dims[1]], &device)
+                        }
                     } else {
                         // Create a new zero tensor with matching dimensions if index is out of bounds
                         Tensor::zeros([h_dims[1]], &device)

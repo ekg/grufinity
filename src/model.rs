@@ -158,11 +158,6 @@ impl<B: Backend> MinGRULM<B> {
             // Get previous hidden state for this layer if available
             let prev_hidden = hidden_states.as_ref()
                 .and_then(|states| states.get(idx).cloned());
-                
-            // Debug hidden state dimensions
-            if let Some(ref h) = prev_hidden {
-                println!("Layer {} prev_hidden shape: {:?}", idx, h.dims());
-            }
         
             // MinGRU with residual connection
             let x_norm = norm1.forward(x.clone());
@@ -284,6 +279,7 @@ impl<B: Backend> MinGRULM<B> {
                 break;
             }
             
+            // Make sure we have valid batch dimension
             let last_token = tokens.clone().slice([0..batch_size, token_len-1..token_len]);
             
             // Forward pass with hidden state
@@ -295,8 +291,11 @@ impl<B: Backend> MinGRULM<B> {
             // Get next token by sampling
             let next_token = self.sample_token(logits, temperature);
             
+            // Reshape to ensure proper dimensions for concatenation
+            let next_token_reshaped = next_token.reshape([batch_size, 1]);
+            
             // Append to generated tokens
-            tokens = Tensor::cat(vec![tokens, next_token.unsqueeze()], 1);
+            tokens = Tensor::cat(vec![tokens, next_token_reshaped], 1);
         }
         
         (tokens, current_hidden_states.unwrap_or_default())
@@ -327,9 +326,14 @@ impl<B: Backend> MinGRULM<B> {
         
         // For simplicity, just take argmax here
         // In a real implementation, you'd want to sample from the distribution
-        // Ensure we get a 1D tensor (shape [batch_size]) by reshaping
         let result = probs.argmax(1);
-        result.reshape([batch_size])
+        
+        // Ensure we get a 1D tensor (shape [batch_size]) 
+        // Make sure we return the correct shape
+        if result.dims()[0] != batch_size {
+            return Tensor::zeros([batch_size], &device);
+        }
+        result
     }
 }
 
