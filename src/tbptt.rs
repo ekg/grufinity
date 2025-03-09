@@ -169,7 +169,6 @@ impl CustomMetrics for TBPTTMetrics {
 // No Module derive - we'll handle the model manually
 pub struct TBPTTTrainer<B: AutodiffBackend> {
     model: MinGRULM<B>,
-    #[module(skip)]
     #[allow(dead_code)]  // Used to initialize the optimizer in train_with_tbptt
     optimizer: AdamConfig,
     hidden_states: HashMap<usize, Vec<Tensor<B, 2>>>,
