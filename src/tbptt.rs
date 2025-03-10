@@ -16,7 +16,8 @@ use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use burn::data::dataloader::batcher::Batcher;
 
-use crate::dataset::{CharVocab, TextBatcher, ChunkedTextDataset, ChunkedTextBatch, ChunkedTextBatcher, ContinuousChunkedTextDataset};
+use crate::dataset::{CharVocab, TextBatcher, ChunkedTextBatch, ChunkedTextBatcher, ContinuousChunkedTextDataset};
+use burn::data::dataset::Dataset;
 use crate::model::{MinGRULM, MinGRULMConfig};
 use burn::record::FileRecorder;
 
@@ -656,7 +657,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     
     // Create continuous chunked dataset for training
     let batch_size = config.batch_size;
-    let train_dataset = ContinuousChunkedTextDataset::new(
+    let mut train_dataset = ContinuousChunkedTextDataset::new(
         input_data.to_string(),
         batch_size,
         config.chunk_size,
@@ -667,7 +668,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
              batch_size, config.chunk_size, config.tbptt_k2);
     
     // Create validation dataset with different seed
-    let valid_dataset = ContinuousChunkedTextDataset::new(
+    let mut valid_dataset = ContinuousChunkedTextDataset::new(
         input_data.to_string(),
         batch_size / 2,
         config.chunk_size,
@@ -708,11 +709,11 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     
     for epoch in 1..=max_training_epochs {
         // Training phase
-        let train_loss = trainer.train_epoch(&train_dataset, &train_batcher, &mut optimizer, epoch);
+        let train_loss = trainer.train_epoch(&mut train_dataset, &train_batcher, &mut optimizer, epoch);
         
         // Validation phase (only if we have validation data)
         let valid_loss = if valid_dataset.len() > 0 {
-            trainer.validate(&valid_dataset, &valid_batcher)
+            trainer.validate(&mut valid_dataset, &valid_batcher)
         } else {
             println!("Warning: No validation data available, skipping validation");
             // Use training loss as a fallback

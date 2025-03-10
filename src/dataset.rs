@@ -253,8 +253,27 @@ pub struct ContinuousChunkedTextDataset {
     text: String,
     start_positions: Vec<usize>,
     chunk_size: usize,
-    max_chunks: usize,
+    pub max_chunks: usize,
     current_chunk: usize,
+}
+
+// Implement Dataset trait for ContinuousChunkedTextDataset
+impl burn::data::dataset::Dataset<TextChunk> for ContinuousChunkedTextDataset {
+    fn get(&self, index: usize) -> Option<TextChunk> {
+        if index < self.max_chunks {
+            // Clone current state, move to specific chunk, get chunks
+            let mut clone = self.clone();
+            clone.current_chunk = index;
+            let chunks = clone.get_current_chunks();
+            chunks.get(0).cloned()
+        } else {
+            None
+        }
+    }
+    
+    fn len(&self) -> usize {
+        self.max_chunks
+    }
 }
 
 #[derive(Clone)]
