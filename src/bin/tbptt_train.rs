@@ -30,15 +30,26 @@ fn print_help() {
     println!("  --chunk-size SIZE              Characters per chunk (default: 64)");
     println!("  --max-chunks-per-epoch NUM     Chunks to process per epoch (default: 1000)");
     println!("  --context-length LENGTH        Set context length in characters");
-    println!("  --max-epochs NUM               Maximum number of epochs to train");
-    println!("  --target-valid-loss VALUE      Target validation loss to stop at");
+    println!("  --num-epochs NUM               Number of training epochs (default: 10)");
+    println!("  --max-epochs NUM               Maximum number of epochs if using target loss (default: 1000)");
+    println!("  --target-valid-loss VALUE      Target validation loss to stop at (0.0 to ignore)");
+    println!("  --target-test-loss VALUE       Target test loss to stop at (0.0 to ignore)");
+    println!("  --update-chunks NUM            Update parameters every NUM chunks (k1 parameter) (default: 4)");
+    println!("  --backprop-chunks NUM          Backprop through NUM chunks (k2 parameter) (default: 8)");
+    println!("  --update-tokens NUM            Update parameters every ~NUM tokens (converted to chunks)");
+    println!("  --backprop-tokens NUM          Backprop through ~NUM tokens (converted to chunks)");
+    println!("  --preserve-hidden-states BOOL  Preserve hidden states between batches (default: true)");
+    println!("  --grad-clip VALUE              Gradient clipping value (0.0 to disable)");
+    println!("  --log-interval NUM             Log interval in batches (default: 10)");
+    println!("  --checkpoint-interval NUM      Checkpoint interval in epochs (default: 1)");
     println!("\nExample:");
-    println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --max-chunks-per-epoch 2000");
+    println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --context-length 100000 --update-tokens 512 --backprop-tokens 1024");
     println!("\nThis will train with:");
     println!("  - 64 parallel sequences");
     println!("  - 128 characters per chunk");
-    println!("  - 2000 chunks per sequence");
-    println!("  - Total context length of 256,000 characters");
+    println!("  - Context length of 100,000 characters");
+    println!("  - Update parameters every ~512 tokens");
+    println!("  - Backpropagate through ~1024 tokens");
 }
 
 fn main() {
@@ -55,6 +66,10 @@ fn main() {
     let mut data_path = "data/sample.txt".to_string();
     let mut artifact_dir = "tbptt_artifacts".to_string();
     let mut config_path = "".to_string();
+    
+    // Token-based parameters (will be converted to chunks)
+    let mut update_tokens: Option<usize> = None;
+    let mut backprop_tokens: Option<usize> = None;
     
     // Parse arguments
     for i in 1..args.len() {
@@ -74,6 +89,20 @@ fn main() {
                     config_path = args[i + 1].clone();
                 }
             },
+            "--update-tokens" => {
+                if i + 1 < args.len() {
+                    if let Ok(tokens) = args[i + 1].parse::<usize>() {
+                        update_tokens = Some(tokens);
+                    }
+                }
+            },
+            "--backprop-tokens" => {
+                if i + 1 < args.len() {
+                    if let Ok(tokens) = args[i + 1].parse::<usize>() {
+                        backprop_tokens = Some(tokens);
+                    }
+                }
+            },
             "--target-valid-loss" => {
                 if i + 1 < args.len() {
                     if let Ok(loss) = args[i + 1].parse::<f32>() {
@@ -90,6 +119,102 @@ fn main() {
                     }
                 }
             },
+            "--update-chunks" => {
+                if i + 1 < args.len() {
+                    if let Ok(chunks) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.tbptt_k1 = chunks;
+                        println!("Setting update frequency to every {} chunks", chunks);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--backprop-chunks" => {
+                if i + 1 < args.len() {
+                    if let Ok(chunks) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.tbptt_k2 = chunks;
+                        println!("Setting backpropagation window to {} chunks", chunks);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--preserve-hidden-states" => {
+                if i + 1 < args.len() {
+                    if let Ok(preserve) = args[i + 1].parse::<bool>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.preserve_hidden_states = preserve;
+                        println!("Setting preserve hidden states to: {}", preserve);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--grad-clip" => {
+                if i + 1 < args.len() {
+                    if let Ok(clip) = args[i + 1].parse::<f32>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.grad_clip = clip;
+                        println!("Setting gradient clipping to: {}", clip);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--log-interval" => {
+                if i + 1 < args.len() {
+                    if let Ok(interval) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.log_interval = interval;
+                        println!("Setting log interval to: {} batches", interval);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--checkpoint-interval" => {
+                if i + 1 < args.len() {
+                    if let Ok(interval) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.checkpoint_interval = interval;
+                        println!("Setting checkpoint interval to: {} epochs", interval);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
             "--target-test-loss" => {
                 if i + 1 < args.len() {
                     if let Ok(loss) = args[i + 1].parse::<f32>() {
@@ -101,6 +226,23 @@ fn main() {
                             }
                         }
                         modified_config.target_test_loss = loss;
+                        println!("Setting target test loss to: {}", loss);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--num-epochs" => {
+                if i + 1 < args.len() {
+                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.num_epochs = epochs;
+                        println!("Setting number of epochs to: {}", epochs);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }
@@ -231,6 +373,37 @@ fn main() {
         "Hello world! This is a sample text for the MinGRU model.".to_string()
     });
     
+    // Process token-based TBPTT parameters
+    let mut modified_config = if !config_path.is_empty() {
+        match TBPTTConfig::load(&config_path) {
+            Ok(cfg) => cfg,
+            Err(_) => create_default_config()
+        }
+    } else {
+        create_default_config()
+    };
+    
+    // Handle token-based parameters
+    let chunk_size = modified_config.chunk_size;
+    
+    if let Some(tokens) = update_tokens {
+        let k1 = calculate_chunks_for_tokens(chunk_size, tokens);
+        modified_config.tbptt_k1 = k1;
+        println!("Setting update frequency to every {} tokens (~{} chunks)", tokens, k1);
+    }
+    
+    if let Some(tokens) = backprop_tokens {
+        let k2 = calculate_chunks_for_tokens(chunk_size, tokens);
+        modified_config.tbptt_k2 = k2;
+        println!("Setting backpropagation window to {} tokens (~{} chunks)", tokens, k2);
+    }
+    
+    // Save modified config for use
+    if update_tokens.is_some() || backprop_tokens.is_some() {
+        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+        config_path = "temp_config.json".to_string();
+    }
+    
     // Create vocabulary from text
     let mut vocab = CharVocab::new();
     vocab.build_from_text(&text);
@@ -290,6 +463,13 @@ fn main() {
 /// Calculate the number of chunks needed for a desired context length
 fn calculate_chunks_for_context(chunk_size: usize, desired_context_length: usize) -> usize {
     (desired_context_length + chunk_size - 1) / chunk_size
+}
+
+/// Calculate the number of chunks needed for a desired token length
+fn calculate_chunks_for_tokens(chunk_size: usize, desired_token_length: usize) -> usize {
+    let chunks = (desired_token_length + chunk_size - 1) / chunk_size;
+    // Ensure at least 1 chunk
+    chunks.max(1)
 }
 
 fn create_default_config() -> TBPTTConfig {
