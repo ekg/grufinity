@@ -386,6 +386,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let [batch_size, seq_len, vocab_size] = logits.dims();
         let [target_batch_size, target_seq_len] = chunk.target.dims();
         
+        // Variable to hold the calculated loss
+        let loss;
+        
         // Check for dimension mismatch
         if batch_size != target_batch_size || seq_len != target_seq_len {
             println!("Warning: Dimension mismatch. logits: [{}, {}, {}], target: [{}, {}]",
@@ -414,14 +417,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             
             // Calculate loss with the adjusted tensors
             let loss_fn = CrossEntropyLossConfig::new().init(&device);
-            let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
+            loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
         } else {
             // Calculate loss normally
             let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
             let targets_reshaped = chunk.target.clone().reshape([batch_size * seq_len]);
             
             let loss_fn = CrossEntropyLossConfig::new().init(&device);
-            let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
+            loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
         }
         
         // Get loss value for metrics
