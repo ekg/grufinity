@@ -46,6 +46,10 @@ pub struct TBPTTConfig {
     #[config(default = 64)]
     pub chunk_size: usize,
     
+    /// Maximum number of chunks to process per epoch
+    #[config(default = 1000)]
+    pub max_chunks_per_epoch: usize,
+    
     /// Whether to preserve hidden states between batches
     #[config(default = true)]
     pub preserve_hidden_states: bool,
@@ -655,24 +659,33 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     // Create TBPTT trainer
     let mut trainer = TBPTTTrainer::new(model, config);
     
+    // Calculate a reasonable number of chunks to process based on data size
+    let input_length = input_data.len();
+    let tokens_per_epoch = config.max_chunks_per_epoch * config.chunk_size * config.batch_size;
+    let coverage_percentage = (tokens_per_epoch as f64 / input_length as f64) * 100.0;
+    
+    println!("Input data size: {} characters", input_length);
+    println!("Will process ~{} tokens per epoch ({:.2}% of dataset)", 
+             tokens_per_epoch, coverage_percentage);
+    
     // Create continuous chunked dataset for training
     let batch_size = config.batch_size;
     let mut train_dataset = ContinuousChunkedTextDataset::new(
         input_data.to_string(),
         batch_size,
         config.chunk_size,
-        config.tbptt_k2,
+        config.max_chunks_per_epoch,
         config.seed
     );
     println!("Created training dataset with {} positions, chunk size {}, max chunks {}", 
-             batch_size, config.chunk_size, config.tbptt_k2);
+             batch_size, config.chunk_size, config.max_chunks_per_epoch);
     
     // Create validation dataset with different seed
     let mut valid_dataset = ContinuousChunkedTextDataset::new(
         input_data.to_string(),
         batch_size / 2,
         config.chunk_size,
-        config.tbptt_k2,
+        config.max_chunks_per_epoch / 5, // Use fewer chunks for validation
         config.seed + 1
     );
     println!("Created validation dataset with {} positions", batch_size / 2);

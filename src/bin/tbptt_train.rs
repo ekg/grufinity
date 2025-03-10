@@ -199,8 +199,9 @@ fn create_default_config() -> TBPTTConfig {
         optimizer_config,
     )
     .with_chunk_size(64)
-    .with_tbptt_k1(4)   // Update frequency
-    .with_tbptt_k2(8)   // Backprop window length
+    .with_tbptt_k1(4)                // Update frequency
+    .with_tbptt_k2(8)                // Backprop window length 
+    .with_max_chunks_per_epoch(1000) // Process 1000 chunks per epoch
     .with_batch_size(32)
     .with_num_epochs(10)
     .with_learning_rate(1e-3)
