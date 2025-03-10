@@ -92,6 +92,23 @@ fn main() {
                     }
                 }
             },
+            "--max-chunks-per-epoch" => {
+                if i + 1 < args.len() {
+                    if let Ok(chunks) = args[i + 1].parse::<usize>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.max_chunks_per_epoch = chunks;
+                        println!("Setting max chunks per epoch to {}", chunks);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
             "--learning-rate" => {
                 if i + 1 < args.len() {
                     if let Ok(lr) = args[i + 1].parse::<f64>() {
