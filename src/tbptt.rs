@@ -776,37 +776,3 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     best_model
 }
 
-/// Helper function to prepare documents from input text
-fn prepare_documents(input_text: &str, chunk_size: usize) -> Vec<String> {
-    // Simple document preparation - split by paragraphs
-    let paragraphs: Vec<String> = input_text
-        .split("\n\n")
-        .map(|p| p.trim().to_string())
-        .filter(|p| !p.is_empty())
-        .collect();
-    
-    // Ensure each document is large enough
-    let min_document_size = chunk_size * 2;
-    
-    let filtered = paragraphs.into_iter()
-        .filter(|p| p.len() >= min_document_size)
-        .collect::<Vec<String>>();
-    
-    // If we don't have enough documents, duplicate the ones we have
-    if filtered.len() < 3 {
-        let mut duplicated = Vec::new();
-        for _ in 0..3 {
-            for doc in &filtered {
-                duplicated.push(doc.clone());
-            }
-        }
-        // If still empty, create a single dummy document that's large enough
-        if duplicated.is_empty() {
-            let dummy = "This is a dummy document for training. ".repeat(chunk_size);
-            duplicated.push(dummy);
-        }
-        return duplicated;
-    }
-    
-    filtered
-}
