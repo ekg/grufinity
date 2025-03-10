@@ -120,6 +120,10 @@ impl TBPTTMetrics {
         self.record_metric("batch_loss", loss);
     }
     
+    pub fn batch_count(&self) -> usize {
+        self.batch_losses.len()
+    }
+    
     pub fn update_chunk_loss(&mut self, loss: f32) {
         self.chunk_losses.push(loss);
         self.record_metric("chunk_loss", loss);
@@ -449,8 +453,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         dataloader.reset();
         self.reset_hidden_states();
         
-        // Process all steps (chunks) for the epoch
-        for step in 0..total_steps {
+        // Process chunks using a definite counter to ensure we respect max_chunks_per_epoch
+        let mut step = 0;
+        while step < total_steps {
             // Get current chunks for all positions
             let chunks = dataloader.get_current_chunks();
             
@@ -462,6 +467,15 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
                 progress_bar.inc(1);
                 progress_bar.set_message("Skipped batch");
+                
+                // We need to still move to next chunk and count even if we skip
+                if !dataloader.next_chunk() {
+                    // If we can't advance, reset and resample to get fresh chunks
+                    dataloader.reset();
+                    dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
+                }
+                
+                step += 1;
                 continue;
             }
             
@@ -479,10 +493,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // Update metrics
             self.metrics.update_progress((step as f32) / (total_steps as f32));
             
-            // Move to next chunk
+            // Move to next chunk and increment step counter
             if !dataloader.next_chunk() {
-                break; // We've processed all chunks
+                // If we can't advance, reset and resample to get fresh chunks
+                dataloader.reset();
+                dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
             }
+            
+            step += 1;
         }
         
         // Ensure we apply any remaining gradients
@@ -495,7 +513,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let epoch_loss = total_loss / batch_count as f32;
         self.metrics.update_batch_loss(epoch_loss);
         
-        progress_bar.finish_with_message(format!("Epoch complete - Avg loss: {:.6}", epoch_loss));
+        progress_bar.finish_with_message(format!("Epoch complete - Processed {} chunks, Avg loss: {:.6}", 
+                                               batch_count, epoch_loss));
         
         epoch_loss
     }
@@ -529,8 +548,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Track hidden states per position
         let mut hidden_states_map: HashMap<usize, Vec<Tensor<B::InnerBackend, 2>>> = HashMap::new();
     
-        // Process all steps
-        for step in 0..total_steps {
+        // Process chunks using a definite counter to ensure we respect max_chunks
+        let mut step = 0;
+        while step < total_steps && step < 200 { // Add a validation limit of 200 chunks for speed
             let chunks = dataloader.get_current_chunks();
             let chunked_batcher = ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
             let batch = chunked_batcher.batch(chunks);
@@ -538,7 +558,13 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // Skip chunks that don't have valid dimensions
             if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
                 progress_bar.inc(1);
-                dataloader.next_chunk();
+                // We need to still move to next chunk and count even if we skip
+                if !dataloader.next_chunk() {
+                    // If we can't advance, reset and resample to get fresh chunks
+                    dataloader.reset();
+                    dataloader.resample_positions(step as u64 + 10000);
+                }
+                step += 1;
                 continue;
             }
             
@@ -619,10 +645,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             progress_bar.inc(1);
             progress_bar.set_message(format!("Chunk {}/{}, Loss: {:.6}", step + 1, total_steps, loss_value));
             
-            // Move to next chunk
+            // Move to next chunk and increment step counter
             if !dataloader.next_chunk() {
-                break;
+                // If we can't advance, reset and resample to get fresh chunks
+                dataloader.reset();
+                dataloader.resample_positions(step as u64 + 10000);
             }
+            
+            step += 1;
         }
         
         // Handle the case where no batches were valid
@@ -632,7 +662,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         }
     
         let avg_loss = total_loss / batch_count as f32;
-        progress_bar.finish_with_message(format!("Validation complete - Avg loss: {:.6}", avg_loss));
+        progress_bar.finish_with_message(format!("Validation complete - Processed {} chunks, Avg loss: {:.6}", 
+                                               batch_count, avg_loss));
     
         avg_loss
     }
