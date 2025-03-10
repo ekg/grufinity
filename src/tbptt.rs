@@ -348,8 +348,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                     let h_dims = h.dims();
                         
                     if h_dims.len() != 2 {
-                        // Create a tensor with the expected dimensions
-                        return Tensor::zeros([self.model.dim()], &device);
+                        // Create a tensor with the expected dimensions (must be 2D)
+                        return Tensor::zeros([1, self.model.dim()], &device);
                     }
                         
                     // Make sure we have valid dimensions for slicing
@@ -357,11 +357,11 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                         // Instead of squeezing, explicitly reshape to ensure correct 2D dimensions
                         let hidden_dim = h_dims[1];
                         let extracted = h.clone().slice([i..i+1, 0..hidden_dim]);
-                        // Reshape to [1, hidden_dim] to maintain 2D tensor
+                        // Already a 2D tensor with shape [1, hidden_dim]
                         extracted
                     } else {
-                        // Create a properly sized tensor if index is out of bounds
-                        Tensor::zeros([h_dims[1]], &device)
+                        // Create a properly sized tensor if index is out of bounds (must be 2D)
+                        Tensor::zeros([1, h_dims[1]], &device)
                     }
                 })
                 .collect();
@@ -588,6 +588,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                             if i < h.dims()[0] {
                                 h.clone().slice([i..i+1, 0..h.dims()[1]])
                             } else {
+                                // Create a 2D tensor with proper dimensions
                                 Tensor::zeros([1, h.dims()[1]], &h.device())
                             }
                         })
