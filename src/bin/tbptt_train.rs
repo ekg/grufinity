@@ -92,6 +92,23 @@ fn main() {
                     }
                 }
             },
+            "--learning-rate" => {
+                if i + 1 < args.len() {
+                    if let Ok(lr) = args[i + 1].parse::<f64>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.learning_rate = lr;
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                        println!("Set learning rate to {}", lr);
+                    }
+                }
+            },
             _ => {}
         }
     }
@@ -139,6 +156,7 @@ fn main() {
     
     println!("Training with TBPTT - chunk size: {}, k1: {}, k2: {}", 
              config.chunk_size, config.tbptt_k1, config.tbptt_k2);
+    println!("Learning rate: {}", config.learning_rate);
     println!("Vocabulary size: {}", vocab.size());
     
     // Train the model using TBPTT with Learner API
