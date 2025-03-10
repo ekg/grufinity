@@ -702,8 +702,12 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     println!("Input data size: {} characters", input_length);
     println!("Will process ~{} tokens per epoch ({:.2}% of dataset)", 
              tokens_per_epoch, coverage_percentage);
-    println!("Effective sequence length per position: {} tokens", config.chunk_size * config.max_chunks_per_epoch);
-    println!("Backpropagation window: {} tokens", config.chunk_size * config.tbptt_k2);
+    println!("Training configuration:");
+    println!("- Batch size: {} parallel sequences", config.batch_size);
+    println!("- Chunk size: {} characters per step", config.chunk_size);
+    println!("- Max chunks: {} steps per sequence", config.max_chunks_per_epoch);
+    println!("- Effective context length: {} characters", config.chunk_size * config.max_chunks_per_epoch);
+    println!("- Backpropagation window: {} characters", config.chunk_size * config.tbptt_k2);
     
     // Create continuous chunked dataset for training
     // This creates 'batch_size' different starting positions in the text

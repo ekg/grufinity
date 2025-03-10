@@ -17,9 +17,39 @@ use std::fs;
 type WgpuBackend = Wgpu<f32, i32>;
 type MyBackend = Autodiff<WgpuBackend>;
 
+fn print_help() {
+    println!("GRUfinity TBPTT Training");
+    println!("========================");
+    println!("Usage: cargo run --release --bin tbptt_train -- [OPTIONS]");
+    println!("\nOptions:");
+    println!("  --data PATH                    Path to training data file");
+    println!("  --output DIR                   Directory for output artifacts");
+    println!("  --config PATH                  Path to configuration file");
+    println!("  --learning-rate RATE           Set learning rate (default: 0.001)");
+    println!("  --batch-size SIZE              Number of random start positions (default: 32)");
+    println!("  --chunk-size SIZE              Characters per chunk (default: 64)");
+    println!("  --max-chunks-per-epoch NUM     Chunks to process per epoch (default: 1000)");
+    println!("  --context-length LENGTH        Set context length in characters");
+    println!("  --max-epochs NUM               Maximum number of epochs to train");
+    println!("  --target-valid-loss VALUE      Target validation loss to stop at");
+    println!("\nExample:");
+    println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --max-chunks-per-epoch 2000");
+    println!("\nThis will train with:");
+    println!("  - 64 parallel sequences");
+    println!("  - 128 characters per chunk");
+    println!("  - 2000 chunks per sequence");
+    println!("  - Total context length of 256,000 characters");
+}
+
 fn main() {
     // Parse command-line arguments
     let args: Vec<String> = std::env::args().collect();
+    
+    // Check for help
+    if args.len() > 1 && (args[1] == "--help" || args[1] == "-h") {
+        print_help();
+        return;
+    }
     
     // Default values
     let mut data_path = "data/sample.txt".to_string();
@@ -105,6 +135,44 @@ fn main() {
                         modified_config.max_chunks_per_epoch = chunks;
                         println!("Setting max chunks per epoch to {}", chunks);
                         println!("Effective context length: {} characters", chunks * modified_config.chunk_size);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--batch-size" => {
+                if i + 1 < args.len() {
+                    if let Ok(batch_size) = args[i + 1].parse::<usize>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.batch_size = batch_size;
+                        println!("Setting batch size to {} random start positions", batch_size);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--chunk-size" => {
+                if i + 1 < args.len() {
+                    if let Ok(chunk_size) = args[i + 1].parse::<usize>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.chunk_size = chunk_size;
+                        // Also update the model's chunk size
+                        modified_config.model = modified_config.model.with_chunk_size(chunk_size);
+                        println!("Setting chunk size to {} characters", chunk_size);
+                        println!("Effective context length: {} characters", 
+                                modified_config.max_chunks_per_epoch * chunk_size);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }
