@@ -384,11 +384,45 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         
         // Calculate loss
         let [batch_size, seq_len, vocab_size] = logits.dims();
-        let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
-        let targets_reshaped = chunk.target.clone().reshape([batch_size * seq_len]);
+        let [target_batch_size, target_seq_len] = chunk.target.dims();
         
-        let loss_fn = CrossEntropyLossConfig::new().init(&device);
-        let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
+        // Check for dimension mismatch
+        if batch_size != target_batch_size || seq_len != target_seq_len {
+            println!("Warning: Dimension mismatch. logits: [{}, {}, {}], target: [{}, {}]",
+                     batch_size, seq_len, vocab_size, target_batch_size, target_seq_len);
+            
+            // Use the minimum sequence length
+            let min_seq_len = seq_len.min(target_seq_len);
+            
+            // Slice the logits to the minimum sequence length
+            let logits_sliced = if seq_len > min_seq_len {
+                logits.slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
+            } else {
+                logits
+            };
+            
+            // Slice the target to the minimum sequence length
+            let target_sliced = if target_seq_len > min_seq_len {
+                chunk.target.slice([0..target_batch_size, 0..min_seq_len])
+            } else {
+                chunk.target.clone()
+            };
+            
+            // Reshape for loss calculation
+            let logits_reshaped = logits_sliced.reshape([batch_size * min_seq_len, vocab_size]);
+            let targets_reshaped = target_sliced.reshape([target_batch_size * min_seq_len]);
+            
+            // Calculate loss with the adjusted tensors
+            let loss_fn = CrossEntropyLossConfig::new().init(&device);
+            let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
+        } else {
+            // Calculate loss normally
+            let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
+            let targets_reshaped = chunk.target.clone().reshape([batch_size * seq_len]);
+            
+            let loss_fn = CrossEntropyLossConfig::new().init(&device);
+            let loss = loss_fn.forward(logits_reshaped.clone(), targets_reshaped.clone());
+        }
         
         // Get loss value for metrics
         let scalar_value = loss.clone().into_scalar();
