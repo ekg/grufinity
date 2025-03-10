@@ -592,7 +592,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     
     // Create validation dataset (ensure we have enough documents)
     let valid_size = (documents.len() / 3).max(3).min(documents.len());
-    let valid_documents = documents.iter()
+    let valid_documents: Vec<String> = documents.iter()
         .take(valid_size)
         .cloned()
         .collect();
