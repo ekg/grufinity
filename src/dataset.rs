@@ -301,7 +301,7 @@ impl ContinuousChunkedTextDataset {
         let mut start_positions = Vec::with_capacity(num_positions);
         
         let dataset = Self {
-            text,
+            text: text.clone(),
             start_positions: Vec::new(),
             chunk_size,
             max_chunks,
