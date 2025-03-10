@@ -406,7 +406,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             
             // Slice the target to the minimum sequence length
             let target_sliced = if target_seq_len > min_seq_len {
-                chunk.target.slice([0..target_batch_size, 0..min_seq_len])
+                chunk.target.clone().slice([0..target_batch_size, 0..min_seq_len])
             } else {
                 chunk.target.clone()
             };
@@ -689,7 +689,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 
                 // Slice the target to the minimum sequence length
                 let target_sliced = if target_seq_len > min_seq_len {
-                    batch.target.slice([0..target_batch_size, 0..min_seq_len])
+                    batch.target.clone().slice([0..target_batch_size, 0..min_seq_len])
                 } else {
                     batch.target.clone()
                 };
