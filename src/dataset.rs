@@ -338,6 +338,40 @@ impl ContinuousChunkedTextDataset {
         self.current_chunk = 0;
     }
     
+    /// Resample random starting positions with a new seed
+    pub fn resample_positions(&mut self, seed: u64) {
+        // Initialize RNG with new seed
+        let mut rng = StdRng::seed_from_u64(seed);
+        
+        // Store the capacity for when we regenerate
+        let capacity = self.start_positions.capacity().max(1);
+        
+        // Clear existing positions
+        self.start_positions.clear();
+        
+        // Generate new random start positions
+        let valid_range = self.text.len().saturating_sub(self.chunk_size * self.max_chunks);
+        
+        if valid_range > 0 {
+            for _ in 0..capacity {
+                let raw_pos = rng.gen_range(0..valid_range);
+                // Ensure position is at a valid character boundary
+                let pos = self.find_char_boundary(raw_pos);
+                self.start_positions.push(pos);
+            }
+        } else {
+            // If text is too short, just use beginning positions
+            for i in 0..capacity.min(self.text.len()) {
+                // Ensure position is at a valid character boundary
+                let pos = self.find_char_boundary(i);
+                self.start_positions.push(pos);
+            }
+        }
+        
+        // Reset current chunk position
+        self.current_chunk = 0;
+    }
+    
     /// Advance to the next chunk
     pub fn next_chunk(&mut self) -> bool {
         if self.current_chunk < self.max_chunks - 1 {

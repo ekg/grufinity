@@ -721,6 +721,11 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     }
     
     for epoch in 1..=max_training_epochs {
+        // Resample starting positions for each epoch with different seeds
+        println!("Resampling positions for epoch {}...", epoch);
+        train_dataset.resample_positions(config.seed + epoch as u64 * 1000);
+        valid_dataset.resample_positions(config.seed + epoch as u64 * 1000 + 500);
+        
         // Training phase
         let train_loss = trainer.train_epoch(&mut train_dataset, &train_batcher, &mut optimizer, epoch);
         
