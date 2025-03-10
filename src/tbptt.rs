@@ -58,6 +58,18 @@ pub struct TBPTTConfig {
     #[config(default = 10)]
     pub num_epochs: usize,
     
+    /// Maximum number of epochs if training to target loss
+    #[config(default = 1000)]
+    pub max_epochs: usize,
+    
+    /// Target validation loss to stop training (0.0 to ignore)
+    #[config(default = 0.0)]
+    pub target_valid_loss: f32,
+    
+    /// Target test loss to stop training (0.0 to ignore)
+    #[config(default = 0.0)]
+    pub target_test_loss: f32,
+    
     /// Batch size
     #[config(default = 32)]
     pub batch_size: usize,
@@ -621,7 +633,22 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     let mut best_loss = f32::MAX;
     let mut best_model = trainer.model.clone();
     
-    for epoch in 1..=config.num_epochs {
+    // Decide on the maximum number of epochs
+    let max_training_epochs = if config.target_valid_loss > 0.0 || config.target_test_loss > 0.0 {
+        config.max_epochs
+    } else {
+        config.num_epochs
+    };
+    
+    println!("Training for up to {} epochs", max_training_epochs);
+    if config.target_valid_loss > 0.0 {
+        println!("Will stop when validation loss reaches {:.6}", config.target_valid_loss);
+    }
+    if config.target_test_loss > 0.0 {
+        println!("Will stop when test loss reaches {:.6}", config.target_test_loss);
+    }
+    
+    for epoch in 1..=max_training_epochs {
         // Training phase
         let train_loss = trainer.train_epoch(&train_dataset, &train_batcher, &mut optimizer, epoch);
         
@@ -635,7 +662,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         };
         
         println!("Epoch {}/{} - Train Loss: {:.6}, Valid Loss: {:.6}", 
-            epoch, config.num_epochs, train_loss, valid_loss);
+            epoch, max_training_epochs, train_loss, valid_loss);
         
         // Save best model
         if valid_loss < best_loss {
@@ -656,6 +683,22 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
             trainer.model.clone()
                 .save_file(&model_path, &recorder)
                 .expect("Failed to save checkpoint");
+        }
+        
+        // Check if we've reached the target loss
+        let target_reached = 
+            (config.target_valid_loss > 0.0 && valid_loss <= config.target_valid_loss) ||
+            (config.target_test_loss > 0.0 && train_loss <= config.target_test_loss);
+        
+        if target_reached {
+            println!("🎉 Target loss reached at epoch {}! Stopping training.", epoch);
+            // Save final model at target
+            let model_path = format!("{}/model_target_reached.bin", artifact_dir);
+            trainer.model.clone()
+                .save_file(&model_path, &recorder)
+                .expect("Failed to save target model");
+            println!("Target model saved to {}", model_path);
+            break;
         }
         
         // Reset hidden states between epochs

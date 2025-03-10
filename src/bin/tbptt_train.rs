@@ -44,6 +44,54 @@ fn main() {
                     config_path = args[i + 1].clone();
                 }
             },
+            "--target-valid-loss" => {
+                if i + 1 < args.len() {
+                    if let Ok(loss) = args[i + 1].parse::<f32>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.target_valid_loss = loss;
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--target-test-loss" => {
+                if i + 1 < args.len() {
+                    if let Ok(loss) = args[i + 1].parse::<f32>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.target_test_loss = loss;
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--max-epochs" => {
+                if i + 1 < args.len() {
+                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.max_epochs = epochs;
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
             _ => {}
         }
     }
@@ -139,4 +187,7 @@ fn create_default_config() -> TBPTTConfig {
     .with_num_epochs(10)
     .with_learning_rate(1e-3)
     .with_preserve_hidden_states(true)
+    .with_target_valid_loss(0.0)  // 0.0 means ignore
+    .with_target_test_loss(0.0)   // 0.0 means ignore
+    .with_max_epochs(1000)        // Maximum epochs if target not reached
 }
