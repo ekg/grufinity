@@ -14,10 +14,9 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
-use burn::data::dataset::Dataset;
 use burn::data::dataloader::batcher::Batcher;
 
-use crate::dataset::{CharVocab, TextBatcher, ChunkedTextDataset, ChunkedTextBatch, ChunkedTextBatcher};
+use crate::dataset::{CharVocab, TextBatcher, ChunkedTextDataset, ChunkedTextBatch, ChunkedTextBatcher, ContinuousChunkedTextDataset};
 use crate::model::{MinGRULM, MinGRULMConfig};
 use burn::record::FileRecorder;
 
@@ -584,7 +583,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                             if i < h.dims()[0] {
                                 h.clone().slice([i..i+1, 0..h.dims()[1]])
                             } else {
-                                Tensor::zeros([1, h.dims()[1]], h.device())
+                                Tensor::zeros([1, h.dims()[1]], &h.device())
                             }
                         })
                         .collect();
