@@ -247,10 +247,14 @@ impl Dataset<(String, String)> for TextDataset {
     }
 }
 
-/// Document-aware dataset for chunked processing with hidden state passing
+/// Continuous chunked dataset for TBPTT with hidden state passing between chunks
 #[derive(Clone)]
-pub struct ChunkedTextDataset {
-    chunks: Vec<TextChunk>,
+pub struct ContinuousChunkedTextDataset {
+    text: String,
+    start_positions: Vec<usize>,
+    chunk_size: usize,
+    max_chunks: usize,
+    current_chunk: usize,
 }
 
 #[derive(Clone)]
@@ -259,6 +263,114 @@ pub struct TextChunk {
     pub doc_id: usize,
     pub chunk_idx: usize,
     pub is_last_chunk: bool,
+    pub is_padded: bool,
+}
+
+/// Legacy document-aware dataset for chunked processing
+#[derive(Clone)]
+pub struct ChunkedTextDataset {
+    chunks: Vec<TextChunk>,
+}
+
+impl ContinuousChunkedTextDataset {
+    pub fn new(text: String, num_positions: usize, chunk_size: usize, max_chunks: usize, seed: u64) -> Self {
+        // Initialize RNG with seed for reproducibility
+        let mut rng = StdRng::seed_from_u64(seed);
+        
+        // Generate random start positions
+        let valid_range = text.len().saturating_sub(chunk_size * max_chunks);
+        let mut start_positions = Vec::with_capacity(num_positions);
+        
+        if valid_range > 0 {
+            for _ in 0..num_positions {
+                let pos = rng.gen_range(0..valid_range);
+                start_positions.push(pos);
+            }
+        } else {
+            // If text is too short, just use beginning positions
+            for i in 0..num_positions.min(text.len()) {
+                start_positions.push(i);
+            }
+        }
+        
+        Self {
+            text,
+            start_positions,
+            chunk_size,
+            max_chunks,
+            current_chunk: 0,
+        }
+    }
+    
+    /// Reset to the first chunk
+    pub fn reset(&mut self) {
+        self.current_chunk = 0;
+    }
+    
+    /// Advance to the next chunk
+    pub fn next_chunk(&mut self) -> bool {
+        if self.current_chunk < self.max_chunks - 1 {
+            self.current_chunk += 1;
+            true
+        } else {
+            false
+        }
+    }
+    
+    /// Get the current chunk index
+    pub fn current_chunk_index(&self) -> usize {
+        self.current_chunk
+    }
+    
+    /// Check if we're at the last chunk
+    pub fn is_last_chunk(&self) -> bool {
+        self.current_chunk == self.max_chunks - 1
+    }
+    
+    /// Get chunks for the current position in the sequence
+    pub fn get_current_chunks(&self) -> Vec<TextChunk> {
+        let mut chunks = Vec::with_capacity(self.start_positions.len());
+        
+        for (doc_id, &start_pos) in self.start_positions.iter().enumerate() {
+            let chunk_start = start_pos + (self.current_chunk * self.chunk_size);
+            let chunk_end = chunk_start + self.chunk_size + 1; // +1 for target
+            
+            let is_last_chunk = self.current_chunk == self.max_chunks - 1;
+            let mut is_padded = false;
+            
+            // Create the chunk text, handling end-of-text with padding
+            let chunk_text = if chunk_end <= self.text.len() {
+                self.text[chunk_start..chunk_end].to_string()
+            } else if chunk_start < self.text.len() {
+                // Partial text + padding (just repeat the last char to reach chunk_size)
+                let mut text = self.text[chunk_start..].to_string();
+                let last_char = text.chars().last().unwrap_or(' ');
+                while text.len() < self.chunk_size + 1 {
+                    text.push(last_char);
+                }
+                is_padded = true;
+                text
+            } else {
+                // Completely beyond text - all padding
+                let padding_char = ' ';
+                let padding = std::iter::repeat(padding_char)
+                    .take(self.chunk_size + 1)
+                    .collect::<String>();
+                is_padded = true;
+                padding
+            };
+            
+            chunks.push(TextChunk {
+                text: chunk_text,
+                doc_id,
+                chunk_idx: self.current_chunk,
+                is_last_chunk,
+                is_padded,
+            });
+        }
+        
+        chunks
+    }
 }
 
 impl ChunkedTextDataset {
@@ -288,6 +400,7 @@ impl ChunkedTextDataset {
                     doc_id,
                     chunk_idx,
                     is_last_chunk: chunk_idx == num_chunks - 1,
+                    is_padded: false,
                 });
             }
         }
@@ -394,6 +507,7 @@ pub struct ChunkedTextBatch<B: Backend> {
     pub doc_ids: Vec<usize>,
     pub chunk_indices: Vec<usize>,
     pub is_last_chunks: Vec<bool>,
+    pub is_padded: Vec<bool>,
 }
 
 impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<B> {
@@ -406,6 +520,7 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
                 doc_ids: Vec::new(),
                 chunk_indices: Vec::new(),
                 is_last_chunks: Vec::new(),
+                is_padded: Vec::new(),
             };
         }
         
@@ -413,6 +528,7 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
         let doc_ids: Vec<_> = items.iter().map(|chunk| chunk.doc_id).collect();
         let chunk_indices: Vec<_> = items.iter().map(|chunk| chunk.chunk_idx).collect();
         let is_last_chunks: Vec<_> = items.iter().map(|chunk| chunk.is_last_chunk).collect();
+        let is_padded: Vec<_> = items.iter().map(|chunk| chunk.is_padded).collect();
         
         // Find maximum sequence length for this batch
         // Each chunk should ideally have the same length, but let's be safe
@@ -465,7 +581,8 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
             target, 
             doc_ids, 
             chunk_indices, 
-            is_last_chunks 
+            is_last_chunks,
+            is_padded
         }
     }
 }
