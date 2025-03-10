@@ -300,15 +300,27 @@ impl ContinuousChunkedTextDataset {
         let valid_range = text.len().saturating_sub(chunk_size * max_chunks);
         let mut start_positions = Vec::with_capacity(num_positions);
         
+        let dataset = Self {
+            text,
+            start_positions: Vec::new(),
+            chunk_size,
+            max_chunks,
+            current_chunk: 0,
+        };
+        
         if valid_range > 0 {
             for _ in 0..num_positions {
-                let pos = rng.gen_range(0..valid_range);
+                let raw_pos = rng.gen_range(0..valid_range);
+                // Ensure position is at a valid character boundary
+                let pos = dataset.find_char_boundary(raw_pos);
                 start_positions.push(pos);
             }
         } else {
             // If text is too short, just use beginning positions
-            for i in 0..num_positions.min(text.len()) {
-                start_positions.push(i);
+            for i in 0..num_positions.min(dataset.text.len()) {
+                // Ensure position is at a valid character boundary
+                let pos = dataset.find_char_boundary(i);
+                start_positions.push(pos);
             }
         }
         
@@ -346,13 +358,35 @@ impl ContinuousChunkedTextDataset {
         self.current_chunk == self.max_chunks - 1
     }
     
+    /// Helper function to find a valid UTF-8 character boundary
+    fn find_char_boundary(&self, index: usize) -> usize {
+        if index >= self.text.len() {
+            return self.text.len();
+        }
+        
+        if self.text.is_char_boundary(index) {
+            return index;
+        }
+        
+        // Find the next valid boundary
+        let mut i = index + 1;
+        while i < self.text.len() && !self.text.is_char_boundary(i) {
+            i += 1;
+        }
+        i.min(self.text.len())
+    }
+    
     /// Get chunks for the current position in the sequence
     pub fn get_current_chunks(&self) -> Vec<TextChunk> {
         let mut chunks = Vec::with_capacity(self.start_positions.len());
         
         for (doc_id, &start_pos) in self.start_positions.iter().enumerate() {
-            let chunk_start = start_pos + (self.current_chunk * self.chunk_size);
-            let chunk_end = chunk_start + self.chunk_size + 1; // +1 for target
+            let raw_chunk_start = start_pos + (self.current_chunk * self.chunk_size);
+            let raw_chunk_end = raw_chunk_start + self.chunk_size + 1; // +1 for target
+            
+            // Ensure we're at valid UTF-8 character boundaries
+            let chunk_start = self.find_char_boundary(raw_chunk_start);
+            let chunk_end = self.find_char_boundary(raw_chunk_end);
             
             let is_last_chunk = self.current_chunk == self.max_chunks - 1;
             let mut is_padded = false;
@@ -362,7 +396,9 @@ impl ContinuousChunkedTextDataset {
                 self.text[chunk_start..chunk_end].to_string()
             } else if chunk_start < self.text.len() {
                 // Partial text + padding (just repeat the last char to reach chunk_size)
-                let mut text = self.text[chunk_start..].to_string();
+                // Use a valid char boundary for the start
+                let safe_start = self.find_char_boundary(chunk_start);
+                let mut text = self.text[safe_start..].to_string();
                 let last_char = text.chars().last().unwrap_or(' ');
                 while text.len() < self.chunk_size + 1 {
                     text.push(last_char);
