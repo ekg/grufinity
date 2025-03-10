@@ -104,6 +104,27 @@ fn main() {
                         }
                         modified_config.max_chunks_per_epoch = chunks;
                         println!("Setting max chunks per epoch to {}", chunks);
+                        println!("Effective context length: {} characters", chunks * modified_config.chunk_size);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--context-length" => {
+                if i + 1 < args.len() {
+                    if let Ok(context_length) = args[i + 1].parse::<usize>() {
+                        // We'll create a modified config with this value
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        let chunk_size = modified_config.chunk_size;
+                        let chunks_needed = calculate_chunks_for_context(chunk_size, context_length);
+                        modified_config.max_chunks_per_epoch = chunks_needed;
+                        println!("Setting context length to {} characters", context_length);
+                        println!("Using {} chunks with chunk size {}", chunks_needed, chunk_size);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }
@@ -198,7 +219,15 @@ fn main() {
              model_path, artifact_dir);
 }
 
+/// Calculate the number of chunks needed for a desired context length
+fn calculate_chunks_for_context(chunk_size: usize, desired_context_length: usize) -> usize {
+    (desired_context_length + chunk_size - 1) / chunk_size
+}
+
 fn create_default_config() -> TBPTTConfig {
+    // Chunk size for processing text
+    let chunk_size = 64;
+    
     // Configure the model
     let model_config = MinGRULMConfig::new(
         256,           // num_tokens (all possible byte values)
@@ -207,18 +236,23 @@ fn create_default_config() -> TBPTTConfig {
     .with_depth(2)
     .with_ff_mult(2.0)
     .with_expansion_factor(1.2)
-    .with_chunk_size(64);  // Chunk size for TBPTT
+    .with_chunk_size(chunk_size);
     
     let optimizer_config = AdamConfig::new();
+    
+    // Calculate chunks for different context lengths
+    let desired_context = 64000; // Desired context length in characters
+    let chunks_needed = calculate_chunks_for_context(chunk_size, desired_context);
+    println!("Default config using {} chunks for ~{} character context", chunks_needed, desired_context);
     
     TBPTTConfig::new(
         model_config,
         optimizer_config,
     )
-    .with_chunk_size(64)
-    .with_tbptt_k1(4)                // Update frequency
-    .with_tbptt_k2(8)                // Backprop window length 
-    .with_max_chunks_per_epoch(1000) // Process 1000 chunks per epoch
+    .with_chunk_size(chunk_size)
+    .with_tbptt_k1(4)                // Update frequency (every 4 chunks)
+    .with_tbptt_k2(8)                // Backprop window (8 chunks = 512 characters)
+    .with_max_chunks_per_epoch(1000) // Process 1000 chunks per epoch (64K character context)
     .with_batch_size(32)
     .with_num_epochs(10)
     .with_learning_rate(1e-3)

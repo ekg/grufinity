@@ -35,10 +35,12 @@ pub struct TBPTTConfig {
     pub learning_rate: f64,
     
     /// Frequency of parameter updates (k1 parameter)
+    /// Updates parameters after processing this many chunks
     #[config(default = 4)]
     pub tbptt_k1: usize,
     
     /// Length of backpropagation window (k2 parameter)
+    /// Gradients flow back through this many chunks (chunk_size * tbptt_k2 total tokens)
     #[config(default = 8)]
     pub tbptt_k2: usize,
     
@@ -47,6 +49,7 @@ pub struct TBPTTConfig {
     pub chunk_size: usize,
     
     /// Maximum number of chunks to process per epoch
+    /// This determines the effective sequence length: chunk_size * max_chunks_per_epoch
     #[config(default = 1000)]
     pub max_chunks_per_epoch: usize,
     
@@ -699,8 +702,12 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     println!("Input data size: {} characters", input_length);
     println!("Will process ~{} tokens per epoch ({:.2}% of dataset)", 
              tokens_per_epoch, coverage_percentage);
+    println!("Effective sequence length per position: {} tokens", config.chunk_size * config.max_chunks_per_epoch);
+    println!("Backpropagation window: {} tokens", config.chunk_size * config.tbptt_k2);
     
     // Create continuous chunked dataset for training
+    // This creates 'batch_size' different starting positions in the text
+    // Each position will process up to 'max_chunks_per_epoch' consecutive chunks
     let batch_size = config.batch_size;
     let mut train_dataset = ContinuousChunkedTextDataset::new(
         input_data.to_string(),
