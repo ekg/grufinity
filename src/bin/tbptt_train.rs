@@ -2,7 +2,7 @@ use burn::{
     backend::wgpu::{Wgpu, WgpuDevice},
     backend::autodiff::Autodiff,
     config::Config,
-    optim::AdamConfig,
+    optim::{AdamConfig, SGDConfig},
 };
 
 use grufinity::{
@@ -42,6 +42,10 @@ fn print_help() {
     println!("  --grad-clip VALUE              Gradient clipping value (0.0 to disable)");
     println!("  --log-interval NUM             Log interval in batches (default: 10)");
     println!("  --checkpoint-interval NUM      Checkpoint interval in epochs (default: 1)");
+    println!("  --momentum VALUE               Momentum factor for SGD (default: 0.0)");
+    println!("  --weight-decay VALUE           Weight decay (L2 penalty) for SGD (default: 0.0)");
+    println!("  --dampening VALUE              Dampening for momentum (default: 0.0)");
+    println!("  --nesterov BOOL                Enable Nesterov momentum (default: false)");
     println!("\nExample:");
     println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --context-length 100000 --update-tokens 512 --backprop-tokens 1024");
     println!("\nThis will train with:");
@@ -210,6 +214,70 @@ fn main() {
                         }
                         modified_config.checkpoint_interval = interval;
                         println!("Setting checkpoint interval to: {} epochs", interval);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--momentum" => {
+                if i + 1 < args.len() {
+                    if let Ok(momentum) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.optimizer = modified_config.optimizer.with_momentum(momentum);
+                        println!("Setting momentum to: {}", momentum);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--weight-decay" => {
+                if i + 1 < args.len() {
+                    if let Ok(decay) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.optimizer = modified_config.optimizer.with_weight_decay(decay);
+                        println!("Setting weight decay to: {}", decay);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--dampening" => {
+                if i + 1 < args.len() {
+                    if let Ok(dampening) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.optimizer = modified_config.optimizer.with_dampening(dampening);
+                        println!("Setting dampening to: {}", dampening);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--nesterov" => {
+                if i + 1 < args.len() {
+                    if let Ok(nesterov) = args[i + 1].parse::<bool>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.optimizer = modified_config.optimizer.with_nesterov(nesterov);
+                        println!("Setting nesterov to: {}", nesterov);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }
@@ -486,7 +554,7 @@ fn create_default_config() -> TBPTTConfig {
     .with_expansion_factor(1.5) // increased from 1.2
     .with_chunk_size(chunk_size);
     
-    let optimizer_config = AdamConfig::new();
+    let optimizer_config = SGDConfig::new();
     
     // Calculate chunks for different context lengths
     let desired_context = 64000; // Desired context length in characters
