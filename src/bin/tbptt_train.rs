@@ -2,7 +2,9 @@ use burn::{
     backend::wgpu::{Wgpu, WgpuDevice},
     backend::autodiff::Autodiff,
     config::Config,
-    optim::{SgdConfig, MomentumConfig, WeightDecayConfig},
+    optim::SgdConfig,
+    optim::momentum::MomentumConfig,
+    optim::decay::WeightDecayConfig,
 };
 
 use grufinity::{
@@ -228,15 +230,13 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        modified_config.optimizer = SgdConfig {
-                            momentum: Some(MomentumConfig {
-                                momentum,
-                                dampening: 0.0,
-                                nesterov: false,
-                            }),
-                            weight_decay: modified_config.optimizer.weight_decay,
-                            gradient_clipping: modified_config.optimizer.gradient_clipping,
+                        // Create a fresh SgdConfig with our custom momentum
+                        let momentum_config = MomentumConfig {
+                            momentum,
+                            dampening: 0.0,
+                            nesterov: false,
                         };
+                        modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
                         println!("Setting momentum to: {}", momentum);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
@@ -252,11 +252,9 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        modified_config.optimizer = SgdConfig {
-                            weight_decay: Some(WeightDecayConfig { penalty: decay }),
-                            momentum: modified_config.optimizer.momentum,
-                            gradient_clipping: modified_config.optimizer.gradient_clipping,
-                        };
+                        // Create a fresh SgdConfig with our custom weight decay
+                        let weight_decay_config = WeightDecayConfig { penalty: decay };
+                        modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
                         println!("Setting weight decay to: {}", decay);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
@@ -272,21 +270,13 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        // Get existing momentum config or create new one
-                        let current_momentum = modified_config.optimizer.momentum.unwrap_or(MomentumConfig {
-                            momentum: 0.9,
-                            dampening: 0.0,
+                        // Create a fresh momentum config with dampening
+                        let momentum_config = MomentumConfig {
+                            momentum: 0.9, // Default momentum
+                            dampening,
                             nesterov: false,
-                        });
-
-                        modified_config.optimizer = SgdConfig {
-                            momentum: Some(MomentumConfig {
-                                dampening,
-                                ..current_momentum
-                            }),
-                            weight_decay: modified_config.optimizer.weight_decay,
-                            gradient_clipping: modified_config.optimizer.gradient_clipping,
                         };
+                        modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
                         println!("Setting dampening to: {}", dampening);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
@@ -302,21 +292,13 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        // Get existing momentum config or create new one
-                        let current_momentum = modified_config.optimizer.momentum.unwrap_or(MomentumConfig {
-                            momentum: 0.9,
+                        // Create a fresh momentum config with nesterov
+                        let momentum_config = MomentumConfig {
+                            momentum: 0.9, // Default momentum
                             dampening: 0.0,
-                            nesterov: false,
-                        });
-
-                        modified_config.optimizer = SgdConfig {
-                            momentum: Some(MomentumConfig {
-                                nesterov,
-                                ..current_momentum
-                            }),
-                            weight_decay: modified_config.optimizer.weight_decay,
-                            gradient_clipping: modified_config.optimizer.gradient_clipping,
+                            nesterov,
                         };
+                        modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
                         println!("Setting nesterov to: {}", nesterov);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
