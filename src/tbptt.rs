@@ -77,8 +77,8 @@ pub struct TBPTTConfig {
     #[config(default = 0.0)]
     pub target_test_loss: f32,
     
-    /// Learning rate scheduler type ("None", "Cosine", "Linear")
-    #[config(default = "None")]
+    /// Learning rate scheduler type ("none", "cosine", "linear")
+    #[config(default = "none")]
     pub lr_scheduler: String,
     
     /// Minimum learning rate for scheduler (as fraction of base lr)
