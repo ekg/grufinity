@@ -6,9 +6,8 @@ use burn::{
 use grufinity::{
     model::MinGRULMConfig,
     dataset::CharVocab,
-    Module,
     use_configured_backend,
-    BackendDevice, RawBackend, BackendWithAutodiff,
+    RawBackend,
 };
 
 fn main() {

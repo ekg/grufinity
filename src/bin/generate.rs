@@ -8,7 +8,7 @@ use grufinity::{
     dataset::CharVocab,
     Config,
     use_configured_backend,
-    BackendDevice, RawBackend, BackendWithAutodiff,
+    RawBackend,
 };
 
 fn main() {
