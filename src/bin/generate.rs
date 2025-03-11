@@ -8,6 +8,7 @@ use grufinity::{
     dataset::CharVocab,
     Config,
     use_configured_backend,
+    BackendDevice, RawBackend, BackendWithAutodiff,
 };
 
 fn main() {
@@ -65,6 +66,33 @@ fn main() {
     
     // Set up the configured backend
     use_configured_backend!();
+    
+    // Get the device from the appropriate backend
+    let device;
+    
+    #[cfg(feature = "wgpu")]
+    {
+        use burn::backend::wgpu::WgpuDevice;
+        device = WgpuDevice::default();
+    }
+    
+    #[cfg(all(feature = "candle", not(feature = "wgpu")))]
+    {
+        use burn::backend::candle::CandleDevice;
+        device = CandleDevice::Cpu;
+    }
+    
+    #[cfg(all(feature = "ndarray", not(any(feature = "wgpu", feature = "candle"))))]
+    {
+        use burn::backend::ndarray::NdArrayDevice;
+        device = NdArrayDevice;
+    }
+    
+    #[cfg(all(feature = "tch", not(any(feature = "wgpu", feature = "candle", feature = "ndarray"))))]
+    {
+        use burn::backend::libtorch::LibTorchDevice;
+        device = LibTorchDevice::Cpu;
+    }
     
     // Load vocabulary
     let mut vocab = CharVocab::new();

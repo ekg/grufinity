@@ -17,6 +17,9 @@ use std::{
     time::Instant,
 };
 
+// Import the backend types from the macro
+use grufinity::{BackendDevice, RawBackend, BackendWithAutodiff};
+
 #[derive(Config)]
 struct TrainingConfig {
     #[config(default = "50")]
@@ -75,6 +78,33 @@ fn main() {
     
     // Set up the configured backend
     use_configured_backend!();
+    
+    // Get the device from the macro
+    let device;
+    
+    #[cfg(feature = "wgpu")]
+    {
+        use burn::backend::wgpu::WgpuDevice;
+        device = WgpuDevice::default();
+    }
+    
+    #[cfg(all(feature = "candle", not(feature = "wgpu")))]
+    {
+        use burn::backend::candle::CandleDevice;
+        device = CandleDevice::Cpu;
+    }
+    
+    #[cfg(all(feature = "ndarray", not(any(feature = "wgpu", feature = "candle"))))]
+    {
+        use burn::backend::ndarray::NdArrayDevice;
+        device = NdArrayDevice;
+    }
+    
+    #[cfg(all(feature = "tch", not(any(feature = "wgpu", feature = "candle", feature = "ndarray"))))]
+    {
+        use burn::backend::libtorch::LibTorchDevice;
+        device = LibTorchDevice::Cpu;
+    }
     
     // Create a directory for artifacts
     fs::create_dir_all(&artifact_dir).expect("Failed to create artifact directory");

@@ -18,6 +18,67 @@ pub use burn::{
     record::{Record, Recorder, BinFileRecorder, FullPrecisionSettings}
 };
 
+// Define backend types at the crate level
+#[cfg(feature = "wgpu")]
+pub use burn::backend::wgpu::{Wgpu, WgpuDevice};
+
+#[cfg(feature = "candle")]
+pub use burn::backend::candle::{Candle, CandleDevice};
+
+#[cfg(feature = "tch")]
+pub use burn::backend::libtorch::{LibTorch, LibTorchDevice};
+
+#[cfg(feature = "ndarray")]
+pub use burn::backend::ndarray::{NdArray, NdArrayDevice};
+
+#[cfg(feature = "autodiff")]
+pub use burn::backend::autodiff::Autodiff;
+
+// Define the backend types based on features
+#[cfg(all(feature = "wgpu", feature = "autodiff"))]
+pub type BackendWithAutodiff = Autodiff<Wgpu<f32, i32>>;
+
+#[cfg(all(feature = "wgpu", not(feature = "autodiff")))]
+pub type BackendWithAutodiff = Wgpu<f32, i32>;
+
+#[cfg(feature = "wgpu")]
+pub type RawBackend = Wgpu<f32, i32>;
+#[cfg(feature = "wgpu")]
+pub type BackendDevice = WgpuDevice;
+
+#[cfg(all(feature = "candle", feature = "autodiff"))]
+pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
+
+#[cfg(all(feature = "candle", not(feature = "autodiff")))]
+pub type BackendWithAutodiff = Candle<f32>;
+
+#[cfg(feature = "candle")]
+pub type RawBackend = Candle<f32>;
+#[cfg(feature = "candle")]
+pub type BackendDevice = CandleDevice;
+
+#[cfg(all(feature = "tch", feature = "autodiff"))]
+pub type BackendWithAutodiff = Autodiff<LibTorch<f32>>;
+
+#[cfg(all(feature = "tch", not(feature = "autodiff")))]
+pub type BackendWithAutodiff = LibTorch<f32>;
+
+#[cfg(feature = "tch")]
+pub type RawBackend = LibTorch<f32>;
+#[cfg(feature = "tch")]
+pub type BackendDevice = LibTorchDevice;
+
+#[cfg(all(feature = "ndarray", feature = "autodiff"))]
+pub type BackendWithAutodiff = Autodiff<NdArray<f32>>;
+
+#[cfg(all(feature = "ndarray", not(feature = "autodiff")))]
+pub type BackendWithAutodiff = NdArray<f32>;
+
+#[cfg(feature = "ndarray")]
+pub type RawBackend = NdArray<f32>;
+#[cfg(feature = "ndarray")]
+pub type BackendDevice = NdArrayDevice;
+
 /// Run with the appropriate backend based on configured features
 #[macro_export]
 macro_rules! use_configured_backend {
@@ -25,115 +86,52 @@ macro_rules! use_configured_backend {
         // Determine which backend to use based on features
         #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff"))]
         {
-            use burn::backend::wgpu::{Wgpu, WgpuDevice};
-            use burn::backend::autodiff::Autodiff;
-            
-            pub type BackendDevice = WgpuDevice;
-            pub type RawBackend = Wgpu<f32, i32>;
-            pub type BackendWithAutodiff = Autodiff<RawBackend>;
-            
             // For reporting
             const BACKEND_NAME: &str = "wgpu-fusion";
             println!("Using WGPU backend with fusion optimization");
-            
-            let device = WgpuDevice::default();
         }
         
         #[cfg(all(feature = "wgpu", feature = "autodiff", not(feature = "fusion")))]
         {
-            use burn::backend::wgpu::{Wgpu, WgpuDevice};
-            use burn::backend::autodiff::Autodiff;
-            
-            pub type BackendDevice = WgpuDevice;
-            pub type RawBackend = Wgpu<f32, i32>;
-            pub type BackendWithAutodiff = Autodiff<RawBackend>;
-            
             // For reporting
             const BACKEND_NAME: &str = "wgpu";
             println!("Using WGPU backend");
-            
-            let device = WgpuDevice::default();
         }
         
         #[cfg(all(feature = "candle", feature = "fusion", feature = "autodiff"))]
         {
-            use burn::backend::candle::{Candle, CandleDevice};
-            use burn::backend::autodiff::Autodiff;
-            
-            pub type BackendDevice = CandleDevice;
-            pub type RawBackend = Candle<f32>;
-            pub type BackendWithAutodiff = Autodiff<RawBackend>;
-            
             // For reporting
             const BACKEND_NAME: &str = "candle-fusion";
             println!("Using Candle CPU backend with fusion optimization");
-            
-            let device = CandleDevice::Cpu;
         }
         
         #[cfg(all(feature = "candle", feature = "autodiff", not(feature = "fusion")))]
         {
-            use burn::backend::candle::{Candle, CandleDevice};
-            use burn::backend::autodiff::Autodiff;
-            
-            pub type BackendDevice = CandleDevice;
-            pub type RawBackend = Candle<f32>;
-            pub type BackendWithAutodiff = Autodiff<RawBackend>;
-            
             // For reporting
             const BACKEND_NAME: &str = "candle";
             println!("Using Candle CPU backend");
-            
-            let device = CandleDevice::Cpu;
         }
         
         #[cfg(all(feature = "tch", feature = "autodiff"))]
         {
-            use burn::backend::libtorch::{LibTorch, LibTorchDevice};
-            use burn::backend::autodiff::Autodiff;
-            
-            pub type BackendDevice = LibTorchDevice;
-            pub type RawBackend = LibTorch<f32>;
-            pub type BackendWithAutodiff = Autodiff<RawBackend>;
-            
             // For reporting
             const BACKEND_NAME: &str = "libtorch";
             println!("Using LibTorch backend");
-            
-            let device = LibTorchDevice::Cpu;
         }
         
         #[cfg(all(feature = "ndarray", feature = "autodiff"))]
         {
-            use burn::backend::ndarray::{NdArray, NdArrayDevice};
-            use burn::backend::autodiff::Autodiff;
-            
-            pub type BackendDevice = NdArrayDevice;
-            pub type RawBackend = NdArray<f32>;
-            pub type BackendWithAutodiff = Autodiff<RawBackend>;
-            
             // For reporting
             const BACKEND_NAME: &str = "ndarray";
             println!("Using NdArray backend");
-            
-            let device = NdArrayDevice;
         }
         
         // Default fallback to WGPU if no specific combination is enabled but wgpu is available
         #[cfg(all(feature = "wgpu", not(feature = "autodiff")))]
         {
-            use burn::backend::wgpu::{Wgpu, WgpuDevice};
-            
-            pub type BackendDevice = WgpuDevice;
-            pub type RawBackend = Wgpu<f32, i32>;
-            // Create a dummy type for BackendWithAutodiff since autodiff isn't available
-            pub type BackendWithAutodiff = Wgpu<f32, i32>;
-            
             // For reporting
             const BACKEND_NAME: &str = "wgpu-basic";
             println!("Using basic WGPU backend (autodiff not available)");
-            
-            let device = WgpuDevice::default();
         }
         
         // We need to ensure one backend is always selected
