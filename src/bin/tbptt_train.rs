@@ -253,7 +253,7 @@ fn main() {
                             }
                         }
                         // Create a fresh SgdConfig with our custom weight decay
-                        let weight_decay_config = WeightDecayConfig { penalty: decay };
+                        let weight_decay_config = WeightDecayConfig { penalty: decay as f32 };
                         modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
                         println!("Setting weight decay to: {}", decay);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
