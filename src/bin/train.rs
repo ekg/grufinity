@@ -10,6 +10,7 @@ use grufinity::{
     dataset::{CharVocab, TextDataset, TextBatcher},
     Module,
     use_configured_backend,
+    Backend, // Import the Backend trait for seed function
 };
 use burn::data::dataset::Dataset;
 use std::{
@@ -18,7 +19,7 @@ use std::{
 };
 
 // Import the backend types from the macro
-use grufinity::{BackendDevice, RawBackend, BackendWithAutodiff};
+use grufinity::{RawBackend, BackendWithAutodiff};
 
 #[derive(Config)]
 struct TrainingConfig {
@@ -194,8 +195,9 @@ fn main() {
         .num_workers(config.num_workers)
         .build(valid_dataset);
     
-    // Initialize learner
-    BackendWithAutodiff::seed(config.seed);
+    // Initialize learner with random seed
+    // Use the Backend trait method
+    <BackendWithAutodiff as Backend>::seed(config.seed);
     
     let learner = LearnerBuilder::new(&artifact_dir)
         .metric_train_numeric(LossMetric::new())

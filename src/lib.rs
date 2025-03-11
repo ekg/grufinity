@@ -18,7 +18,10 @@ pub use burn::{
     record::{Record, Recorder, BinFileRecorder, FullPrecisionSettings}
 };
 
-// Define backend types at the crate level
+// Re-export the Backend trait for use with seed function
+pub use burn::tensor::backend::Backend;
+
+// Import backend types at the crate level
 #[cfg(feature = "wgpu")]
 pub use burn::backend::wgpu::{Wgpu, WgpuDevice};
 
@@ -34,49 +37,47 @@ pub use burn::backend::ndarray::{NdArray, NdArrayDevice};
 #[cfg(feature = "autodiff")]
 pub use burn::backend::autodiff::Autodiff;
 
-// Define the backend types based on features
+// Define the backend types conditionally - only one will be active at a time
+// based on the feature flags and their priority
+
+// WGPU backend (highest priority)
 #[cfg(all(feature = "wgpu", feature = "autodiff"))]
 pub type BackendWithAutodiff = Autodiff<Wgpu<f32, i32>>;
-
 #[cfg(all(feature = "wgpu", not(feature = "autodiff")))]
 pub type BackendWithAutodiff = Wgpu<f32, i32>;
-
 #[cfg(feature = "wgpu")]
 pub type RawBackend = Wgpu<f32, i32>;
 #[cfg(feature = "wgpu")]
 pub type BackendDevice = WgpuDevice;
 
-#[cfg(all(feature = "candle", feature = "autodiff"))]
+// Candle backend (second priority, only used if wgpu is not enabled)
+#[cfg(all(feature = "candle", feature = "autodiff", not(feature = "wgpu")))]
 pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
-
-#[cfg(all(feature = "candle", not(feature = "autodiff")))]
+#[cfg(all(feature = "candle", not(feature = "autodiff"), not(feature = "wgpu")))]
 pub type BackendWithAutodiff = Candle<f32>;
-
-#[cfg(feature = "candle")]
+#[cfg(all(feature = "candle", not(feature = "wgpu")))]
 pub type RawBackend = Candle<f32>;
-#[cfg(feature = "candle")]
+#[cfg(all(feature = "candle", not(feature = "wgpu")))]
 pub type BackendDevice = CandleDevice;
 
-#[cfg(all(feature = "tch", feature = "autodiff"))]
+// LibTorch backend (third priority)
+#[cfg(all(feature = "tch", feature = "autodiff", not(any(feature = "wgpu", feature = "candle"))))]
 pub type BackendWithAutodiff = Autodiff<LibTorch<f32>>;
-
-#[cfg(all(feature = "tch", not(feature = "autodiff")))]
+#[cfg(all(feature = "tch", not(feature = "autodiff"), not(any(feature = "wgpu", feature = "candle"))))]
 pub type BackendWithAutodiff = LibTorch<f32>;
-
-#[cfg(feature = "tch")]
+#[cfg(all(feature = "tch", not(any(feature = "wgpu", feature = "candle"))))]
 pub type RawBackend = LibTorch<f32>;
-#[cfg(feature = "tch")]
+#[cfg(all(feature = "tch", not(any(feature = "wgpu", feature = "candle"))))]
 pub type BackendDevice = LibTorchDevice;
 
-#[cfg(all(feature = "ndarray", feature = "autodiff"))]
+// NdArray backend (lowest priority)
+#[cfg(all(feature = "ndarray", feature = "autodiff", not(any(feature = "wgpu", feature = "candle", feature = "tch"))))]
 pub type BackendWithAutodiff = Autodiff<NdArray<f32>>;
-
-#[cfg(all(feature = "ndarray", not(feature = "autodiff")))]
+#[cfg(all(feature = "ndarray", not(feature = "autodiff"), not(any(feature = "wgpu", feature = "candle", feature = "tch"))))]
 pub type BackendWithAutodiff = NdArray<f32>;
-
-#[cfg(feature = "ndarray")]
+#[cfg(all(feature = "ndarray", not(any(feature = "wgpu", feature = "candle", feature = "tch"))))]
 pub type RawBackend = NdArray<f32>;
-#[cfg(feature = "ndarray")]
+#[cfg(all(feature = "ndarray", not(any(feature = "wgpu", feature = "candle", feature = "tch"))))]
 pub type BackendDevice = NdArrayDevice;
 
 /// Run with the appropriate backend based on configured features
