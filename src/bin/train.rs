@@ -5,22 +5,18 @@ use burn::{
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::backend::Backend,
     train::{LearnerBuilder, metric::LossMetric},
-    backend::wgpu::{Wgpu, WgpuDevice},
-    backend::autodiff::Autodiff,
 };
 use grufinity::{
     model::MinGRULMConfig,
     dataset::{CharVocab, TextDataset, TextBatcher},
     Module,
+    use_configured_backend,
 };
 use burn::data::dataset::Dataset;
 use std::{
     fs,
     time::Instant,
 };
-
-type WgpuBackend = Wgpu<f32, i32>;
-type MyBackend = Autodiff<WgpuBackend>;
 
 #[derive(Config)]
 struct TrainingConfig {
@@ -78,8 +74,8 @@ fn main() {
         }
     }
     
-    // Use the GPU-capable backend
-    let device = WgpuDevice::default();
+    // Set up the configured backend
+    use_configured_backend!();
     
     // Create a directory for artifacts
     fs::create_dir_all(&artifact_dir).expect("Failed to create artifact directory");
@@ -153,8 +149,8 @@ fn main() {
     );
     
     // Set up batchers
-    let train_batcher = TextBatcher::<MyBackend>::new(vocab.clone(), device.clone());
-    let valid_batcher = TextBatcher::<WgpuBackend>::new(vocab.clone(), device.clone());
+    let train_batcher = TextBatcher::<BackendWithAutodiff>::new(vocab.clone(), device.clone());
+    let valid_batcher = TextBatcher::<RawBackend>::new(vocab.clone(), device.clone());
     
     // Set up dataloaders
     let train_dataloader = DataLoaderBuilder::new(train_batcher)
@@ -170,7 +166,7 @@ fn main() {
         .build(valid_dataset);
     
     // Initialize learner
-    MyBackend::seed(config.seed);
+    BackendWithAutodiff::seed(config.seed);
     
     let learner = LearnerBuilder::new(&artifact_dir)
         .metric_train_numeric(LossMetric::new())
@@ -178,7 +174,7 @@ fn main() {
         .devices(vec![device.clone()])
         .num_epochs(config.num_epochs)
         .build(
-            config.model.init::<MyBackend>(&device),
+            config.model.init::<BackendWithAutodiff>(&device),
             config.optimizer.init(),
             config.learning_rate,
         );

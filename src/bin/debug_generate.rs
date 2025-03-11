@@ -1,15 +1,14 @@
 use burn::{
     record::{BinFileRecorder, FullPrecisionSettings, Recorder},
     tensor::{Tensor, Int, activation},
-    backend::wgpu::{Wgpu, WgpuDevice},
+    module::Module,
 };
 use grufinity::{
     model::MinGRULMConfig,
     dataset::CharVocab,
     Module,
+    use_configured_backend,
 };
-
-type MyBackend = Wgpu<f32, i32>;
 
 fn main() {
     // Parse command-line arguments
@@ -56,8 +55,8 @@ fn main() {
         }
     }
     
-    // Use the GPU-capable backend
-    let device = WgpuDevice::default();
+    // Set up the configured backend
+    use_configured_backend!();
     
     println!("Model path: {}", model_path);
     println!("Vocab path: {}", vocab_path);
@@ -82,7 +81,7 @@ fn main() {
         .with_chunk_size(256);
     
     // Initialize model
-    let mut model = config.init::<MyBackend>(&device);
+    let mut model = config.init::<RawBackend>(&device);
     
     // Load model weights
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
@@ -111,7 +110,7 @@ fn main() {
     }
     
     // Create initial tensor
-    let mut tokens = Tensor::<MyBackend, 1, Int>::from_data(&*seed_tokens, &device).unsqueeze::<2>();
+    let mut tokens = Tensor::<RawBackend, 1, Int>::from_data(&*seed_tokens, &device).unsqueeze::<2>();
     println!("Initial tokens shape: {:?}", tokens.dims());
     
     let mut hidden_states = None;

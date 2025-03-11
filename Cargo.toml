@@ -4,9 +4,25 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-burn = { version = "0.16.0", features = ["ndarray", "wgpu", "train"] }
+burn = { version = "0.16.0", default-features = false }
 rand = "0.8.5"
 indicatif = "0.17.7"
+bincode = "=1.3.3"  # Pin bincode version for compatibility with burn
+
+[features]
+default = ["wgpu"]  # Default backend uses WGPU
+
+# Base backends (choose one)
+wgpu = ["burn/wgpu", "burn/train", "burn/metrics", "burn/autotune"]
+candle = ["burn/candle", "burn/train", "burn/metrics"]
+
+# GPU acceleration options
+candle-cuda = ["candle", "burn/cuda"]
+candle-metal = ["candle", "burn/metal"]
+
+# Fusion optimization
+wgpu-fusion = ["wgpu", "burn/fusion"]
+candle-cuda-fusion = ["candle-cuda", "burn/fusion"]
 
 [[bin]]
 name = "train"

@@ -1,15 +1,14 @@
 use burn::{
     record::{BinFileRecorder, FullPrecisionSettings, Recorder},
     tensor::{Tensor, Int},
-    backend::wgpu::{Wgpu, WgpuDevice},
+    module::Module,
 };
 use grufinity::{
     model::MinGRULMConfig,
     dataset::CharVocab,
     Config, Module,
+    use_configured_backend,
 };
-
-type MyBackend = Wgpu<f32, i32>;
 
 fn main() {
     // Parse command-line arguments
@@ -71,8 +70,8 @@ fn main() {
         }
     }
     
-    // Use the GPU-capable backend
-    let device = WgpuDevice::default();
+    // Set up the configured backend
+    use_configured_backend!();
     
     println!("Model path: {}", model_path);
     println!("Vocab path: {}", vocab_path);
@@ -105,7 +104,7 @@ fn main() {
     };
     
     // Initialize model
-    let mut model = config.init::<MyBackend>(&device);
+    let mut model = config.init::<RawBackend>(&device);
     
     // Load model weights
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
@@ -133,7 +132,7 @@ fn main() {
     
     println!("Generating {} characters with seed: \"{}\"", num_chars, seed_text);
     
-    let seed_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*seed_tokens, &device).unsqueeze::<2>();
+    let seed_tensor = Tensor::<RawBackend, 1, Int>::from_data(&*seed_tokens, &device).unsqueeze::<2>();
     println!("Input tensor shape: {:?}", seed_tensor.dims());
     
     // Generate text without hidden state passing

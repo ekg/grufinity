@@ -1,6 +1,4 @@
 use burn::{
-    backend::wgpu::{Wgpu, WgpuDevice},
-    backend::autodiff::Autodiff,
     config::Config,
     optim::SgdConfig,
     optim::momentum::MomentumConfig,
@@ -12,12 +10,10 @@ use grufinity::{
     dataset::CharVocab,
     tbptt::{TBPTTConfig, train_with_tbptt},
     Module,
+    use_configured_backend,
 };
 
 use std::fs;
-
-type WgpuBackend = Wgpu<f32, i32>;
-type MyBackend = Autodiff<WgpuBackend>;
 
 fn print_help() {
     println!("GRUfinity TBPTT Training");
@@ -451,8 +447,8 @@ fn main() {
         }
     }
     
-    // Use the GPU-capable backend
-    let device = WgpuDevice::default();
+    // Set up the configured backend
+    use_configured_backend!();
     
     // Create a directory for artifacts
     fs::create_dir_all(&artifact_dir).expect("Failed to create artifact directory");
@@ -530,7 +526,7 @@ fn main() {
     
     // Train the model using TBPTT with Learner API
     println!("Training with TBPTT using Learner API");
-    let model = train_with_tbptt::<MyBackend>(
+    let model = train_with_tbptt::<BackendWithAutodiff>(
         &config,
         &device,
         &text,
