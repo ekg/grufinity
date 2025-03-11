@@ -215,7 +215,7 @@ impl<B: Backend> MinGRULM<B> {
     pub fn config(&self) -> MinGRULMConfig {
         // Use fixed dimensions since we can't directly access weight dimensions
         let vocab_size = 256; // num_tokens
-        let hidden_dim = 96;  // dimension
+        let hidden_dim = 128;  // dimension (increased from 96)
         
         MinGRULMConfig::new(vocab_size, hidden_dim)
             .with_depth(self.mingru_layers.len())
@@ -224,7 +224,7 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Get the hidden dimension of the model
     pub fn hidden_dim(&self) -> usize {
-        96 // This matches our config
+        128 // Increased from 96 to match new config
     }
     
     /// Accessor for mingru layers
@@ -234,7 +234,7 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Get hidden dimension for other modules
     pub fn dim(&self) -> usize {
-        96 // From model config
+        128 // Increased from 96 to match new config
     }
 
     fn forward_no_chunking(
