@@ -3,7 +3,6 @@ use burn::{
     data::dataloader::DataLoaderBuilder,
     optim::AdamConfig,
     record::{BinFileRecorder, FullPrecisionSettings},
-    tensor::backend::Backend,
     train::{LearnerBuilder, metric::LossMetric},
 };
 use grufinity::{
