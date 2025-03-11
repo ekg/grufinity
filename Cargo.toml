@@ -16,9 +16,9 @@ default = ["wgpu"]  # Default backend uses WGPU
 wgpu = ["burn/wgpu", "burn/train", "burn/metrics", "burn/autotune"]
 candle = ["burn/candle", "burn/train", "burn/metrics"]
 
-# GPU acceleration options
-candle-cuda = ["candle", "burn/cuda"]
-candle-metal = ["candle", "burn/metal"]
+# GPU acceleration options - use correct feature names
+candle-cuda = ["candle", "burn/candle-cuda"]
+candle-metal = ["candle", "burn/candle-metal"]
 
 # Fusion optimization
 wgpu-fusion = ["wgpu", "burn/fusion"]

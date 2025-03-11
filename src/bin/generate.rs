@@ -161,7 +161,7 @@ fn main() {
             continue;
         }
         
-        let chunk_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*chunk_tokens, &device).unsqueeze::<2>();
+        let chunk_tensor = Tensor::<RawBackend, 1, Int>::from_data(&*chunk_tokens, &device).unsqueeze::<2>();
         let (_, next_hidden) = model.forward(chunk_tensor, hidden_states);
         hidden_states = Some(next_hidden);
         
@@ -181,7 +181,7 @@ fn main() {
     
     if !last_tokens.is_empty() {
         println!("Using seed of {} bytes for continuation: \"{}\"", last_tokens.len(), last_chunk);
-        let last_tensor = Tensor::<MyBackend, 1, Int>::from_data(&*last_tokens, &device).unsqueeze::<2>();
+        let last_tensor = Tensor::<RawBackend, 1, Int>::from_data(&*last_tokens, &device).unsqueeze::<2>();
         
         // Print tensor dimensions for debugging
         println!("Seed tensor shape: {:?}", last_tensor.dims());
