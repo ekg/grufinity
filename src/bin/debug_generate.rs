@@ -114,46 +114,9 @@ fn main() {
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
     match recorder.load::<<MinGRULM<RawBackend> as Module<RawBackend>>::Record>(model_path.clone().into(), &device) {
         Ok(record) => {
-            // Try to load the record with proper error handling
-            match std::panic::catch_unwind(|| model.load_record(record)) {
-                Ok(loaded_model) => {
-                    model = loaded_model;
-                    println!("Model loaded successfully");
-                },
-                Err(_) => {
-                    eprintln!("Failed to load model with current structure");
-                    eprintln!("Trying again with a different model structure...");
-                    
-                    // Try with a different model structure
-                    let fallback_config = MinGRULMConfig::new(256, 128)
-                        .with_depth(4)  // Try with 4 layers instead of 2
-                        .with_ff_mult(3.0)
-                        .with_expansion_factor(1.5)
-                        .with_chunk_size(256);
-                    
-                    let fallback_model = fallback_config.init::<RawBackend>(&device);
-                    
-                    // We need to load the record again for the fallback model
-                    match recorder.load::<<MinGRULM<RawBackend> as Module<RawBackend>>::Record>(model_path.clone().into(), &device) {
-                        Ok(new_record) => {
-                            match std::panic::catch_unwind(|| fallback_model.load_record(new_record)) {
-                                Ok(loaded_model) => {
-                                    model = loaded_model;
-                                    println!("Model loaded with fallback configuration");
-                                },
-                                Err(_) => {
-                                    eprintln!("Failed to load with fallback structure");
-                                    return;
-                                }
-                            }
-                        },
-                        Err(e) => {
-                            eprintln!("Failed to reload model file: {}", e);
-                            return;
-                        }
-                    }
-                }
-            }
+            // Try to load the record directly
+            model = model.load_record(record);
+            println!("Model loaded successfully");
         }
         Err(e) => {
             eprintln!("Failed to load model file: {}", e);
