@@ -96,28 +96,28 @@ macro_rules! use_configured_backend {
             println!("Using WGPU backend");
         }
         
-        #[cfg(all(feature = "candle", feature = "fusion", feature = "autodiff"))]
+        #[cfg(all(feature = "candle", feature = "fusion", feature = "autodiff", not(feature = "wgpu")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-fusion";
             println!("Using Candle CPU backend with fusion optimization");
         }
         
-        #[cfg(all(feature = "candle", feature = "autodiff", not(feature = "fusion")))]
+        #[cfg(all(feature = "candle", feature = "autodiff", not(feature = "fusion"), not(feature = "wgpu")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle";
             println!("Using Candle CPU backend");
         }
         
-        #[cfg(all(feature = "tch", feature = "autodiff"))]
+        #[cfg(all(feature = "tch", feature = "autodiff", not(any(feature = "wgpu", feature = "candle"))))]
         {
             // For reporting
             const BACKEND_NAME: &str = "libtorch";
             println!("Using LibTorch backend");
         }
         
-        #[cfg(all(feature = "ndarray", feature = "autodiff"))]
+        #[cfg(all(feature = "ndarray", feature = "autodiff", not(any(feature = "wgpu", feature = "candle", feature = "tch"))))]
         {
             // For reporting
             const BACKEND_NAME: &str = "ndarray";
