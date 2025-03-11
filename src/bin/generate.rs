@@ -123,7 +123,7 @@ fn main() {
     
     // Load model weights with robust error handling
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
-    match recorder.load::<MinGRULM<RawBackend>::Record>(model_path.clone().into(), &device) {
+    match recorder.load::<<MinGRULM<RawBackend> as Module>::Record>(model_path.clone().into(), &device) {
         Ok(record) => {
             // Try to load the record with proper error handling
             match std::panic::catch_unwind(|| model.load_record(record.clone())) {
@@ -144,7 +144,7 @@ fn main() {
                     
                     let fallback_model = fallback_config.init::<RawBackend>(&device);
                     
-                    match recorder.load::<MinGRULM<RawBackend>::Record>(model_path.clone().into(), &device) {
+                    match recorder.load::<<MinGRULM<RawBackend> as Module>::Record>(model_path.clone().into(), &device) {
                         Ok(new_record) => {
                             match std::panic::catch_unwind(|| fallback_model.load_record(new_record)) {
                                 Ok(loaded_model) => {
