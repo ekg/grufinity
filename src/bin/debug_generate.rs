@@ -4,7 +4,7 @@ use burn::{
     module::Module,
 };
 use grufinity::{
-    model::MinGRULMConfig,
+    model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
     use_configured_backend,
     RawBackend,
