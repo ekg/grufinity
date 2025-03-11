@@ -112,48 +112,35 @@ fn main() {
     
     // Load model weights with robust error handling
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
-    match recorder.load::<MinGRULM<RawBackend>>(model_path.into(), &device) {
-        Ok(record) => {
-            // Try to load the record, handling potential structure mismatches
-            match std::panic::catch_unwind(|| model.load_record(record.clone())) {
+    match recorder.load_item(model_path.clone().into(), &device) {
+        Ok(loaded_model) => {
+            model = loaded_model;
+            println!("Model loaded successfully");
+        },
+        Err(e) => {
+            eprintln!("Failed to load model: {}", e);
+            eprintln!("Trying again with a different model structure...");
+            
+            // Try with a different model structure
+            let fallback_config = MinGRULMConfig::new(256, 128)
+                .with_depth(4)  // Try with 4 layers instead of 2
+                .with_ff_mult(3.0)
+                .with_expansion_factor(1.5)
+                .with_chunk_size(256);
+            
+            let fallback_model = fallback_config.init::<RawBackend>(&device);
+            
+            match recorder.load_item(model_path.clone().into(), &device) {
                 Ok(loaded_model) => {
                     model = loaded_model;
-                    println!("Model loaded successfully");
+                    println!("Model loaded with fallback configuration");
                 },
-                Err(_) => {
-                    eprintln!("Failed to load model record - structure mismatch");
-                    eprintln!("Trying again with a different model structure...");
-                    
-                    // Try with a different model structure
-                    let fallback_config = MinGRULMConfig::new(256, 128)
-                        .with_depth(4)  // Try with 4 layers instead of 2
-                        .with_ff_mult(3.0)
-                        .with_expansion_factor(1.5)
-                        .with_chunk_size(256);
-                    
-                    let fallback_model = fallback_config.init::<RawBackend>(&device);
-                    
-                    match recorder.load::<MinGRULM<RawBackend>>(model_path.clone().into(), &device) {
-                        Ok(new_record) => {
-                            match std::panic::catch_unwind(|| fallback_model.load_record(new_record)) {
-                                Ok(loaded_model) => {
-                                    model = loaded_model;
-                                    println!("Model loaded with fallback configuration");
-                                },
-                                Err(_) => {
-                                    eprintln!("Failed to load with fallback structure");
-                                    return;
-                                }
-                            }
-                        },
-                        Err(e) => {
-                            eprintln!("Failed to reload model file: {}", e);
-                            return;
-                        }
-                    }
+                Err(e) => {
+                    eprintln!("Failed to load with fallback structure: {}", e);
+                    return;
                 }
             }
-        },
+        }
         Err(e) => {
             eprintln!("Failed to load model file: {}", e);
             return;
