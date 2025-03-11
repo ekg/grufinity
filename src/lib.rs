@@ -18,9 +18,6 @@ pub use burn::{
     record::{Record, Recorder, BinFileRecorder, FullPrecisionSettings}
 };
 
-// Re-export the Backend trait for use with seed function
-pub use burn::tensor::backend::Backend;
-
 // Import backend types at the crate level
 #[cfg(feature = "wgpu")]
 pub use burn::backend::wgpu::{Wgpu, WgpuDevice};

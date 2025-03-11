@@ -752,7 +752,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     artifact_dir: &str,
 ) -> MinGRULM<B> {
     // Set random seed for reproducibility
-    <B as Backend>::seed(config.seed);
+    <B as burn::tensor::backend::Backend>::seed(config.seed);
     
     // Initialize model
     let model = config.model.clone()
