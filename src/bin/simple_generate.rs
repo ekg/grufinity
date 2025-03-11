@@ -122,11 +122,11 @@ fn main() {
         Ok(config) => config,
         Err(e) => {
             eprintln!("Failed to load model config: {}", e);
-            // Create a default config
-            MinGRULMConfig::new(256, 96)
-                .with_depth(2)
-                .with_ff_mult(2.0)
-                .with_expansion_factor(1.2)
+            // Create a more robust default config with 4 layers
+            MinGRULMConfig::new(256, 128)
+                .with_depth(4)  // Increased from 2 to 4 layers
+                .with_ff_mult(3.0)  // Increased from 2.0 to 3.0
+                .with_expansion_factor(1.5)  // Increased from 1.2 to 1.5
                 .with_chunk_size(256)
         }
     };
@@ -134,15 +134,44 @@ fn main() {
     // Initialize model
     let mut model = config.init::<RawBackend>(&device);
     
-    // Load model weights
+    // Load model weights with robust error handling
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
     match recorder.load(model_path.into(), &device) {
         Ok(record) => {
-            model = model.load_record(record);
-            println!("Model loaded successfully");
+            // Try to load the record, handling potential structure mismatches
+            match burn::record::RecordLoader::load(model, record) {
+                Ok(loaded_model) => {
+                    model = loaded_model;
+                    println!("Model loaded successfully");
+                },
+                Err(e) => {
+                    eprintln!("Failed to load model record: {}", e);
+                    eprintln!("Trying again with a different model structure...");
+                    
+                    // Try again with a different model structure
+                    let fallback_config = MinGRULMConfig::new(256, 128)
+                        .with_depth(4)  // Try with 4 layers
+                        .with_ff_mult(3.0)
+                        .with_expansion_factor(1.5)
+                        .with_chunk_size(256);
+                    
+                    let fallback_model = fallback_config.init::<RawBackend>(&device);
+                    
+                    match burn::record::RecordLoader::load(fallback_model, recorder.load(model_path.clone().into(), &device).unwrap()) {
+                        Ok(loaded_model) => {
+                            model = loaded_model;
+                            println!("Model loaded with fallback configuration");
+                        },
+                        Err(e2) => {
+                            eprintln!("Failed to load with fallback structure: {}", e2);
+                            return;
+                        }
+                    }
+                }
+            }
         },
         Err(e) => {
-            eprintln!("Failed to load model: {}", e);
+            eprintln!("Failed to load model file: {}", e);
             return;
         }
     }
