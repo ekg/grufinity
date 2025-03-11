@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-burn = { version = "0.16.0", default-features = false }
+burn = { version = "0.16.0", default-features = false, features = ["autodiff", "autotune", "candle", "fusion", "ndarray", "tch", "train", "wgpu", "metrics"] }
 rand = "0.8.5"
 indicatif = "0.17.7"
-bincode = "=1.3.3"  # Pin bincode version for compatibility with burn
+bincode = "=2.0.0-rc.3"
+bincode_derive = "=2.0.0-rc.3"
 
 [features]
 default = ["wgpu"]  # Default backend uses WGPU
@@ -16,14 +17,15 @@ default = ["wgpu"]  # Default backend uses WGPU
 wgpu = ["burn/wgpu"]
 fusion = ["burn/fusion"]
 candle = ["burn/candle"]
-candle-cuda = ["burn/candle-cuda"]
+tch = ["burn/tch"]
+ndarray = ["burn/ndarray"]
 autodiff = ["burn/autodiff"]
 autotune = ["burn/autotune"]
 
 # Combined feature flags for convenience
 wgpu-fusion = ["wgpu", "fusion", "autodiff", "autotune"]
 candle-fusion = ["candle", "fusion", "autodiff"]
-candle-cuda-fusion = ["candle", "candle-cuda", "fusion", "autodiff"]
+# add 
 
 [[bin]]
 name = "train"
