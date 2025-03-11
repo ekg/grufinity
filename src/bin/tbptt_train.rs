@@ -11,7 +11,6 @@ use grufinity::{
     tbptt::{TBPTTConfig, train_with_tbptt},
     Module,
     use_configured_backend,
-    Backend, // Import the Backend trait for seed function
     RawBackend, BackendWithAutodiff,
 };
 
