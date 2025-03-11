@@ -23,7 +23,7 @@ pub use burn::{
 macro_rules! use_configured_backend {
     () => {
         // Determine which backend to use based on features
-        #[cfg(feature = "wgpu-fusion")]
+        #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff"))]
         {
             use burn::backend::wgpu::{Wgpu, WgpuDevice};
             use burn::backend::autodiff::Autodiff;
@@ -39,7 +39,7 @@ macro_rules! use_configured_backend {
             let device = WgpuDevice::default();
         }
         
-        #[cfg(all(feature = "wgpu", not(feature = "wgpu-fusion")))]
+        #[cfg(all(feature = "wgpu", feature = "autodiff", not(feature = "fusion")))]
         {
             use burn::backend::wgpu::{Wgpu, WgpuDevice};
             use burn::backend::autodiff::Autodiff;
@@ -55,7 +55,7 @@ macro_rules! use_configured_backend {
             let device = WgpuDevice::default();
         }
         
-        #[cfg(feature = "candle-cuda-fusion")]
+        #[cfg(all(feature = "candle", feature = "candle-cuda", feature = "fusion", feature = "autodiff"))]
         {
             use burn::backend::candle::{Candle, CandleDevice};
             use burn::backend::autodiff::Autodiff;
@@ -80,7 +80,7 @@ macro_rules! use_configured_backend {
             };
         }
         
-        #[cfg(all(feature = "candle-cuda", not(feature = "candle-cuda-fusion")))]
+        #[cfg(all(feature = "candle", feature = "candle-cuda", feature = "autodiff", not(feature = "fusion")))]
         {
             use burn::backend::candle::{Candle, CandleDevice};
             use burn::backend::autodiff::Autodiff;
@@ -105,7 +105,7 @@ macro_rules! use_configured_backend {
             };
         }
         
-        #[cfg(all(feature = "candle", not(any(feature = "candle-cuda", feature = "candle-cuda-fusion"))))]
+        #[cfg(all(feature = "candle", feature = "autodiff", not(feature = "candle-cuda"), not(feature = "fusion")))]
         {
             use burn::backend::candle::{Candle, CandleDevice};
             use burn::backend::autodiff::Autodiff;
@@ -121,14 +121,35 @@ macro_rules! use_configured_backend {
             let device = CandleDevice::Cpu;
         }
         
+        // Default fallback to WGPU if no specific combination is enabled but wgpu is available
+        #[cfg(all(feature = "wgpu", not(feature = "autodiff")))]
+        {
+            use burn::backend::wgpu::{Wgpu, WgpuDevice};
+            
+            type BackendDevice = WgpuDevice;
+            type RawBackend = Wgpu<f32, i32>;
+            // Create a dummy type for BackendWithAutodiff since autodiff isn't available
+            type BackendWithAutodiff = Wgpu<f32, i32>;
+            
+            // For reporting
+            const BACKEND_NAME: &str = "wgpu-basic";
+            println!("Using basic WGPU backend (autodiff not available)");
+            
+            let device = WgpuDevice::default();
+        }
+        
         // We need to ensure one backend is always selected
         #[cfg(not(any(
             feature = "wgpu", 
-            feature = "wgpu-fusion", 
-            feature = "candle", 
-            feature = "candle-cuda", 
-            feature = "candle-cuda-fusion"
+            feature = "candle"
         )))]
-        compile_error!("At least one backend feature must be enabled: 'wgpu', 'wgpu-fusion', 'candle', 'candle-cuda', or 'candle-cuda-fusion'");
+        compile_error!("At least one backend feature must be enabled: 'wgpu' or 'candle'");
+        
+        // Ensure autodiff is available for training
+        #[cfg(not(feature = "autodiff"))]
+        {
+            println!("WARNING: 'autodiff' feature is not enabled. Training will not work properly.");
+            println!("Consider adding the autodiff feature: cargo add burn --features autodiff");
+        }
     };
 }
