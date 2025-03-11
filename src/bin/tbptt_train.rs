@@ -8,7 +8,7 @@ use burn::{
 use grufinity::{
     model::MinGRULMConfig,
     dataset::CharVocab,
-    tbptt::{TBPTTConfig, train_with_tbptt},
+    tbptt::{TBPTTConfig, train_with_tbptt, LRSchedulerType},
     Module,
     use_configured_backend,
     RawBackend, BackendWithAutodiff,
@@ -314,8 +314,16 @@ fn main() {
                             modified_config = cfg;
                         }
                     }
-                    modified_config.lr_scheduler = scheduler_type.clone();
-                    println!("Setting learning rate scheduler to: {}", scheduler_type);
+                    
+                    // Parse the scheduler type string to the enum
+                    let scheduler = match scheduler_type.to_lowercase().as_str() {
+                        "cosine" => LRSchedulerType::Cosine,
+                        "linear" => LRSchedulerType::Linear,
+                        _ => LRSchedulerType::Constant, // Default to constant for any other value
+                    };
+                    
+                    modified_config.lr_scheduler = scheduler;
+                    println!("Setting learning rate scheduler to: {:?}", scheduler);
                     modified_config.save("temp_config.json").expect("Failed to save temporary config");
                     config_path = "temp_config.json".to_string();
                 }
@@ -672,7 +680,7 @@ fn create_default_config() -> TBPTTConfig {
     .with_target_valid_loss(0.0)  // 0.0 means ignore
     .with_target_test_loss(0.0)   // 0.0 means ignore
     .with_max_epochs(1000)        // Maximum epochs if target not reached
-    .with_lr_scheduler("constant") // Constant learning rate by default
+    .with_lr_scheduler(LRSchedulerType::Constant) // Constant learning rate by default
     .with_min_lr_factor(0.1)       // Minimum LR at 10% of max
     .with_warmup_epochs(0)         // No warmup by default
 }

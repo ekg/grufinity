@@ -8,6 +8,7 @@ use burn::{
     tensor::{backend::AutodiffBackend, cast::ToElement, Tensor},
     train::metric::MetricEntry,
 };
+use std::str::FromStr;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -20,6 +21,37 @@ use crate::dataset::{
 use crate::model::{MinGRULM, MinGRULMConfig};
 use burn::data::dataset::Dataset;
 use burn::record::FileRecorder;
+
+/// Learning rate scheduler type
+#[derive(Config, Debug, Clone, Copy, PartialEq)]
+pub enum LRSchedulerType {
+    /// Constant learning rate
+    Constant,
+    /// Cosine annealing learning rate
+    Cosine,
+    /// Linear decay learning rate
+    Linear,
+}
+
+impl Default for LRSchedulerType {
+    fn default() -> Self {
+        LRSchedulerType::Constant
+    }
+}
+
+/// Convert string to LRSchedulerType
+impl FromStr for LRSchedulerType {
+    type Err = String;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "constant" => Ok(LRSchedulerType::Constant),
+            "cosine" => Ok(LRSchedulerType::Cosine),
+            "linear" => Ok(LRSchedulerType::Linear),
+            _ => Err(format!("Unknown scheduler type: {}", s)),
+        }
+    }
+}
 
 /// Configuration for TBPTT training
 #[derive(Config)]
@@ -77,9 +109,9 @@ pub struct TBPTTConfig {
     #[config(default = 0.0)]
     pub target_test_loss: f32,
 
-    /// Learning rate scheduler type ("constant", "cosine", "linear")
-    #[config(default = "constant")]
-    pub lr_scheduler: String,
+    /// Learning rate scheduler type
+    #[config(default = "LRSchedulerType::Constant")]
+    pub lr_scheduler: LRSchedulerType,
 
     /// Minimum learning rate for scheduler (as fraction of base lr)
     #[config(default = 0.1)]
@@ -909,9 +941,9 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     };
 
     // Setup learning rate scheduling
-    let use_cosine = config.lr_scheduler.eq_ignore_ascii_case("cosine");
-    let use_linear = config.lr_scheduler.eq_ignore_ascii_case("linear");
-    // Anything other than "cosine" or "linear" will use constant learning rate
+    let use_cosine = config.lr_scheduler == LRSchedulerType::Cosine;
+    let use_linear = config.lr_scheduler == LRSchedulerType::Linear;
+    // Anything other than Cosine or Linear will use constant learning rate
     let warmup_epochs = config.warmup_epochs;
     let min_lr = config.learning_rate * config.min_lr_factor;
 
