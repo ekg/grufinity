@@ -45,6 +45,9 @@ fn print_help() {
     println!("  --weight-decay VALUE           Weight decay (L2 penalty) for SGD (default: 0.0)");
     println!("  --dampening VALUE              Dampening for momentum (default: 0.0)");
     println!("  --nesterov BOOL                Enable Nesterov momentum (default: false)");
+    println!("  --lr-scheduler TYPE            Learning rate scheduler (none, cosine, linear) (default: none)");
+    println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
+    println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
     println!("\nExample:");
     println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --context-length 100000 --update-tokens 512 --backprop-tokens 1024");
     println!("\nThis will train with:");
@@ -297,6 +300,53 @@ fn main() {
                         };
                         modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
                         println!("Setting nesterov to: {}", nesterov);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--lr-scheduler" => {
+                if i + 1 < args.len() {
+                    let scheduler_type = args[i + 1].clone();
+                    let mut modified_config = create_default_config();
+                    if !config_path.is_empty() {
+                        if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                            modified_config = cfg;
+                        }
+                    }
+                    modified_config.lr_scheduler = scheduler_type.clone();
+                    println!("Setting learning rate scheduler to: {}", scheduler_type);
+                    modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                    config_path = "temp_config.json".to_string();
+                }
+            },
+            "--min-lr-factor" => {
+                if i + 1 < args.len() {
+                    if let Ok(factor) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.min_lr_factor = factor;
+                        println!("Setting minimum learning rate factor to: {}", factor);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--warmup-epochs" => {
+                if i + 1 < args.len() {
+                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.warmup_epochs = epochs;
+                        println!("Setting warmup epochs to: {}", epochs);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }
@@ -622,4 +672,7 @@ fn create_default_config() -> TBPTTConfig {
     .with_target_valid_loss(0.0)  // 0.0 means ignore
     .with_target_test_loss(0.0)   // 0.0 means ignore
     .with_max_epochs(1000)        // Maximum epochs if target not reached
+    .with_lr_scheduler("none")     // No scheduler by default
+    .with_min_lr_factor(0.1)       // Minimum LR at 10% of max
+    .with_warmup_epochs(0)         // No warmup by default
 }

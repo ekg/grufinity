@@ -77,6 +77,18 @@ pub struct TBPTTConfig {
     #[config(default = 0.0)]
     pub target_test_loss: f32,
     
+    /// Learning rate scheduler type ("none", "cosine", "linear")
+    #[config(default = "none")]
+    pub lr_scheduler: String,
+    
+    /// Minimum learning rate for scheduler (as fraction of base lr)
+    #[config(default = 0.1)]
+    pub min_lr_factor: f64,
+    
+    /// Number of warmup epochs
+    #[config(default = 0)]
+    pub warmup_epochs: usize,
+    
     /// Batch size
     #[config(default = 32)]
     pub batch_size: usize,
@@ -826,6 +838,12 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         config.num_epochs
     };
     
+    // Setup learning rate scheduling
+    let use_cosine = config.lr_scheduler.to_lowercase() == "cosine";
+    let use_linear = config.lr_scheduler.to_lowercase() == "linear";
+    let warmup_epochs = config.warmup_epochs;
+    let min_lr = config.learning_rate * config.min_lr_factor;
+    
     println!("Training for up to {} epochs", max_training_epochs);
     if config.target_valid_loss > 0.0 {
         println!("Will stop when validation loss reaches {:.6}", config.target_valid_loss);
@@ -834,7 +852,47 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         println!("Will stop when test loss reaches {:.6}", config.target_test_loss);
     }
     
+    // Print learning rate schedule info
+    if warmup_epochs > 0 {
+        println!("Using {} warmup epochs with linear ramp", warmup_epochs);
+    }
+    if use_cosine {
+        println!("Using cosine annealing schedule from lr={} to min_lr={}", 
+                config.learning_rate, min_lr);
+    } else if use_linear {
+        println!("Using linear decay schedule from lr={} to min_lr={}", 
+                config.learning_rate, min_lr);
+    } else {
+        println!("Using constant learning rate: {}", config.learning_rate);
+    }
+    
     for epoch in 1..=max_training_epochs {
+        // Calculate learning rate for this epoch
+        let current_lr = if epoch <= warmup_epochs {
+            // Linear warmup
+            config.learning_rate * (epoch as f64 / warmup_epochs.max(1) as f64)
+        } else if use_cosine {
+            // Cosine annealing
+            let progress = (epoch - warmup_epochs) as f64 / 
+                          (max_training_epochs - warmup_epochs).max(1) as f64;
+            let cosine_decay = 0.5 * (1.0 + (std::f64::consts::PI * progress).cos());
+            min_lr + (config.learning_rate - min_lr) * cosine_decay
+        } else if use_linear {
+            // Linear decay
+            let progress = (epoch - warmup_epochs) as f64 / 
+                          (max_training_epochs - warmup_epochs).max(1) as f64;
+            config.learning_rate - (config.learning_rate - min_lr) * progress
+        } else {
+            // Constant learning rate
+            config.learning_rate
+        };
+        
+        // Update trainer's learning rate
+        trainer.learning_rate = current_lr;
+        trainer.metrics.update_lr(current_lr);
+        
+        println!("Epoch {}/{} - Learning rate: {:.6e}", epoch, max_training_epochs, current_lr);
+        
         // Resample starting positions for each epoch with different seeds
         println!("Resampling positions for epoch {}...", epoch);
         train_dataset.resample_positions(config.seed + epoch as u64 * 1000);
