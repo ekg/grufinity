@@ -77,8 +77,8 @@ pub struct TBPTTConfig {
     #[config(default = 0.0)]
     pub target_test_loss: f32,
     
-    /// Learning rate scheduler type ("none", "cosine", "linear")
-    #[config(default = "none")]
+    /// Learning rate scheduler type ("constant", "cosine", "linear")
+    #[config(default = "constant")]
     pub lr_scheduler: String,
     
     /// Minimum learning rate for scheduler (as fraction of base lr)
@@ -841,6 +841,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     // Setup learning rate scheduling
     let use_cosine = config.lr_scheduler.eq_ignore_ascii_case("cosine");
     let use_linear = config.lr_scheduler.eq_ignore_ascii_case("linear");
+    // Anything other than "cosine" or "linear" will use constant learning rate
     let warmup_epochs = config.warmup_epochs;
     let min_lr = config.learning_rate * config.min_lr_factor;
     

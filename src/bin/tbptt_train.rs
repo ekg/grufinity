@@ -45,7 +45,7 @@ fn print_help() {
     println!("  --weight-decay VALUE           Weight decay (L2 penalty) for SGD (default: 0.0)");
     println!("  --dampening VALUE              Dampening for momentum (default: 0.0)");
     println!("  --nesterov BOOL                Enable Nesterov momentum (default: false)");
-    println!("  --lr-scheduler TYPE            Learning rate scheduler (none, cosine, linear) (default: none)");
+    println!("  --lr-scheduler TYPE            Learning rate scheduler (constant, cosine, linear) (default: constant)");
     println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
     println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
     println!("\nExample:");
@@ -672,7 +672,7 @@ fn create_default_config() -> TBPTTConfig {
     .with_target_valid_loss(0.0)  // 0.0 means ignore
     .with_target_test_loss(0.0)   // 0.0 means ignore
     .with_max_epochs(1000)        // Maximum epochs if target not reached
-    .with_lr_scheduler("none")     // No scheduler by default
+    .with_lr_scheduler("constant") // Constant learning rate by default
     .with_min_lr_factor(0.1)       // Minimum LR at 10% of max
     .with_warmup_epochs(0)         // No warmup by default
 }
