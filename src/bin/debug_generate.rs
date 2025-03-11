@@ -1,13 +1,13 @@
 use burn::{
     record::{BinFileRecorder, FullPrecisionSettings, Recorder},
     tensor::{Tensor, Int, activation},
-    module::Module,
 };
 use grufinity::{
     model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
     use_configured_backend,
     RawBackend,
+    Module,
 };
 
 fn main() {

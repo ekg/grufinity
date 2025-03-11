@@ -1,7 +1,6 @@
 use burn::{
     record::{BinFileRecorder, FullPrecisionSettings, Recorder},
     tensor::{Tensor, Int},
-    module::Module,
 };
 use grufinity::{
     model::{MinGRULMConfig, MinGRULM},
@@ -9,6 +8,7 @@ use grufinity::{
     Config,
     use_configured_backend,
     RawBackend,
+    Module,
 };
 
 fn main() {
