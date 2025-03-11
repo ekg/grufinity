@@ -23,7 +23,7 @@ use burn::data::dataset::Dataset;
 use burn::record::FileRecorder;
 
 /// Learning rate scheduler type
-#[derive(Config, Debug, Clone, Copy, PartialEq)]
+#[derive(Config, Debug, Copy, PartialEq)]
 pub enum LRSchedulerType {
     /// Constant learning rate
     Constant,
