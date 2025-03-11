@@ -139,13 +139,13 @@ fn main() {
     match recorder.load(model_path.into(), &device) {
         Ok(record) => {
             // Try to load the record, handling potential structure mismatches
-            match burn::record::RecordLoader::load(model, record) {
+            match std::panic::catch_unwind(|| model.load_record(record.clone())) {
                 Ok(loaded_model) => {
                     model = loaded_model;
                     println!("Model loaded successfully");
                 },
-                Err(e) => {
-                    eprintln!("Failed to load model record: {}", e);
+                Err(_) => {
+                    eprintln!("Failed to load model record - structure mismatch");
                     eprintln!("Trying again with a different model structure...");
                     
                     // Try again with a different model structure
@@ -157,13 +157,21 @@ fn main() {
                     
                     let fallback_model = fallback_config.init::<RawBackend>(&device);
                     
-                    match burn::record::RecordLoader::load(fallback_model, recorder.load(model_path.clone().into(), &device).unwrap()) {
-                        Ok(loaded_model) => {
-                            model = loaded_model;
-                            println!("Model loaded with fallback configuration");
+                    match recorder.load(model_path.clone().into(), &device) {
+                        Ok(new_record) => {
+                            match std::panic::catch_unwind(|| fallback_model.load_record(new_record)) {
+                                Ok(loaded_model) => {
+                                    model = loaded_model;
+                                    println!("Model loaded with fallback configuration");
+                                },
+                                Err(_) => {
+                                    eprintln!("Failed to load with fallback structure");
+                                    return;
+                                }
+                            }
                         },
-                        Err(e2) => {
-                            eprintln!("Failed to load with fallback structure: {}", e2);
+                        Err(e) => {
+                            eprintln!("Failed to reload model file: {}", e);
                             return;
                         }
                     }
