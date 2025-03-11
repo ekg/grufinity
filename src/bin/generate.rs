@@ -126,7 +126,7 @@ fn main() {
     match recorder.load::<<MinGRULM<RawBackend> as Module<RawBackend>>::Record>(model_path.clone().into(), &device) {
         Ok(record) => {
             // Try to load the record with proper error handling
-            match std::panic::catch_unwind(|| model.load_record(record.clone())) {
+            match std::panic::catch_unwind(|| model.load_record(record)) {
                 Ok(loaded_model) => {
                     model = loaded_model;
                     println!("Model loaded from: {}", model_path);
@@ -144,6 +144,7 @@ fn main() {
                     
                     let fallback_model = fallback_config.init::<RawBackend>(&device);
                     
+                    // We need to load the record again for the fallback model
                     match recorder.load::<<MinGRULM<RawBackend> as Module<RawBackend>>::Record>(model_path.clone().into(), &device) {
                         Ok(new_record) => {
                             match std::panic::catch_unwind(|| fallback_model.load_record(new_record)) {
