@@ -2,7 +2,7 @@ use burn::{
     config::Config,
     module::{Module, AutodiffModule},
     nn::loss::CrossEntropyLossConfig,
-    optim::{AdamConfig, SGDConfig, GradientsAccumulator, GradientsParams, Optimizer},
+    optim::{SgdConfig, GradientsAccumulator, GradientsParams, Optimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::AutodiffBackend, Tensor, cast::ToElement},
     train::{
@@ -28,7 +28,7 @@ pub struct TBPTTConfig {
     pub model: MinGRULMConfig,
     
     /// Optimizer configuration
-    pub optimizer: SGDConfig,
+    pub optimizer: SgdConfig,
     
     /// Learning rate
     #[config(default = 1e-3)]
