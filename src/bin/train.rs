@@ -80,7 +80,8 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the macro
-    let device;
+    let mut device;
+    let device_initialized = false;
     
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
     {
