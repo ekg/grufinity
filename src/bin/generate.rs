@@ -68,8 +68,23 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the appropriate backend
-    let device;
-    let mut device_initialized = false;
+    #[cfg(feature = "wgpu")]
+    let device = burn::backend::wgpu::WgpuDevice::default();
+    
+    #[cfg(all(not(feature = "wgpu"), feature = "cuda-jit"))]
+    let device = burn::backend::cuda_jit::CudaDevice::new(0);
+    
+    #[cfg(all(not(feature = "wgpu"), not(feature = "cuda-jit"), feature = "candle"))]
+    let device = burn::backend::candle::CandleDevice::Cpu;
+    
+    #[cfg(all(not(feature = "wgpu"), not(feature = "cuda-jit"), not(feature = "candle"), feature = "ndarray"))]
+    let device = burn::backend::ndarray::NdArrayDevice;
+    
+    #[cfg(all(not(feature = "wgpu"), not(feature = "cuda-jit"), not(feature = "candle"), not(feature = "ndarray"), feature = "tch"))]
+    let device = burn::backend::libtorch::LibTorchDevice::Cpu;
+    
+    // Always initialize to false, we'll set it true in each implementation block
+    let device_initialized = false;
     
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
     {
