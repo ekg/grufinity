@@ -1,6 +1,6 @@
 use burn::{
     config::Config,
-    optim::SgdConfig,
+    optim::{SgdConfig, AdamConfig},
     optim::momentum::MomentumConfig,
     optim::decay::WeightDecayConfig,
 };
@@ -230,13 +230,23 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        // Create a fresh SgdConfig with our custom momentum
-                        let momentum_config = MomentumConfig {
-                            momentum,
-                            dampening: 0.0,
-                            nesterov: false,
-                        };
-                        modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
+                        #[cfg(feature = "tbptt-sgd")]
+                        {
+                            // Create a fresh SgdConfig with our custom momentum
+                            let momentum_config = MomentumConfig {
+                                momentum,
+                                dampening: 0.0,
+                                nesterov: false,
+                            };
+                            modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
+                        }
+                        
+                        #[cfg(not(feature = "tbptt-sgd"))]
+                        {
+                            println!("Note: Momentum parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            // Keep the default Adam config
+                            modified_config.optimizer = AdamConfig::new();
+                        }
                         println!("Setting momentum to: {}", momentum);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
@@ -252,9 +262,19 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        // Create a fresh SgdConfig with our custom weight decay
-                        let weight_decay_config = WeightDecayConfig { penalty: decay as f32 };
-                        modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
+                        #[cfg(feature = "tbptt-sgd")]
+                        {
+                            // Create a fresh SgdConfig with our custom weight decay
+                            let weight_decay_config = WeightDecayConfig { penalty: decay as f32 };
+                            modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
+                        }
+                        
+                        #[cfg(not(feature = "tbptt-sgd"))]
+                        {
+                            println!("Note: Weight decay parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            // Keep the default Adam config
+                            modified_config.optimizer = AdamConfig::new();
+                        }
                         println!("Setting weight decay to: {}", decay);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
@@ -270,13 +290,23 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        // Create a fresh momentum config with dampening
-                        let momentum_config = MomentumConfig {
-                            momentum: 0.9, // Default momentum
-                            dampening,
-                            nesterov: false,
-                        };
-                        modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
+                        #[cfg(feature = "tbptt-sgd")]
+                        {
+                            // Create a fresh momentum config with dampening
+                            let momentum_config = MomentumConfig {
+                                momentum: 0.9, // Default momentum
+                                dampening,
+                                nesterov: false,
+                            };
+                            modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
+                        }
+                        
+                        #[cfg(not(feature = "tbptt-sgd"))]
+                        {
+                            println!("Note: Dampening parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            // Keep the default Adam config
+                            modified_config.optimizer = AdamConfig::new();
+                        }
                         println!("Setting dampening to: {}", dampening);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
@@ -292,13 +322,23 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        // Create a fresh momentum config with nesterov
-                        let momentum_config = MomentumConfig {
-                            momentum: 0.9, // Default momentum
-                            dampening: 0.0,
-                            nesterov,
-                        };
-                        modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
+                        #[cfg(feature = "tbptt-sgd")]
+                        {
+                            // Create a fresh momentum config with nesterov
+                            let momentum_config = MomentumConfig {
+                                momentum: 0.9, // Default momentum
+                                dampening: 0.0,
+                                nesterov,
+                            };
+                            modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
+                        }
+                        
+                        #[cfg(not(feature = "tbptt-sgd"))]
+                        {
+                            println!("Note: Nesterov parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            // Keep the default Adam config
+                            modified_config.optimizer = AdamConfig::new();
+                        }
                         println!("Setting nesterov to: {}", nesterov);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();

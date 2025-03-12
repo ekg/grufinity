@@ -3,7 +3,11 @@ use burn::{
     config::Config,
     module::{AutodiffModule, Module},
     nn::loss::CrossEntropyLossConfig,
-    optim::{GradientsAccumulator, GradientsParams, Optimizer, SgdConfig, AdamConfig},
+    optim::{GradientsAccumulator, GradientsParams, Optimizer},
+    #[cfg(feature = "tbptt-sgd")]
+    optim::SgdConfig,
+    #[cfg(not(feature = "tbptt-sgd"))]
+    optim::AdamConfig,
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::AutodiffBackend, cast::ToElement, Tensor},
     train::metric::MetricEntry,
