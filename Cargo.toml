@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-burn = { version = "0.16.0", default-features = false, features = ["autodiff", "autotune", "candle", "fusion", "ndarray", "tch", "train", "wgpu", "metrics", "cuda-jit", "candle-cuda"] }
+burn = { version = "0.16.0", default-features = false, features = ["autodiff", "autotune", "train", "metrics"] }
 rand = "0.8.5"
 indicatif = "0.17.7"
 bincode = "=2.0.0-rc.3"
@@ -13,7 +13,7 @@ bincode_derive = "=2.0.0-rc.3"
 [features]
 default = ["wgpu"]  # Default backend uses WGPU
 
-# Use the features that were successfully added
+# Core features - no dependencies included here
 wgpu = ["burn/wgpu"]
 fusion = ["burn/fusion"]
 candle = ["burn/candle"]
@@ -22,15 +22,21 @@ ndarray = ["burn/ndarray"]
 autodiff = ["burn/autodiff"]
 autotune = ["burn/autotune"]
 
+# Optional CUDA features - these should be explicitly requested
+candle-cuda = ["candle", "burn/candle-cuda"]
+cuda-jit = ["burn/cuda-jit"]
+
 # Optimizer selection for TBPTT (exactly one should be enabled)
 optimizer-adam = []  # Use Adam optimizer for TBPTT
 optimizer-sgd = []   # Use SGD optimizer for TBPTT
 
-# Combined feature flags for convenience
+# Combined feature flags for convenience (non-CUDA)
 wgpu-fusion = ["wgpu", "fusion", "autodiff", "autotune"]
 candle-fusion = ["candle", "fusion", "autodiff"]
-candle-cuda = ["candle", "burn/candle-cuda", "fusion", "autodiff"]  # CUDA via candle
-cuda-jit = ["burn/cuda-jit", "fusion", "autodiff"]  # Direct CUDA JIT support
+
+# Combined CUDA features - these are opt-in only
+cuda-full = ["cuda-jit", "fusion", "autodiff"]
+candle-cuda-full = ["candle", "candle-cuda", "fusion", "autodiff"]
 
 [[bin]]
 name = "train"

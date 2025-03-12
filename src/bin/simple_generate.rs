@@ -77,14 +77,14 @@ fn main() {
     // Get the device from the appropriate backend
     let device;
     
-    #[cfg(feature = "cuda-jit")]
+    #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
     {
         use burn::backend::cuda_jit::CudaDevice;
         device = CudaDevice::new(0); // Use first CUDA device with JIT
         println!("Using CUDA JIT device");
     }
     
-    #[cfg(all(feature = "candle", feature = "candle-cuda", not(feature = "cuda-jit")))]
+    #[cfg(all(feature = "candle", feature = "candle-cuda", not(feature = "cuda-jit"), not(feature = "wgpu")))]
     {
         use burn::backend::candle::CandleDevice;
         device = CandleDevice::Cuda(0);  // Use first CUDA device via Candle
