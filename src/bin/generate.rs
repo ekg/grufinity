@@ -72,8 +72,8 @@ fn main() {
     
     #[cfg(feature = "cuda-jit")]
     {
-        use burn::backend::cuda_jit::CudaJitDevice;
-        device = CudaJitDevice::new(0); // Use first CUDA device with JIT
+        use burn::backend::cuda_jit::CudaDevice;
+        device = CudaDevice::new(0); // Use first CUDA device with JIT
         println!("Using CUDA JIT device");
     }
     

@@ -20,7 +20,8 @@ pub use burn::{
 
 // Import backend types at the crate level
 #[cfg(feature = "cuda-jit")]
-pub use burn::backend::cuda_jit::{CudaJit, CudaDevice as CudaJitDevice};
+pub use burn::backend::CudaJit;
+pub use burn::backend::cuda_jit::CudaDevice as CudaJitDevice;
 
 #[cfg(feature = "wgpu")]
 pub use burn::backend::wgpu::{Wgpu, WgpuDevice};
