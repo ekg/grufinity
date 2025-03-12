@@ -1,9 +1,16 @@
 use burn::{
     config::Config,
-    optim::{SgdConfig, AdamConfig},
+};
+
+#[cfg(feature = "optimizer-sgd")]
+use burn::{
+    optim::SgdConfig,
     optim::momentum::MomentumConfig,
     optim::decay::WeightDecayConfig,
 };
+
+#[cfg(feature = "optimizer-adam")]
+use burn::optim::AdamConfig;
 
 use grufinity::{
     model::MinGRULMConfig,
@@ -230,7 +237,7 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        #[cfg(feature = "tbptt-sgd")]
+                        #[cfg(feature = "optimizer-sgd")]
                         {
                             // Create a fresh SgdConfig with our custom momentum
                             let momentum_config = MomentumConfig {
@@ -241,9 +248,9 @@ fn main() {
                             modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
                         }
                         
-                        #[cfg(not(feature = "tbptt-sgd"))]
+                        #[cfg(feature = "optimizer-adam")]
                         {
-                            println!("Note: Momentum parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            println!("Note: Momentum parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
                             // Keep the default Adam config
                             modified_config.optimizer = AdamConfig::new();
                         }
@@ -262,16 +269,16 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        #[cfg(feature = "tbptt-sgd")]
+                        #[cfg(feature = "optimizer-sgd")]
                         {
                             // Create a fresh SgdConfig with our custom weight decay
                             let weight_decay_config = WeightDecayConfig { penalty: decay as f32 };
                             modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
                         }
                         
-                        #[cfg(not(feature = "tbptt-sgd"))]
+                        #[cfg(feature = "optimizer-adam")]
                         {
-                            println!("Note: Weight decay parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            println!("Note: Weight decay parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
                             // Keep the default Adam config
                             modified_config.optimizer = AdamConfig::new();
                         }
@@ -290,7 +297,7 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        #[cfg(feature = "tbptt-sgd")]
+                        #[cfg(feature = "optimizer-sgd")]
                         {
                             // Create a fresh momentum config with dampening
                             let momentum_config = MomentumConfig {
@@ -301,9 +308,9 @@ fn main() {
                             modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
                         }
                         
-                        #[cfg(not(feature = "tbptt-sgd"))]
+                        #[cfg(feature = "optimizer-adam")]
                         {
-                            println!("Note: Dampening parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            println!("Note: Dampening parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
                             // Keep the default Adam config
                             modified_config.optimizer = AdamConfig::new();
                         }
@@ -322,7 +329,7 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        #[cfg(feature = "tbptt-sgd")]
+                        #[cfg(feature = "optimizer-sgd")]
                         {
                             // Create a fresh momentum config with nesterov
                             let momentum_config = MomentumConfig {
@@ -333,9 +340,9 @@ fn main() {
                             modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
                         }
                         
-                        #[cfg(not(feature = "tbptt-sgd"))]
+                        #[cfg(feature = "optimizer-adam")]
                         {
-                            println!("Note: Nesterov parameter is only applicable when using SGD optimizer (--features=\"tbptt-sgd\")");
+                            println!("Note: Nesterov parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
                             // Keep the default Adam config
                             modified_config.optimizer = AdamConfig::new();
                         }
@@ -712,10 +719,10 @@ fn create_default_config() -> TBPTTConfig {
     .with_expansion_factor(1.5) // increased from 1.2
     .with_chunk_size(chunk_size);
     
-    #[cfg(feature = "tbptt-sgd")]
+    #[cfg(feature = "optimizer-sgd")]
     let optimizer_config = SgdConfig::new();
     
-    #[cfg(not(feature = "tbptt-sgd"))]
+    #[cfg(feature = "optimizer-adam")]
     let optimizer_config = AdamConfig::new();
     
     // Calculate chunks for different context lengths

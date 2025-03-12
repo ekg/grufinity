@@ -9,11 +9,14 @@ use burn::{
     train::metric::MetricEntry,
 };
 
-#[cfg(feature = "tbptt-sgd")]
+#[cfg(feature = "optimizer-sgd")]
 use burn::optim::SgdConfig;
 
-#[cfg(not(feature = "tbptt-sgd"))]
+#[cfg(feature = "optimizer-adam")]
 use burn::optim::AdamConfig;
+
+#[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
+compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled");
 use std::str::FromStr;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
@@ -65,12 +68,12 @@ pub struct TBPTTConfig {
     /// Model configuration
     pub model: MinGRULMConfig,
 
-    #[cfg(feature = "tbptt-sgd")]
+    #[cfg(feature = "optimizer-sgd")]
     /// SGD Optimizer configuration
     pub optimizer: SgdConfig,
 
-    #[cfg(not(feature = "tbptt-sgd"))]
-    /// Adam Optimizer configuration (default)
+    #[cfg(feature = "optimizer-adam")]
+    /// Adam Optimizer configuration
     pub optimizer: AdamConfig,
 
     /// Learning rate
@@ -395,8 +398,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                             .collect();
 
                         if layer_states.len() == batch_size {
-                            // Stack along batch dimension
-                            merged_states.push(Tensor::cat(layer_states, 0));
+                            // Make sure we're not stacking empty tensors
+                            if !layer_states.is_empty() {
+                                // Stack along batch dimension
+                                merged_states.push(Tensor::cat(layer_states, 0));
+                            } else {
+                                // Skip this batch due to empty tensors
+                                return 0.0;
+                            }
                         } else {
                             // Skip this batch due to dimension mismatch
                             return 0.0;
