@@ -8,7 +8,8 @@ pub use parallel_scan::*;
 pub use mingru::*;
 pub use model::*;
 pub use dataset::*;
-pub use tbptt::*;
+// Only export specific items from tbptt module that are needed
+pub use tbptt::{TBPTTConfig, train_with_tbptt, LRSchedulerType};
 
 // Re-export essential types for convenience
 pub use burn::{

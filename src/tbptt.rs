@@ -4,14 +4,16 @@ use burn::{
     module::{AutodiffModule, Module},
     nn::loss::CrossEntropyLossConfig,
     optim::{GradientsAccumulator, GradientsParams, Optimizer},
-    #[cfg(feature = "tbptt-sgd")]
-    optim::SgdConfig,
-    #[cfg(not(feature = "tbptt-sgd"))]
-    optim::AdamConfig,
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::AutodiffBackend, cast::ToElement, Tensor},
     train::metric::MetricEntry,
 };
+
+#[cfg(feature = "tbptt-sgd")]
+use burn::optim::SgdConfig;
+
+#[cfg(not(feature = "tbptt-sgd"))]
+use burn::optim::AdamConfig;
 use std::str::FromStr;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
@@ -863,11 +865,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
 
-    // Initialize optimizer based on feature flag
-    #[cfg(feature = "tbptt-sgd")]
-    let mut optimizer = config.optimizer.init();
-
-    #[cfg(not(feature = "tbptt-sgd"))]
+    // Initialize optimizer (feature flag is handled at the type level)
     let mut optimizer = config.optimizer.init();
 
     // Create TBPTT trainer
