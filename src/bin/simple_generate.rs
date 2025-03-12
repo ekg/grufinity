@@ -76,11 +76,13 @@ fn main() {
     
     // Get the device from the appropriate backend
     let device;
+    let mut device_initialized = false;
     
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
     {
         use burn::backend::cuda_jit::CudaDevice;
         device = CudaDevice::new(0); // Use first CUDA device with JIT
+        device_initialized = true;
         println!("Using CUDA JIT device");
     }
     
@@ -124,7 +126,7 @@ fn main() {
     
     // Fallback to ensure device is always initialized
     // This will only run if none of the above cfg blocks matched
-    if std::mem::needs_drop(&device) == false {
+    if !device_initialized {
         #[cfg(feature = "cuda-jit")]
         {
             use burn::backend::cuda_jit::CudaDevice;

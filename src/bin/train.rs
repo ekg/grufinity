@@ -129,7 +129,7 @@ fn main() {
     
     // Fallback to ensure device is always initialized
     // This will only run if none of the above cfg blocks matched
-    if std::mem::needs_drop(&device) == false {
+    if !device_initialized {
         #[cfg(feature = "cuda-jit")]
         {
             use burn::backend::cuda_jit::CudaDevice;
