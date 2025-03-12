@@ -672,7 +672,11 @@ fn create_default_config() -> TBPTTConfig {
     .with_expansion_factor(1.5) // increased from 1.2
     .with_chunk_size(chunk_size);
     
+    #[cfg(feature = "tbptt-sgd")]
     let optimizer_config = SgdConfig::new();
+    
+    #[cfg(not(feature = "tbptt-sgd"))]
+    let optimizer_config = AdamConfig::new();
     
     // Calculate chunks for different context lengths
     let desired_context = 64000; // Desired context length in characters
