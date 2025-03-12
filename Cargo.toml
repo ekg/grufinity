@@ -38,6 +38,10 @@ candle-fusion = ["candle", "fusion", "autodiff"]
 cuda-full = ["cuda-jit", "fusion", "autodiff"]
 candle-cuda-full = ["candle", "candle-cuda", "fusion", "autodiff"]
 
+# Apple Metal support for Candle
+candle-metal = ["candle", "burn/metal"]
+candle-metal-full = ["candle", "burn/metal", "fusion", "autodiff"]
+
 [[bin]]
 name = "train"
 path = "src/bin/train.rs"
