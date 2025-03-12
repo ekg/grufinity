@@ -512,25 +512,32 @@ fn main() {
     // Get the device from the appropriate backend
     let device;
     
-    #[cfg(feature = "wgpu")]
+    #[cfg(feature = "cuda")]
+    {
+        use burn::backend::cuda::CudaDevice;
+        device = CudaDevice::new(0); // Use first CUDA device
+        println!("Using CUDA device");
+    }
+    
+    #[cfg(all(feature = "wgpu", not(feature = "cuda")))]
     {
         use burn::backend::wgpu::WgpuDevice;
         device = WgpuDevice::default();
     }
     
-    #[cfg(all(feature = "candle", not(feature = "wgpu")))]
+    #[cfg(all(feature = "candle", not(any(feature = "cuda", feature = "wgpu"))))]
     {
         use burn::backend::candle::CandleDevice;
         device = CandleDevice::Cpu;
     }
     
-    #[cfg(all(feature = "ndarray", not(any(feature = "wgpu", feature = "candle"))))]
+    #[cfg(all(feature = "ndarray", not(any(feature = "cuda", feature = "wgpu", feature = "candle"))))]
     {
         use burn::backend::ndarray::NdArrayDevice;
         device = NdArrayDevice;
     }
     
-    #[cfg(all(feature = "tch", not(any(feature = "wgpu", feature = "candle", feature = "ndarray"))))]
+    #[cfg(all(feature = "tch", not(any(feature = "cuda", feature = "wgpu", feature = "candle", feature = "ndarray"))))]
     {
         use burn::backend::libtorch::LibTorchDevice;
         device = LibTorchDevice::Cpu;

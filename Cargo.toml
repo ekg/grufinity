@@ -21,10 +21,12 @@ tch = ["burn/tch"]
 ndarray = ["burn/ndarray"]
 autodiff = ["burn/autodiff"]
 autotune = ["burn/autotune"]
+cuda = ["burn/cuda"]  # Add CUDA feature
 
 # Combined feature flags for convenience
 wgpu-fusion = ["wgpu", "fusion", "autodiff", "autotune"]
 candle-fusion = ["candle", "fusion", "autodiff"]
+cuda-fusion = ["cuda", "fusion", "autodiff"]  # CUDA with fusion optimization
 # add 
 
 [[bin]]
