@@ -77,32 +77,32 @@ fn main() {
         println!("Using CUDA JIT device");
     }
     
-    #[cfg(all(feature = "candle", feature = "burn/candle-cuda", not(feature = "cuda-jit")))]
+    #[cfg(all(feature = "candle", feature = "candle-cuda", not(feature = "cuda-jit")))]
     {
         use burn::backend::candle::CandleDevice;
         device = CandleDevice::Cuda(0);  // Use first CUDA device via Candle
         println!("Using Candle CUDA device");
     }
     
-    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"), not(all(feature = "candle", feature = "burn/candle-cuda"))))]
+    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"), not(all(feature = "candle", feature = "candle-cuda"))))]
     {
         use burn::backend::wgpu::WgpuDevice;
         device = WgpuDevice::default();
     }
     
-    #[cfg(all(feature = "candle", not(any(feature = "cuda", feature = "wgpu"))))]
+    #[cfg(all(feature = "candle", not(any(feature = "cuda-jit", feature = "wgpu"))))]
     {
         use burn::backend::candle::CandleDevice;
         device = CandleDevice::Cpu;
     }
     
-    #[cfg(all(feature = "ndarray", not(any(feature = "cuda", feature = "wgpu", feature = "candle"))))]
+    #[cfg(all(feature = "ndarray", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle"))))]
     {
         use burn::backend::ndarray::NdArrayDevice;
         device = NdArrayDevice;
     }
     
-    #[cfg(all(feature = "tch", not(any(feature = "cuda", feature = "wgpu", feature = "candle", feature = "ndarray"))))]
+    #[cfg(all(feature = "tch", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "ndarray"))))]
     {
         use burn::backend::libtorch::LibTorchDevice;
         device = LibTorchDevice::Cpu;
