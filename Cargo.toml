@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-burn = { version = "0.16.0", default-features = false, features = ["autodiff", "autotune", "candle", "fusion", "ndarray", "tch", "train", "wgpu", "metrics"] }
+burn = { version = "0.16.0", default-features = false, features = ["autodiff", "autotune", "candle", "fusion", "ndarray", "tch", "train", "wgpu", "metrics", "cuda-jit", "candle-cuda"] }
 rand = "0.8.5"
 indicatif = "0.17.7"
 bincode = "=2.0.0-rc.3"
