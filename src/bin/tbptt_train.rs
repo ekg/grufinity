@@ -604,6 +604,38 @@ fn main() {
         device = LibTorchDevice::Cpu;
     }
     
+    // Fallback to ensure device is always initialized
+    // This will only run if none of the above cfg blocks matched
+    if std::mem::needs_drop(&device) == false {
+        #[cfg(feature = "cuda-jit")]
+        {
+            use burn::backend::cuda_jit::CudaDevice;
+            device = CudaDevice::new(0);
+            println!("Using CUDA JIT device (fallback)");
+        }
+        
+        #[cfg(all(not(feature = "cuda-jit"), feature = "wgpu"))]
+        {
+            use burn::backend::wgpu::WgpuDevice;
+            device = WgpuDevice::default();
+            println!("Using WGPU device (fallback)");
+        }
+        
+        #[cfg(all(not(feature = "cuda-jit"), not(feature = "wgpu"), feature = "candle"))]
+        {
+            use burn::backend::candle::CandleDevice;
+            device = CandleDevice::Cpu;
+            println!("Using Candle CPU device (fallback)");
+        }
+        
+        #[cfg(all(not(feature = "cuda-jit"), not(feature = "wgpu"), not(feature = "candle"), feature = "ndarray"))]
+        {
+            use burn::backend::ndarray::NdArrayDevice;
+            device = NdArrayDevice;
+            println!("Using NdArray device (fallback)");
+        }
+    }
+    
     // Create a directory for artifacts
     fs::create_dir_all(&artifact_dir).expect("Failed to create artifact directory");
     
