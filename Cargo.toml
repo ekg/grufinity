@@ -22,6 +22,10 @@ ndarray = ["burn/ndarray"]
 autodiff = ["burn/autodiff"]
 autotune = ["burn/autotune"]
 
+# Optimizer selection for TBPTT
+tbptt-adam = []  # Use Adam optimizer for TBPTT (default)
+tbptt-sgd = []   # Use SGD optimizer for TBPTT
+
 # Combined feature flags for convenience
 wgpu-fusion = ["wgpu", "fusion", "autodiff", "autotune"]
 candle-fusion = ["candle", "fusion", "autodiff"]

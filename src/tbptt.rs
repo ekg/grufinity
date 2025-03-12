@@ -3,7 +3,7 @@ use burn::{
     config::Config,
     module::{AutodiffModule, Module},
     nn::loss::CrossEntropyLossConfig,
-    optim::{GradientsAccumulator, GradientsParams, Optimizer, SgdConfig},
+    optim::{GradientsAccumulator, GradientsParams, Optimizer, SgdConfig, AdamConfig},
     record::{BinFileRecorder, FullPrecisionSettings},
     tensor::{backend::AutodiffBackend, cast::ToElement, Tensor},
     train::metric::MetricEntry,
@@ -59,8 +59,13 @@ pub struct TBPTTConfig {
     /// Model configuration
     pub model: MinGRULMConfig,
 
-    /// Optimizer configuration
+    #[cfg(feature = "tbptt-sgd")]
+    /// SGD Optimizer configuration
     pub optimizer: SgdConfig,
+
+    #[cfg(not(feature = "tbptt-sgd"))]
+    /// Adam Optimizer configuration (default)
+    pub optimizer: AdamConfig,
 
     /// Learning rate
     #[config(default = 1e-3)]
@@ -854,7 +859,11 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .with_chunk_size(config.chunk_size)
         .init::<B>(device);
 
-    // Initialize optimizer
+    // Initialize optimizer based on feature flag
+    #[cfg(feature = "tbptt-sgd")]
+    let mut optimizer = config.optimizer.init();
+
+    #[cfg(not(feature = "tbptt-sgd"))]
     let mut optimizer = config.optimizer.init();
 
     // Create TBPTT trainer
