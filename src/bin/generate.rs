@@ -70,14 +70,14 @@ fn main() {
     // Get the device from the appropriate backend
     let device;
     
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "candle", feature = "burn/candle-cuda"))]
     {
-        use burn::backend::cuda::CudaDevice;
-        device = CudaDevice::new(0); // Use first CUDA device
-        println!("Using CUDA device");
+        use burn::backend::candle::CandleDevice;
+        device = CandleDevice::Cuda(0);  // Use first CUDA device via Candle
+        println!("Using Candle CUDA device");
     }
     
-    #[cfg(all(feature = "wgpu", not(feature = "cuda")))]
+    #[cfg(all(feature = "wgpu", not(all(feature = "candle", feature = "burn/candle-cuda"))))]
     {
         use burn::backend::wgpu::WgpuDevice;
         device = WgpuDevice::default();
