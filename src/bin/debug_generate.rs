@@ -82,6 +82,7 @@ fn main() {
     let device;
     let mut device_initialized = false;
     
+    // Initialize device based on enabled features
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
     {
         use burn::backend::cuda_jit::CudaDevice;
