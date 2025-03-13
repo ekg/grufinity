@@ -141,12 +141,12 @@ fn main() {
         Err(e) => {
             eprintln!("Failed to load model config: {}", e);
             println!("Attempting to infer model structure from saved model...");
-            // Create a more robust default config with 4 layers instead of 2
+            // Create a more robust default config with 6 layers
             // This matches the structure used in newer training runs
-            MinGRULMConfig::new(256, 128)
-                .with_depth(4)  // Increased from 2 to 4 layers
-                .with_ff_mult(3.0)  // Increased from 2.0 to 3.0
-                .with_expansion_factor(1.5)  // Increased from 1.2 to 1.5
+            MinGRULMConfig::new(256, 512)
+                .with_depth(6)  // Using 6 layers
+                .with_ff_mult(3.0)  // Keeping ff_mult at 3.0
+                .with_expansion_factor(1.5)  // Keeping expansion_factor at 1.5
                 .with_chunk_size(256)
         }
     };

@@ -156,10 +156,10 @@ fn main() {
     }
     
     // Create a more robust model configuration to match newer models
-    let config = MinGRULMConfig::new(256, 128)
-        .with_depth(4)  // Increased from 2 to 4 layers
-        .with_ff_mult(3.0)  // Increased from 2.0 to 3.0
-        .with_expansion_factor(1.5)  // Increased from 1.2 to 1.5
+    let config = MinGRULMConfig::new(256, 512)
+        .with_depth(6)  // Using 6 layers
+        .with_ff_mult(3.0)  // Keeping ff_mult at 3.0
+        .with_expansion_factor(1.5)  // Keeping expansion_factor at 1.5
         .with_chunk_size(256);
     
     // Initialize model

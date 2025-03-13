@@ -224,7 +224,7 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Get the hidden dimension of the model
     pub fn hidden_dim(&self) -> usize {
-        128 // Increased from 96 to match new config
+        512 // Increased from 128 to 512
     }
     
     /// Accessor for mingru layers
@@ -234,7 +234,7 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Get hidden dimension for other modules
     pub fn dim(&self) -> usize {
-        128 // Increased from 96 to match new config
+        512 // Increased from 128 to 512
     }
 
     fn forward_no_chunking(
