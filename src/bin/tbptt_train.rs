@@ -556,9 +556,26 @@ fn main() {
     // Set up the configured backend
     use_configured_backend!();
     
-    // Get the device from the appropriate backend
+    // Get the device from the appropriate backend with a default initialization
     #[allow(unused_assignments)]
-    let device;
+    let mut device;
+    
+    // Default initialization to ensure device is always initialized
+    // This value will be overwritten by the feature-specific code below
+    #[cfg(feature = "ndarray")]
+    {
+        use burn::backend::ndarray::NdArrayDevice;
+        device = NdArrayDevice;
+    }
+    
+    #[cfg(not(feature = "ndarray"))]
+    {
+        // If we're compiling without ndarray, we still need a default value
+        // This line should not be reached in practice, as we enforce backends in the code below
+        struct DummyDevice;
+        device = DummyDevice;
+    }
+    
     let mut device_initialized = false;
     
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
