@@ -198,11 +198,40 @@ fn main() {
         }
     }
     
+    // Verify that the config path exists, and use fallbacks if it doesn't
+    if !std::path::Path::new(&config_path).exists() {
+        // Try alternate filenames in the same directory
+        if let Some(last_slash) = model_path.rfind('/') {
+            let dir = &model_path[..last_slash];
+            
+            // Check for tbptt_config.json
+            let tbptt_path = format!("{}/tbptt_config.json", dir);
+            if std::path::Path::new(&tbptt_path).exists() {
+                println!("Using TBPTT config: {}", tbptt_path);
+                config_path = tbptt_path;
+            } else {
+                // Check for regular config.json
+                let regular_path = format!("{}/config.json", dir);
+                if std::path::Path::new(&regular_path).exists() {
+                    println!("Using config: {}", regular_path);
+                    config_path = regular_path;
+                }
+            }
+        }
+    }
+    
+    println!("Trying to load config from: {}", config_path);
+    
     // Load model configuration
     let config = match MinGRULMConfig::load(&config_path) {
-        Ok(config) => config,
+        Ok(config) => {
+            println!("Loaded model configuration from: {}", config_path);
+            println!("Model dimensions: {}, layers: {}", config.dim(), config.depth());
+            config
+        },
         Err(e) => {
             eprintln!("Failed to load model config: {}", e);
+            println!("Using default configuration");
             // Create a default config with 3 layers for testing
             MinGRULMConfig::new(256, 1024)
                 .with_depth(3)  // Using 3 layers

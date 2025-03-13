@@ -181,12 +181,41 @@ fn main() {
         }
     }
     
-    // Create a more robust model configuration to match newer models
-    let config = MinGRULMConfig::new(256, 1024)
-        .with_depth(3)  // Using 3 layers for testing
-        .with_ff_mult(3.0)  // Keeping ff_mult at 3.0
-        .with_expansion_factor(1.5)  // Keeping expansion_factor at 1.5
-        .with_chunk_size(256);
+    // Try to extract directory from model path for config file
+    let mut config_path = "model_config.json".to_string();
+    if let Some(last_slash) = model_path.rfind('/') {
+        let dir = &model_path[..last_slash];
+        config_path = format!("{}/config.json", dir);
+        
+        // Also check for tbptt_config.json as fallback
+        if !std::path::Path::new(&config_path).exists() {
+            let tbptt_config = format!("{}/tbptt_config.json", dir);
+            if std::path::Path::new(&tbptt_config).exists() {
+                config_path = tbptt_config;
+            }
+        }
+    }
+    
+    println!("Trying to load config from: {}", config_path);
+    
+    // Load model configuration
+    let config = match MinGRULMConfig::load(&config_path) {
+        Ok(config) => {
+            println!("Loaded model configuration from: {}", config_path);
+            println!("Model dimensions: {}, layers: {}", config.dim(), config.depth());
+            config
+        },
+        Err(e) => {
+            eprintln!("Failed to load model config: {}", e);
+            println!("Using default configuration");
+            // Create a default config with 3 layers for testing
+            MinGRULMConfig::new(256, 1024)
+                .with_depth(3)  // Using 3 layers for testing
+                .with_ff_mult(3.0)  // Keeping ff_mult at 3.0
+                .with_expansion_factor(1.5)  // Keeping expansion_factor at 1.5
+                .with_chunk_size(256)
+        }
+    };
     
     // Initialize model
     let mut model = config.init::<RawBackend>(&device);
