@@ -54,6 +54,24 @@ fn main() {
             _ => {}
         }
     }
+
+    // Add a final fallback in case no backend feature is enabled
+    if !device_initialized {
+        // We need to pick one default backend that will be in the binary to satisfy the compiler
+        #[cfg(feature = "ndarray")]
+        {
+            use burn::backend::ndarray::NdArrayDevice;
+            device = NdArrayDevice;
+            println!("WARNING: Using NdArray device as last resort fallback");
+            println!("No backend feature was enabled - please enable at least one backend feature");
+        }
+        
+        #[cfg(not(any(feature = "ndarray", feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "tch")))]
+        {
+            // This is a compile-time error that will be triggered if no backend is enabled
+            compile_error!("No backend feature was enabled. Please enable at least one: ndarray, wgpu, candle, etc.");
+        }
+    }
     
     // Set up the configured backend
     use_configured_backend!();
