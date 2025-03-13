@@ -79,8 +79,9 @@ fn main() {
     
     // Get the device from the appropriate backend
     #[allow(unused_assignments)]
-    let device;
-    let mut device_initialized = false;
+    let mut device;
+    #[allow(unused_assignments)]
+    let _device_initialized = false;
     
     // Initialize device based on enabled features
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
@@ -136,7 +137,7 @@ fn main() {
         {
             use burn::backend::cuda_jit::CudaDevice;
             device = CudaDevice::new(0);
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using CUDA JIT device (fallback)");
         }
         

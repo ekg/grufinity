@@ -138,7 +138,7 @@ fn main() {
         {
             use burn::backend::cuda_jit::CudaDevice;
             device = CudaDevice::new(0);
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using CUDA JIT device (fallback)");
         }
         
