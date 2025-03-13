@@ -200,9 +200,9 @@ fn main() {
         Ok(config) => config,
         Err(e) => {
             eprintln!("Failed to load model config: {}", e);
-            // Create a more robust default config with 6 layers
+            // Create a default config with 3 layers for testing
             MinGRULMConfig::new(256, 512)
-                .with_depth(6)  // Using 6 layers
+                .with_depth(3)  // Using 3 layers
                 .with_ff_mult(3.0)  // Keeping ff_mult at 3.0
                 .with_expansion_factor(1.5)  // Keeping expansion_factor at 1.5
                 .with_chunk_size(256)

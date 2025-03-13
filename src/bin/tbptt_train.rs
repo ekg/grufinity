@@ -743,9 +743,9 @@ fn create_default_config() -> TBPTTConfig {
     // Configure the model
     let model_config = MinGRULMConfig::new(
         256,           // num_tokens (all possible byte values)
-        512            // dimension (increased from 128 to 512)
+        512            // dimension
     )
-    .with_depth(6)     // increased from 4 to 6
+    .with_depth(3)     // testing with 3 layers
     .with_ff_mult(3.0) // keeping ff_mult at 3.0
     .with_expansion_factor(1.5) // keeping expansion_factor at 1.5
     .with_chunk_size(chunk_size);
