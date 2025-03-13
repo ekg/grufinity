@@ -75,8 +75,9 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the appropriate backend
-    let mut device;
-    let device_initialized = false;
+    #[allow(unused_assignments)]
+    let device;
+    let mut device_initialized = false;
     
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
     {
@@ -131,6 +132,7 @@ fn main() {
         {
             use burn::backend::cuda_jit::CudaDevice;
             device = CudaDevice::new(0);
+            device_initialized = true;
             println!("Using CUDA JIT device (fallback)");
         }
         
@@ -138,6 +140,7 @@ fn main() {
         {
             use burn::backend::wgpu::WgpuDevice;
             device = WgpuDevice::default();
+            device_initialized = true;
             println!("Using WGPU device (fallback)");
         }
         
@@ -145,6 +148,7 @@ fn main() {
         {
             use burn::backend::candle::CandleDevice;
             device = CandleDevice::Cpu;
+            device_initialized = true;
             println!("Using Candle CPU device (fallback)");
         }
         
@@ -152,6 +156,7 @@ fn main() {
         {
             use burn::backend::ndarray::NdArrayDevice;
             device = NdArrayDevice;
+            device_initialized = true;
             println!("Using NdArray device (fallback)");
         }
     }

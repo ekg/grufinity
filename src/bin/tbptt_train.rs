@@ -654,7 +654,7 @@ fn main() {
             println!("No backend feature was enabled - please enable at least one backend feature");
         }
         
-        #[cfg(not(feature = "ndarray"))]
+        #[cfg(not(any(feature = "ndarray", feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "tch")))]
         {
             // This is a compile-time error that will be triggered if no backend is enabled
             compile_error!("No backend feature was enabled. Please enable at least one: ndarray, wgpu, candle, etc.");
