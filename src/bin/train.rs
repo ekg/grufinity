@@ -80,16 +80,16 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the macro
-    #[allow(unused_assignments)]
     let device;
-    let mut device_initialized = false; 
+    let mut device_initialized = false;
     
-    #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
-    {
+    #[cfg(feature = "cuda-jit")]
+    let device = {
         use burn::backend::cuda_jit::CudaDevice;
-        device = CudaDevice::new(0); // Use first CUDA device with JIT
+        device_initialized = true;
         println!("Using CUDA JIT device");
-    }
+        CudaDevice::new(0) // Use first CUDA device with JIT
+    };
     
     #[cfg(all(feature = "candle", feature = "candle-cuda", not(feature = "cuda-jit"), not(feature = "wgpu")))]
     {
