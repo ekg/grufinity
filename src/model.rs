@@ -58,6 +58,36 @@ pub struct MinGRULMConfig {
 }
 
 impl MinGRULMConfig {
+    /// Get number of tokens (vocabulary size)
+    pub fn num_tokens(&self) -> usize {
+        self.num_tokens
+    }
+    
+    /// Get model dimension
+    pub fn dim(&self) -> usize {
+        self.dim
+    }
+    
+    /// Get number of layers
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
+    
+    /// Get feed-forward multiplier
+    pub fn ff_mult(&self) -> f64 {
+        self.ff_mult
+    }
+    
+    /// Get expansion factor
+    pub fn expansion_factor(&self) -> f64 {
+        self.expansion_factor
+    }
+    
+    /// Get chunk size
+    pub fn chunk_size(&self) -> usize {
+        self.chunk_size
+    }
+    
     pub fn init<B: Backend>(&self, device: &B::Device) -> MinGRULM<B> {
         // Token embedding
         let token_emb = EmbeddingConfig::new(self.num_tokens, self.dim).init(device);
@@ -213,9 +243,9 @@ impl<B: Backend> MinGRULM<B> {
     /// Forward pass without chunking, used by forward_chunked
     /// Get model configuration
     pub fn config(&self) -> MinGRULMConfig {
-        // Use fixed dimensions since we can't directly access weight dimensions
-        let vocab_size = 256; // num_tokens
-        let hidden_dim = 128;  // dimension (increased from 96)
+        // Use the actual dimensions from the model
+        let vocab_size = self.to_logits.config().output_dim;
+        let hidden_dim = self.dim();
         
         MinGRULMConfig::new(vocab_size, hidden_dim)
             .with_depth(self.mingru_layers.len())

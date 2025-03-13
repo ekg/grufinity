@@ -56,6 +56,11 @@ fn print_help() {
     println!("  --lr-scheduler TYPE            Learning rate scheduler (constant, cosine, linear) (default: constant)");
     println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
     println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
+    println!("\nModel Structure Options:");
+    println!("  --model-dim SIZE               Model hidden dimension (default: 1024)");
+    println!("  --model-depth NUM              Number of MinGRU layers (default: 3)");
+    println!("  --model-ff-mult FACTOR         Feed-forward multiplier (default: 3.0)");
+    println!("  --model-exp-factor FACTOR      Expansion factor (default: 1.5)");
     println!("\nExample:");
     println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --context-length 100000 --update-tokens 512 --backprop-tokens 1024");
     println!("\nThis will train with:");
@@ -114,6 +119,106 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(tokens) = args[i + 1].parse::<usize>() {
                         backprop_tokens = Some(tokens);
+                    }
+                }
+            },
+            "--model-dim" => {
+                if i + 1 < args.len() {
+                    if let Ok(dim) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        // Update model dimension in the config
+                        modified_config.model = MinGRULMConfig::new(
+                            modified_config.model.num_tokens(),
+                            dim
+                        )
+                        .with_depth(modified_config.model.depth())
+                        .with_ff_mult(modified_config.model.ff_mult())
+                        .with_expansion_factor(modified_config.model.expansion_factor())
+                        .with_chunk_size(modified_config.model.chunk_size());
+                        
+                        println!("Setting model dimension to: {}", dim);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--model-depth" => {
+                if i + 1 < args.len() {
+                    if let Ok(depth) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        // Update model depth in the config
+                        modified_config.model = MinGRULMConfig::new(
+                            modified_config.model.num_tokens(),
+                            modified_config.model.dim()
+                        )
+                        .with_depth(depth)
+                        .with_ff_mult(modified_config.model.ff_mult())
+                        .with_expansion_factor(modified_config.model.expansion_factor())
+                        .with_chunk_size(modified_config.model.chunk_size());
+                        
+                        println!("Setting model depth to: {} layers", depth);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--model-ff-mult" => {
+                if i + 1 < args.len() {
+                    if let Ok(mult) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        // Update feed-forward multiplier in the config
+                        modified_config.model = MinGRULMConfig::new(
+                            modified_config.model.num_tokens(),
+                            modified_config.model.dim()
+                        )
+                        .with_depth(modified_config.model.depth())
+                        .with_ff_mult(mult)
+                        .with_expansion_factor(modified_config.model.expansion_factor())
+                        .with_chunk_size(modified_config.model.chunk_size());
+                        
+                        println!("Setting feed-forward multiplier to: {}", mult);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--model-exp-factor" => {
+                if i + 1 < args.len() {
+                    if let Ok(factor) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        // Update expansion factor in the config
+                        modified_config.model = MinGRULMConfig::new(
+                            modified_config.model.num_tokens(),
+                            modified_config.model.dim()
+                        )
+                        .with_depth(modified_config.model.depth())
+                        .with_ff_mult(modified_config.model.ff_mult())
+                        .with_expansion_factor(factor)
+                        .with_chunk_size(modified_config.model.chunk_size());
+                        
+                        println!("Setting expansion factor to: {}", factor);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
                     }
                 }
             },
