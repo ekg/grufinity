@@ -60,7 +60,7 @@ fn main() {
     
     // Get the device from the appropriate backend
     #[allow(unused_assignments)]
-    let device;
+    let device: grufinity::BackendDevice;
     let mut device_initialized = false;
     
     // Add a final fallback in case no backend feature is enabled
@@ -76,9 +76,6 @@ fn main() {
         // This is a compile-time error that will be triggered if no backend is enabled
         compile_error!("No backend feature was enabled. Please enable at least one: ndarray, wgpu, candle, etc.");
     }
-    
-    // Set up the configured backend
-    use_configured_backend!();
     
     // Get the device from the appropriate backend
     #[allow(unused_assignments)]
