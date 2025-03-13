@@ -19,6 +19,7 @@ use grufinity::{
     Module,
     use_configured_backend,
     BackendWithAutodiff,
+    BackendDevice,
 };
 
 use std::fs;
@@ -557,7 +558,7 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the appropriate backend
-    let device;
+    let device: BackendDevice;
     let mut device_initialized = false;
     
     #[cfg(feature = "cuda-jit")]
