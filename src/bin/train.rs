@@ -292,7 +292,7 @@ fn create_default_config() -> TrainingConfig {
     // Configure the model
     let model_config = MinGRULMConfig::new(
         256,           // num_tokens (all possible byte values)
-        512            // dimension
+        1024           // dimension (increased from 512 to 1024)
     )
     .with_depth(3)     // testing with 3 layers
     .with_ff_mult(3.0) // keeping ff_mult at 3.0

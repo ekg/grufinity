@@ -179,7 +179,7 @@ fn main() {
     }
     
     // Create a more robust model configuration to match newer models
-    let config = MinGRULMConfig::new(256, 512)
+    let config = MinGRULMConfig::new(256, 1024)
         .with_depth(3)  // Using 3 layers for testing
         .with_ff_mult(3.0)  // Keeping ff_mult at 3.0
         .with_expansion_factor(1.5)  // Keeping expansion_factor at 1.5
