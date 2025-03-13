@@ -76,8 +76,8 @@ fn main() {
     
     // Get the device from the appropriate backend
     #[allow(unused_assignments)]
-    let device: grufinity::BackendDevice;
-    let mut device_initialized = false;
+    let _device: grufinity::BackendDevice;
+    let mut _device_initialized = false;
     
     // Add a final fallback in case no backend feature is enabled
     #[cfg(feature = "ndarray")]
@@ -148,7 +148,7 @@ fn main() {
     
     // Fallback to ensure device is always initialized
     // This will only run if none of the above cfg blocks matched
-    if !device_initialized {
+    if !_device_initialized {
         #[cfg(feature = "cuda-jit")]
         {
             use burn::backend::cuda_jit::CudaDevice;
@@ -161,7 +161,7 @@ fn main() {
         {
             use burn::backend::wgpu::WgpuDevice;
             device = WgpuDevice::default();
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using WGPU device (fallback)");
         }
         

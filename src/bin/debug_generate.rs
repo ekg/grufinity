@@ -8,6 +8,7 @@ use grufinity::{
     use_configured_backend,
     RawBackend,
     Module,
+    Config,
 };
 
 fn main() {

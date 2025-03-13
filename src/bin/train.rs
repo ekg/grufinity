@@ -146,7 +146,7 @@ fn main() {
         {
             use burn::backend::wgpu::WgpuDevice;
             device = WgpuDevice::default();
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using WGPU device (fallback)");
         }
         
