@@ -244,7 +244,7 @@ impl<B: Backend> MinGRULM<B> {
     /// Get model configuration
     pub fn config(&self) -> MinGRULMConfig {
         // Use the actual dimensions from the model
-        let vocab_size = self.to_logits.weight().dims()[0]; // output dimension is first dimension of weight matrix
+        let vocab_size = self.to_logits.weight.dims()[0]; // output dimension is first dimension of weight matrix
         let hidden_dim = self.dim();
         
         MinGRULMConfig::new(vocab_size, hidden_dim)
@@ -264,7 +264,7 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Get hidden dimension for other modules
     pub fn dim(&self) -> usize {
-        self.token_emb.weight().dims()[1] // embedding dimension is second dimension of weight matrix
+        self.token_emb.weight.dims()[1] // embedding dimension is second dimension of weight matrix
     }
 
     fn forward_no_chunking(
