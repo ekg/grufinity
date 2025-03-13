@@ -154,7 +154,7 @@ fn main() {
         {
             use burn::backend::candle::CandleDevice;
             device = CandleDevice::Cpu;
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using Candle CPU device (fallback)");
         }
         

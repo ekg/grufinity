@@ -61,7 +61,7 @@ fn main() {
     
     // Get the device from the appropriate backend
     #[allow(unused_assignments)]
-    let device: grufinity::BackendDevice;
+    let _device: grufinity::BackendDevice;
     let mut device_initialized = false;
     
     // Add a final fallback in case no backend feature is enabled
@@ -146,7 +146,7 @@ fn main() {
         {
             use burn::backend::wgpu::WgpuDevice;
             device = WgpuDevice::default();
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using WGPU device (fallback)");
         }
         
