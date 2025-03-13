@@ -69,12 +69,15 @@ fn main() {
     
     // Initialize device based on enabled features
     // Priority: cuda-jit > candle-cuda > candle-metal > wgpu > candle > ndarray > tch
+    #[allow(unused_assignments)]
     let device;
+    let mut device_initialized = false;
     
     #[cfg(feature = "cuda-jit")]
     {
         use burn::backend::cuda_jit::CudaDevice;
         device = CudaDevice::new(0);
+        device_initialized = true;
         println!("Using CUDA JIT device");
     }
     
@@ -82,6 +85,7 @@ fn main() {
     {
         use burn::backend::candle::CandleDevice;
         device = CandleDevice::Cuda(0);
+        device_initialized = true;
         println!("Using Candle CUDA device");
     }
     

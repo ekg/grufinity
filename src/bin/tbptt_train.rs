@@ -557,8 +557,9 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the appropriate backend
-    let mut device;
-    let device_initialized = false;
+    #[allow(unused_assignments)]
+    let device;
+    let mut device_initialized = false;
     
     #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
     {
@@ -613,6 +614,7 @@ fn main() {
         {
             use burn::backend::cuda_jit::CudaDevice;
             device = CudaDevice::new(0);
+            device_initialized = true;
             println!("Using CUDA JIT device (fallback)");
         }
         
@@ -620,6 +622,7 @@ fn main() {
         {
             use burn::backend::wgpu::WgpuDevice;
             device = WgpuDevice::default();
+            device_initialized = true;
             println!("Using WGPU device (fallback)");
         }
         
@@ -627,6 +630,7 @@ fn main() {
         {
             use burn::backend::candle::CandleDevice;
             device = CandleDevice::Cpu;
+            device_initialized = true;
             println!("Using Candle CPU device (fallback)");
         }
         
@@ -634,7 +638,26 @@ fn main() {
         {
             use burn::backend::ndarray::NdArrayDevice;
             device = NdArrayDevice;
+            device_initialized = true;
             println!("Using NdArray device (fallback)");
+        }
+    }
+
+    // Add a final fallback in case no backend feature is enabled
+    if !device_initialized {
+        // We need to pick one default backend that will be in the binary to satisfy the compiler
+        #[cfg(feature = "ndarray")]
+        {
+            use burn::backend::ndarray::NdArrayDevice;
+            device = NdArrayDevice;
+            println!("WARNING: Using NdArray device as last resort fallback");
+            println!("No backend feature was enabled - please enable at least one backend feature");
+        }
+        
+        #[cfg(not(feature = "ndarray"))]
+        {
+            // This is a compile-time error that will be triggered if no backend is enabled
+            compile_error!("No backend feature was enabled. Please enable at least one: ndarray, wgpu, candle, etc.");
         }
     }
     
