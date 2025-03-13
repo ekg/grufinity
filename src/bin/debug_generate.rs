@@ -62,7 +62,7 @@ fn main() {
     // Get the device from the appropriate backend
     #[allow(unused_assignments)]
     let _device: grufinity::BackendDevice;
-    let mut device_initialized = false;
+    let device_initialized = false;
     
     // Add a final fallback in case no backend feature is enabled
     #[cfg(feature = "ndarray")]
@@ -154,7 +154,7 @@ fn main() {
         {
             use burn::backend::candle::CandleDevice;
             device = CandleDevice::Cpu;
-            device_initialized = true;
+            let _device_initialized = true;
             println!("Using Candle CPU device (fallback)");
         }
         
