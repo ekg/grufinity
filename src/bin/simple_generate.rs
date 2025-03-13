@@ -71,16 +71,21 @@ fn main() {
         }
     }
     
+    // Set up the configured backend
+    use_configured_backend!();
+    
+    // Get the device from the appropriate backend
+    #[allow(unused_assignments)]
+    let device;
+    let mut device_initialized = false;
+    
     // Add a final fallback in case no backend feature is enabled
-    if !device_initialized {
-        // We need to pick one default backend that will be in the binary to satisfy the compiler
-        #[cfg(feature = "ndarray")]
-        {
-            use burn::backend::ndarray::NdArrayDevice;
-            device = NdArrayDevice;
-            println!("WARNING: Using NdArray device as last resort fallback");
-            println!("No backend feature was enabled - please enable at least one backend feature");
-        }
+    #[cfg(feature = "ndarray")]
+    {
+        use burn::backend::ndarray::NdArrayDevice;
+        let _fallback_device = NdArrayDevice;
+        // We'll set the actual device later based on enabled features
+    }
         
         #[cfg(not(any(feature = "ndarray", feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "tch")))]
         {

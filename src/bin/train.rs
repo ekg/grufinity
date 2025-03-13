@@ -80,7 +80,9 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the macro
-    let device;
+    #[allow(unused_assignments)]
+    let mut device;
+    #[allow(unused_assignments)]
     let mut device_initialized = false;
     
     #[cfg(feature = "cuda-jit")]
