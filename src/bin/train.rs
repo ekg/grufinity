@@ -162,7 +162,7 @@ fn main() {
         {
             use burn::backend::ndarray::NdArrayDevice;
             device = NdArrayDevice;
-            device_initialized = true;
+            let _device_initialized = true;
             println!("Using NdArray device (fallback)");
         }
     }
