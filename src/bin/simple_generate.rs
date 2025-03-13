@@ -86,12 +86,11 @@ fn main() {
         let _fallback_device = NdArrayDevice;
         // We'll set the actual device later based on enabled features
     }
-        
-        #[cfg(not(any(feature = "ndarray", feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "tch")))]
-        {
-            // This is a compile-time error that will be triggered if no backend is enabled
-            compile_error!("No backend feature was enabled. Please enable at least one: ndarray, wgpu, candle, etc.");
-        }
+    
+    #[cfg(not(any(feature = "ndarray", feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "tch")))]
+    {
+        // This is a compile-time error that will be triggered if no backend is enabled
+        compile_error!("No backend feature was enabled. Please enable at least one: ndarray, wgpu, candle, etc.");
     }
     
     // Set up the configured backend
