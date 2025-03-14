@@ -707,7 +707,7 @@ fn main() {
         use burn::backend::candle::CandleDevice;
         device_initialized = true;
         println!("Using Candle CPU device");
-        CandleDevice::Cpu
+        CandleDevice::cpu()
     };
     
     #[cfg(all(feature = "ndarray", not(feature = "cuda-jit"), not(feature = "wgpu"), not(feature = "candle"), not(feature = "candle-metal")))]
