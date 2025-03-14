@@ -864,8 +864,13 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     vocab: &CharVocab,
     artifact_dir: &str,
 ) -> MinGRULM<B> {
-    // Set random seed for reproducibility
-    <B as burn::tensor::backend::Backend>::seed(config.seed);
+    // Set random seed for reproducibility (if supported by backend)
+    match std::panic::catch_unwind(|| {
+        <B as burn::tensor::backend::Backend>::seed(config.seed);
+    }) {
+        Ok(_) => println!("Random seed set to {}", config.seed),
+        Err(_) => println!("Warning: This backend doesn't support manual seed setting. Random results may vary.")
+    }
 
     // Initialize model
     let model = config

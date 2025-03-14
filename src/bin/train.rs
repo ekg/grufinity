@@ -280,9 +280,13 @@ fn main() {
         .num_workers(config.num_workers)
         .build(valid_dataset);
     
-    // Initialize learner with random seed
-    // Use the Backend trait method
-    <BackendWithAutodiff as burn::tensor::backend::Backend>::seed(config.seed);
+    // Initialize learner with random seed (if supported)
+    match std::panic::catch_unwind(|| {
+        <BackendWithAutodiff as burn::tensor::backend::Backend>::seed(config.seed);
+    }) {
+        Ok(_) => println!("Random seed set to {}", config.seed),
+        Err(_) => println!("Warning: This backend doesn't support manual seed setting. Random results may vary.")
+    }
     
     let learner = LearnerBuilder::new(&artifact_dir)
         .metric_train_numeric(LossMetric::new())
