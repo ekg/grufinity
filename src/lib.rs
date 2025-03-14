@@ -93,13 +93,17 @@ pub type RawBackend = Candle<f32>;
 pub type BackendDevice = CandleDevice;
 
 // Candle backend (fourth priority)
-#[cfg(all(feature = "candle", feature = "autodiff", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal"))))]
+#[cfg(all(feature = "candle", feature = "autodiff", 
+         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
-#[cfg(all(feature = "candle", not(feature = "autodiff"), not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal"))))]
+#[cfg(all(feature = "candle", not(feature = "autodiff"), 
+         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type BackendWithAutodiff = Candle<f32>;
-#[cfg(all(feature = "candle", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal"))))]
+#[cfg(all(feature = "candle", 
+         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type RawBackend = Candle<f32>;
-#[cfg(all(feature = "candle", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal"))))]
+#[cfg(all(feature = "candle", 
+         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type BackendDevice = CandleDevice;
 
 // LibTorch backend (fifth priority)
