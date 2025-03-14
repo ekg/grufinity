@@ -290,7 +290,7 @@ fn torch_cat_tokens<B: Backend>(
     }
     
     // Create new tensor from the collected data
-    result = Tensor::<B, 1, Int>::from_data(&*token_data, device).reshape([batch_size, seq_len + 1]);
+    let result = Tensor::<B, 1, Int>::from_data(&*token_data, device).reshape([batch_size, seq_len + 1]);
     
     result
 }
@@ -326,13 +326,13 @@ fn sample_with_top_k<B: Backend>(
         if temperature == 0.0 {
             // Convert to Int tensor type without to_dtype 
             // (which doesn't exist in this version of Burn)
-            let indices = probs.argmax(1).to_data().into_vec().unwrap();
+            let indices: Vec<i32> = probs.argmax(1).to_data().into_vec().unwrap();
             return Tensor::<B, 1, Int>::from_data(&*indices, device);
         }
         
         // Instead of multinomial, we'll use a simple sampling method
         // Get probabilities and use them to select an index
-        let probs_vec = probs.to_data().into_vec().unwrap();
+        let probs_vec: Vec<f32> = probs.to_data().into_vec().unwrap();
         
         // Generate random value
         let mut rng = rand::thread_rng();
