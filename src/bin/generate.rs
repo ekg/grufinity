@@ -305,7 +305,7 @@ fn sample_with_top_k<B: Backend>(
     let [batch_size, seq_len, vocab_size] = logits.dims();
     
     // Get logits for last position in sequence
-    let last_pos_logits = logits.slice([0..batch_size, seq_len-1..seq_len, 0..vocab_size]).squeeze(1);
+    let last_pos_logits = logits.clone().slice([0..batch_size, seq_len-1..seq_len, 0..vocab_size]).squeeze(1);
     
     // Apply temperature scaling
     let scaled_logits = if temperature == 0.0 {
