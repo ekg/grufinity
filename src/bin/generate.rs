@@ -293,7 +293,7 @@ fn torch_cat_tokens<B: Backend>(
     }
     
     // Create new tensor from the collected data
-    result = Tensor::<B, 1, Int>::from_data(&*token_data, device).reshape::<2>([batch_size, seq_len + 1]);
+    result = Tensor::<B, 1, Int>::from_data(&*token_data, device).reshape([batch_size, seq_len + 1]);
     
     result
 }
@@ -327,7 +327,7 @@ fn sample_with_top_k<B: Backend>(
         
         // Simple argmax for deterministic sampling (temperature=0 case)
         if temperature == 0.0 {
-            return probs.argmax(1).dtype::<Int>();
+            return probs.argmax(1).to_dtype::<Int>();
         }
         
         // Instead of multinomial, we'll use a simple sampling method
