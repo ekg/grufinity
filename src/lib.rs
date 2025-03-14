@@ -29,10 +29,7 @@ pub use burn::backend::cuda_jit::CudaDevice as CudaJitDevice;
 #[cfg(feature = "wgpu")]
 pub use burn::backend::wgpu::{Wgpu, WgpuDevice};
 
-#[cfg(feature = "candle")]
-pub use burn::backend::candle::{Candle, CandleDevice};
-
-#[cfg(feature = "candle-cuda")]
+#[cfg(any(feature = "candle", feature = "candle-cuda", feature = "candle-metal"))]
 pub use burn::backend::candle::{Candle, CandleDevice};
 
 #[cfg(feature = "tch")]
