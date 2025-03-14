@@ -9,6 +9,7 @@ rand = "0.8.5"
 indicatif = "0.17.7"
 bincode = "=2.0.0-rc.3"
 bincode_derive = "=2.0.0-rc.3"
+serde_json = "1.0"
 
 [features]
 default = []  # No default backend - user must explicitly choose
