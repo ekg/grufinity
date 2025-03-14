@@ -108,35 +108,64 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
 
 // Locate configuration file with fallbacks
 fn locate_config_file(config_path: &mut String, model_path: &str) {
-    if !std::path::Path::new(config_path).exists() {
-        // Try alternate filenames in the same directory
-        if let Some(last_slash) = model_path.rfind('/') {
-            let dir = &model_path[..last_slash];
-            
-            // Check for tbptt_config.json
-            let tbptt_path = format!("{}/tbptt_config.json", dir);
-            if std::path::Path::new(&tbptt_path).exists() {
-                println!("Using TBPTT config: {}", tbptt_path);
-                *config_path = tbptt_path;
-            } else {
-                // Check for regular config.json
-                let regular_path = format!("{}/config.json", dir);
-                if std::path::Path::new(&regular_path).exists() {
-                    println!("Using config: {}", regular_path);
-                    *config_path = regular_path;
-                }
-            }
-        }
+    println!("Looking for configuration file...");
+    
+    // Check if the explicitly provided config path exists
+    let explicit_config_exists = std::path::Path::new(config_path).exists();
+    if explicit_config_exists {
+        println!("Found explicitly specified config: {}", config_path);
+        return;
     }
     
-    println!("Config path: {}", config_path);
+    println!("Explicit config not found at: {}. Searching for alternatives...", config_path);
+    
+    // Extract the directory from the model path
+    if let Some(last_slash) = model_path.rfind('/') {
+        let dir = &model_path[..last_slash];
+        println!("Looking in model directory: {}", dir);
+        
+        // Try possible config filenames in priority order
+        let possible_configs = [
+            ("tbptt_config.json", "TBPTT config"),
+            ("config.json", "standard config"),
+        ];
+        
+        for (filename, desc) in possible_configs.iter() {
+            let candidate_path = format!("{}/{}", dir, filename);
+            println!("Checking for {} at: {}", desc, candidate_path);
+            
+            if std::path::Path::new(&candidate_path).exists() {
+                println!("Found {} at: {}", desc, candidate_path);
+                *config_path = candidate_path;
+                return;
+            }
+        }
+        
+        println!("No configuration files found in model directory.");
+    } else {
+        println!("Could not determine model directory from path: {}", model_path);
+    }
+    
+    println!("Will use config path: {} (may not exist)", config_path);
 }
 
 // Load model configuration with fallbacks
 fn load_model_config(config_path: &str, chunk_size: usize) -> MinGRULMConfig {
+    if !std::path::Path::new(config_path).exists() {
+        println!("Config file not found at: {}", config_path);
+        println!("Using default configuration instead");
+        
+        return MinGRULMConfig::new(256, 1024)
+            .with_depth(3)
+            .with_ff_mult(3.0)
+            .with_expansion_factor(1.5)
+            .with_chunk_size(chunk_size);
+    }
+    
+    println!("Attempting to load config from: {}", config_path);
     match MinGRULMConfig::load(config_path) {
         Ok(mut config) => {
-            println!("Loaded model configuration from: {}", config_path);
+            println!("Successfully loaded model configuration");
             println!("Model dimensions: {}, layers: {}", config.dim(), config.depth());
             
             // Update chunk size to match CLI argument
@@ -145,8 +174,25 @@ fn load_model_config(config_path: &str, chunk_size: usize) -> MinGRULMConfig {
             config
         },
         Err(e) => {
-            eprintln!("Failed to load model config: {}", e);
+            eprintln!("Error loading config file: {}", e);
+            eprintln!("The file was found but could not be parsed");
             println!("Using default configuration");
+            
+            // Try to read the file contents to help debug
+            match std::fs::read_to_string(config_path) {
+                Ok(content) => {
+                    if content.trim().is_empty() {
+                        println!("Note: Config file is empty");
+                    } else if content.len() < 100 {
+                        println!("File content: {}", content);
+                    } else {
+                        println!("File content too large to display ({}b)", content.len());
+                    }
+                },
+                Err(read_err) => {
+                    println!("Could not read file: {}", read_err);
+                }
+            }
             
             // Create a default config
             MinGRULMConfig::new(256, 1024)
@@ -296,26 +342,37 @@ fn main() {
     
     // Parse arguments
     for i in 1..args.len() {
+        if i + 1 >= args.len() && (args[i].starts_with("--") && args[i] != "--help" && args[i] != "-h") {
+            eprintln!("Warning: Option {} has no value", args[i]);
+            continue;
+        }
+        
         match args[i].as_str() {
             "--model" => {
                 if i + 1 < args.len() {
                     model_path = args[i + 1].clone();
+                    println!("Model path set to: {}", model_path);
                 }
             },
             "--vocab" => {
                 if i + 1 < args.len() {
                     vocab_path = args[i + 1].clone();
+                    println!("Vocabulary path set to: {}", vocab_path);
                 }
             },
             "--prompt" => {
                 if i + 1 < args.len() {
                     prompt = args[i + 1].clone();
+                    println!("Prompt set to: \"{}\"", prompt);
                 }
             },
             "--length" => {
                 if i + 1 < args.len() {
                     if let Ok(n) = args[i + 1].parse() {
                         length = n;
+                        println!("Generation length set to: {}", length);
+                    } else {
+                        eprintln!("Warning: Invalid length value: {}", args[i + 1]);
                     }
                 }
             },
@@ -323,6 +380,9 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(n) = args[i + 1].parse() {
                         chunk_size = n;
+                        println!("Chunk size set to: {}", chunk_size);
+                    } else {
+                        eprintln!("Warning: Invalid chunk size value: {}", args[i + 1]);
                     }
                 }
             },
@@ -330,18 +390,25 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(t) = args[i + 1].parse() {
                         temperature = t;
+                        println!("Temperature set to: {}", temperature);
+                    } else {
+                        eprintln!("Warning: Invalid temperature value: {}", args[i + 1]);
                     }
                 }
             },
             "--config" => {
                 if i + 1 < args.len() {
                     config_path = args[i + 1].clone();
+                    println!("Config path explicitly set to: {}", config_path);
                 }
             },
             "--device-id" => {
                 if i + 1 < args.len() {
                     if let Ok(id) = args[i + 1].parse() {
                         device_id = id;
+                        println!("Device ID set to: {}", device_id);
+                    } else {
+                        eprintln!("Warning: Invalid device ID value: {}", args[i + 1]);
                     }
                 }
             },
@@ -349,9 +416,16 @@ fn main() {
             "--seed" => {
                 if i + 1 < args.len() {
                     prompt = args[i + 1].clone();
+                    println!("Using deprecated --seed option. Use --prompt instead.");
+                    println!("Prompt set to: \"{}\"", prompt);
                 }
             },
-            _ => {}
+            _ => {
+                // Only warn about unrecognized options, not values
+                if args[i].starts_with("--") {
+                    eprintln!("Warning: Unrecognized option: {}", args[i]);
+                }
+            }
         }
     }
     
