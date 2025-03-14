@@ -3,6 +3,7 @@ use burn::{
     tensor::{Tensor, Int, backend::Backend},
     module::Module,
 };
+use rand::Rng;
 use grufinity::{
     model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
@@ -272,13 +273,27 @@ fn torch_cat_tokens<B: Backend>(
     let new_token = new_token.unsqueeze::<2>();
     
     // Create a new tensor with room for the additional token
-    let mut result = Tensor::zeros([batch_size, seq_len + 1], device).dtype::<Int>();
+    let mut result = Tensor::zeros([batch_size, seq_len + 1], device).to_dtype::<Int>();
     
-    // Copy existing tokens
-    result = result.slice_assign([0..batch_size, 0..seq_len], tokens);
+    // Copy existing tokens - manually create the tensor by concatenating
+    let mut token_data = Vec::with_capacity(batch_size * (seq_len + 1));
     
-    // Add new token at the end
-    result = result.slice_assign([0..batch_size, seq_len..seq_len+1], new_token);
+    // Extract data from existing tokens and new token
+    let tokens_data = tokens.to_data().into_vec().unwrap();
+    let new_token_data = new_token.to_data().into_vec().unwrap();
+    
+    // Copy data from tokens to result
+    for b in 0..batch_size {
+        // Copy existing tokens for this batch
+        let start = b * seq_len;
+        token_data.extend_from_slice(&tokens_data[start..start + seq_len]);
+        
+        // Add new token at the end
+        token_data.push(new_token_data[b]);
+    }
+    
+    // Create new tensor from the collected data
+    result = Tensor::from_data(&token_data, device).reshape([batch_size, seq_len + 1]);
     
     result
 }
@@ -307,42 +322,101 @@ fn sample_with_top_k<B: Backend>(
         // Apply softmax manually since we don't have a direct method
         // exp(x) / sum(exp(x))
         let exp_logits = scaled_logits.exp();
-        let sum_exp = exp_logits.clone().sum_dim(1, true);
+        let sum_exp = exp_logits.clone().sum_dim(1).unsqueeze::<2>();
         let probs = exp_logits / sum_exp;
         
-        // Sample from the distribution
-        return probs.multinomial(1, true).squeeze::<1>().dtype::<Int>();
+        // Simple argmax for deterministic sampling (temperature=0 case)
+        if temperature == 0.0 {
+            return probs.argmax(1).to_dtype::<Int>();
+        }
+        
+        // Instead of multinomial, we'll use a simple sampling method
+        // Get probabilities and use them to select an index
+        let probs_vec = probs.to_data().into_vec().unwrap();
+        
+        // Generate random value
+        let mut rng = rand::thread_rng();
+        let random: f32 = rng.gen();
+        
+        // Sample based on cumulative distribution
+        let mut cumsum = 0.0;
+        let mut selected_idx = 0;
+        
+        for (idx, &prob) in probs_vec.iter().enumerate() {
+            cumsum += prob;
+            if random < cumsum {
+                selected_idx = idx;
+                break;
+            }
+        }
+        
+        // Create a tensor with the selected index
+        let indices = vec![selected_idx as i32];
+        return Tensor::from_data(&indices, device);
     }
     
     // Otherwise, perform top-k sampling
     
-    // Find the top-k values for each batch item
-    // Since we don't have a sort with descending option, we'll negate the values and sort ascending
-    // Then negate back after sorting
-    let negated_logits = scaled_logits.clone().neg();
-    let sorted_result = negated_logits.sort(1);
+    // We need to find the top-k indices and values
+    // Since sorting with descending option isn't available, we'll use a different approach
     
-    // Extract sorted indices and negate the sorted values back
-    let sorted_indices = sorted_result.clone().argsort(1);
-    let sorted_logits = sorted_result.neg();
+    // We'll find the top k values ourselves
+    let logits_vec = scaled_logits.to_data().into_vec().unwrap();
+    let mut top_k_indices = Vec::with_capacity(k);
+    let mut top_k_values = Vec::with_capacity(k);
     
-    // Keep only the top-k values
-    let top_k_logits = sorted_logits.slice([0..batch_size, 0..k]);
-    let top_k_indices = sorted_indices.slice([0..batch_size, 0..k]);
+    // Create a copy we can modify
+    let mut logits_copy = logits_vec.clone();
+    
+    // Find top-k values by repeatedly finding max
+    for _ in 0..k {
+        if let Some(max_idx) = logits_copy.iter().enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(idx, _)| idx) 
+        {
+            top_k_indices.push(max_idx as i32);
+            top_k_values.push(logits_vec[max_idx]);
+            // Set this value to negative infinity so it's not picked again
+            logits_copy[max_idx] = f32::NEG_INFINITY;
+        }
+    }
     
     // Apply softmax manually to get probabilities for just the top-k
-    let exp_logits = top_k_logits.exp();
-    let sum_exp = exp_logits.clone().sum_dim(1, true);
-    let top_k_probs = exp_logits / sum_exp;
+    let mut exp_sum = 0.0;
+    let mut top_k_probs = Vec::with_capacity(k);
     
-    // Sample from the top-k distribution
-    let sampled_top_k_indices = top_k_probs.multinomial(1, true).squeeze::<1>().dtype::<Int>();
+    // Calculate exp and sum
+    for &val in &top_k_values {
+        let exp_val = (val / temperature as f32).exp();
+        top_k_probs.push(exp_val);
+        exp_sum += exp_val;
+    }
     
-    // Map back to original vocabulary indices
-    let batch_indices = Tensor::arange(0..batch_size as i64, device).dtype::<Int>();
-    let final_indices = top_k_indices.gather(1, sampled_top_k_indices.unsqueeze(1)).squeeze(1);
+    // Normalize to get probabilities
+    for prob in &mut top_k_probs {
+        *prob /= exp_sum;
+    }
     
-    final_indices
+    // Sample based on the probabilities
+    let mut rng = rand::thread_rng();
+    let random: f32 = rng.gen();
+    
+    let mut cumsum = 0.0;
+    let mut selected_idx = 0;
+    
+    for (idx, prob) in top_k_probs.iter().enumerate() {
+        cumsum += prob;
+        if random < cumsum {
+            selected_idx = idx;
+            break;
+        }
+    }
+    
+    // Get the original vocabulary index
+    let final_idx = top_k_indices[selected_idx];
+    
+    // Return as a tensor
+    Tensor::from_data(&[final_idx], device)
 }
 
 // Generate text with chunking and hidden state passing
