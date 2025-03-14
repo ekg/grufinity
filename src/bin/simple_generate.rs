@@ -168,56 +168,7 @@ fn main() {
     compile_error!("No backend feature was enabled. Please enable at least one: cuda-jit, wgpu, candle, ndarray, etc.");
     
     // Initialize device based on enabled features
-    #[cfg(all(feature = "cuda-jit", not(feature = "wgpu"), not(feature = "candle"), not(feature = "tch"), not(feature = "ndarray")))]
-    {
-        use burn::backend::cuda_jit::CudaDevice;
-        device = CudaDevice::new(0); // Use first CUDA device with JIT
-        device_initialized = true;
-        println!("Using CUDA JIT device");
-    }
-    
-    #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
-    {
-        use burn::backend::candle::CandleDevice;
-        device = CandleDevice::cuda(0);  // Use first CUDA device via Candle
-        _device_initialized = true;
-        println!("Using Candle CUDA device");
-    }
-    
-    #[cfg(all(feature = "candle-metal", not(feature = "cuda-jit"), not(feature = "wgpu"), not(all(feature = "candle", feature = "candle-cuda"))))]
-    {
-        use burn::backend::candle::CandleDevice;
-        device = CandleDevice::metal(0);  // Use first Metal device
-        println!("Using Candle Metal device");
-    }
-    
-    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"), 
-              not(feature = "candle-cuda"), not(feature = "candle-metal"),
-              not(feature = "candle")))]
-    {
-        use burn::backend::wgpu::WgpuDevice;
-        device = WgpuDevice::default();
-        _device_initialized = true;
-        println!("Using WGPU device");
-    }
-    
-    #[cfg(all(feature = "candle", not(any(feature = "cuda-jit", feature = "wgpu"))))]
-    {
-        use burn::backend::candle::CandleDevice;
-        device = CandleDevice::Cpu;
-    }
-    
-    #[cfg(all(feature = "ndarray", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle"))))]
-    {
-        use burn::backend::ndarray::NdArrayDevice;
-        device = NdArrayDevice;
-    }
-    
-    #[cfg(all(feature = "tch", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "ndarray"))))]
-    {
-        use burn::backend::libtorch::LibTorchDevice;
-        device = LibTorchDevice::Cpu;
-    }
+    // Removed redundant device initialization blocks
     
     // Fallback to ensure device is always initialized
     // This will only run if none of the above cfg blocks matched
@@ -242,7 +193,7 @@ fn main() {
         {
             use burn::backend::candle::CandleDevice;
             device = CandleDevice::Cpu;
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using Candle CPU device (fallback)");
         }
         

@@ -73,7 +73,7 @@ fn main() {
     
     // Use appropriate device type for each backend
     #[cfg(feature = "cuda-jit")]
-    let device = {
+    let mut device = {
         use burn::backend::cuda_jit::CudaDevice;
         device_initialized = true;
         println!("Using CUDA JIT device");
@@ -141,67 +141,7 @@ fn main() {
                   feature = "candle-cuda")))]
     compile_error!("No backend feature was enabled. Please enable at least one: cuda-jit, wgpu, candle, ndarray, etc.");
     
-    #[cfg(feature = "cuda-jit")]
-    {
-        use burn::backend::cuda_jit::CudaDevice;
-        device = CudaDevice::new(0);
-        device_initialized = true;
-        println!("Using CUDA JIT device");
-    }
-    
-    #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
-    {
-        use burn::backend::candle::CandleDevice;
-        device = CandleDevice::cuda(0);
-        device_initialized = true;
-        println!("Using Candle CUDA device");
-    }
-    
-    #[cfg(all(feature = "candle-metal", not(feature = "cuda-jit"), 
-              not(all(feature = "candle", feature = "candle-cuda"))))]
-    {
-        use burn::backend::candle::CandleDevice;
-        device = CandleDevice::metal(0);
-        device_initialized = true;
-        println!("Using Candle Metal device");
-    }
-    
-    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"),
-              not(feature = "candle-cuda"), not(feature = "candle-metal"),
-              not(feature = "candle")))]
-    {
-        use burn::backend::wgpu::WgpuDevice;
-        device = WgpuDevice::default();
-        device_initialized = true;
-        println!("Using WGPU device");
-    }
-    
-    #[cfg(all(feature = "candle", not(feature = "cuda-jit"), not(feature = "wgpu"),
-              not(feature = "candle-metal"), not(feature = "candle-cuda")))]
-    {
-        use burn::backend::candle::CandleDevice;
-        device = CandleDevice::Cpu;
-        device_initialized = true;
-        println!("Using Candle CPU device");
-    }
-    
-    #[cfg(all(feature = "ndarray", not(feature = "cuda-jit"), not(feature = "wgpu"),
-              not(feature = "candle"), not(feature = "candle-metal")))]
-    {
-        use burn::backend::ndarray::NdArrayDevice;
-        device = NdArrayDevice;
-        device_initialized = true;
-        println!("Using NdArray device");
-    }
-    
-    #[cfg(all(feature = "tch", not(feature = "cuda-jit"), not(feature = "wgpu"),
-              not(feature = "candle"), not(feature = "ndarray"), not(feature = "candle-metal")))]
-    {
-        use burn::backend::libtorch::LibTorchDevice;
-        device = LibTorchDevice::Cpu;
-        device_initialized = true;
-        println!("Using LibTorch CPU device");
-    }
+    // Removed redundant device initialization blocks
     
     // Add a final fallback in case no backend feature is enabled
     if !device_initialized {
