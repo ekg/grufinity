@@ -95,7 +95,7 @@ fn main() {
     
     // Get the device from the appropriate backend
     #[allow(unused_assignments)]
-    let mut device;
+    let mut device: grufinity::BackendDevice;
     #[allow(unused_assignments)]
     let mut _device_initialized = false;
     

@@ -70,7 +70,7 @@ fn main() {
     // Initialize device based on enabled features
     // Priority: cuda-jit > candle-cuda > candle-metal > wgpu > candle > ndarray > tch
     #[allow(unused_assignments)]
-    let device;
+    let mut device: grufinity::BackendDevice;
     #[allow(unused_assignments)]
     let mut device_initialized = false;
     

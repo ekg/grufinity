@@ -81,7 +81,7 @@ fn main() {
     
     // Get the device from the macro
     #[allow(unused_assignments)]
-    let mut device;
+    let mut device: grufinity::BackendDevice;
     #[allow(unused_assignments)]
     let mut device_initialized = false;
     
