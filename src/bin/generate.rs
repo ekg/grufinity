@@ -94,7 +94,7 @@ fn main() {
               not(all(feature = "candle", feature = "candle-cuda"))))]
     {
         use burn::backend::candle::CandleDevice;
-        device = CandleDevice::Metal(0);
+        device = CandleDevice::metal(0);
         device_initialized = true;
         println!("Using Candle Metal device");
     }
