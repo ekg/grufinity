@@ -56,6 +56,7 @@ fn print_help() {
     println!("  --lr-scheduler TYPE            Learning rate scheduler (constant, cosine, linear) (default: constant)");
     println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
     println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
+    println!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
     println!("\nModel Structure Options:");
     println!("  --model-dim SIZE               Model hidden dimension (default: 1024)");
     println!("  --model-depth NUM              Number of MinGRU layers (default: 3)");
@@ -655,6 +656,14 @@ fn main() {
                     }
                 }
             },
+            "--device-id" => {
+                if i + 1 < args.len() {
+                    if let Ok(id) = args[i + 1].parse::<usize>() {
+                        device_id = id;
+                        println!("Using CUDA/GPU device ID: {}", device_id);
+                    }
+                }
+            },
             _ => {}
         }
     }
@@ -672,24 +681,24 @@ fn main() {
     let device = {
         use burn::backend::cuda_jit::CudaDevice;
         device_initialized = true;
-        println!("Using CUDA JIT device");
-        CudaDevice::new(0) // Use first CUDA device with JIT
+        println!("Using CUDA JIT device {}", device_id);
+        CudaDevice::new(device_id) // Use specified CUDA device with JIT
     };
     
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
     let device = {
         use burn::backend::candle::CandleDevice;
         device_initialized = true;
-        println!("Using Candle CUDA device");
-        CandleDevice::cuda(0)  // Use first CUDA device via Candle
+        println!("Using Candle CUDA device {}", device_id);
+        CandleDevice::cuda(device_id)  // Use specified CUDA device via Candle
     };
     
     #[cfg(all(feature = "candle-metal", not(feature = "cuda-jit"), not(all(feature = "candle", feature = "candle-cuda"))))]
     let device = {
         use burn::backend::candle::CandleDevice;
         device_initialized = true;
-        println!("Using Candle Metal device");
-        CandleDevice::metal(0)  // Use first Metal device
+        println!("Using Candle Metal device {}", device_id);
+        CandleDevice::metal(device_id)  // Use specified Metal device
     };
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"),
