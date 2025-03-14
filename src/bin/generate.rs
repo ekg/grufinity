@@ -46,7 +46,6 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     // Log the device type being used based on enabled features
     #[cfg(feature = "cuda-jit")]
     {
-        use burn::backend::cuda_jit::CudaDevice;
         device_initialized = true;
         println!("Using CUDA JIT device {}", device_id);
     }
@@ -239,7 +238,7 @@ fn generate_with_top_k<B: Backend>(
     hidden_states: Option<Vec<Tensor<B, 2>>>,
     device: &B::Device
 ) -> (Tensor<B, 2, Int>, Vec<Tensor<B, 2>>) {
-    let [batch_size, seq_len] = input_tokens.dims();
+    let [_batch_size, _seq_len] = input_tokens.dims();
     
     // Start with the input tokens
     let mut all_tokens = input_tokens.clone();
@@ -270,10 +269,10 @@ fn torch_cat_tokens<B: Backend>(
     let [batch_size, seq_len] = tokens.dims();
     
     // Reshape new token to [batch_size, 1]
-    let new_token = new_token.unsqueeze(1);
+    let new_token = new_token.unsqueeze::<2>();
     
     // Create a new tensor with room for the additional token
-    let mut result = Tensor::zeros([batch_size, seq_len + 1], device).to_dtype::<Int>();
+    let mut result = Tensor::zeros([batch_size, seq_len + 1], device).dtype::<Int>();
     
     // Copy existing tokens
     result = result.slice_assign([0..batch_size, 0..seq_len], tokens);
@@ -305,27 +304,42 @@ fn sample_with_top_k<B: Backend>(
     
     // If k is 0 or >= vocab_size, use regular sampling (equivalent to top-k with k=vocab_size)
     if k == 0 || k >= vocab_size {
-        return scaled_logits.softmax(1).multinomial(1, true).squeeze(1).to_dtype();
+        // Apply softmax manually since we don't have a direct method
+        // exp(x) / sum(exp(x))
+        let exp_logits = scaled_logits.exp();
+        let sum_exp = exp_logits.clone().sum_dim(1, true);
+        let probs = exp_logits / sum_exp;
+        
+        // Sample from the distribution
+        return probs.multinomial(1, true).squeeze::<1>().dtype::<Int>();
     }
     
     // Otherwise, perform top-k sampling
     
     // Find the top-k values for each batch item
-    // Sort logits along vocab dimension (descending)
-    let (sorted_logits, sorted_indices) = scaled_logits.sort(1, true);
+    // Since we don't have a sort with descending option, we'll negate the values and sort ascending
+    // Then negate back after sorting
+    let negated_logits = scaled_logits.clone().neg();
+    let sorted_result = negated_logits.sort(1);
+    
+    // Extract sorted indices and negate the sorted values back
+    let sorted_indices = sorted_result.clone().argsort(1);
+    let sorted_logits = sorted_result.neg();
     
     // Keep only the top-k values
     let top_k_logits = sorted_logits.slice([0..batch_size, 0..k]);
     let top_k_indices = sorted_indices.slice([0..batch_size, 0..k]);
     
-    // Apply softmax to get probabilities for just the top-k
-    let top_k_probs = top_k_logits.softmax(1);
+    // Apply softmax manually to get probabilities for just the top-k
+    let exp_logits = top_k_logits.exp();
+    let sum_exp = exp_logits.clone().sum_dim(1, true);
+    let top_k_probs = exp_logits / sum_exp;
     
     // Sample from the top-k distribution
-    let sampled_top_k_indices = top_k_probs.multinomial(1, true).squeeze(1).to_dtype::<Int>();
+    let sampled_top_k_indices = top_k_probs.multinomial(1, true).squeeze::<1>().dtype::<Int>();
     
     // Map back to original vocabulary indices
-    let batch_indices = Tensor::arange(0, batch_size as i64, device).to_dtype::<Int>();
+    let batch_indices = Tensor::arange(0..batch_size as i64, device).dtype::<Int>();
     let final_indices = top_k_indices.gather(1, sampled_top_k_indices.unsqueeze(1)).squeeze(1);
     
     final_indices
