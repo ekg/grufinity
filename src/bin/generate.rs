@@ -23,6 +23,7 @@ fn print_help() {
     println!("  --length NUM                   Number of characters to generate (default: 100)");
     println!("  --chunk-size NUM               Characters per chunk for processing (default: 64)");
     println!("  --temperature VALUE            Sampling temperature (default: 0.8)");
+    println!("  --top-k VALUE                  Top-k sampling value (0 = disabled, default: 0)");
     println!("  --config PATH                  Path to model configuration (optional)");
     println!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
     println!("\nExample:");
@@ -228,6 +229,108 @@ fn initialize_model<B: Backend>(
     }
 }
 
+// Custom implementation of text generation with top-k sampling
+fn generate_with_top_k<B: Backend>(
+    model: &MinGRULM<B>,
+    input_tokens: Tensor<B, 2, Int>,
+    max_new_tokens: usize,
+    temperature: f64,
+    top_k: usize,
+    hidden_states: Option<Vec<Tensor<B, 2>>>,
+    device: &B::Device
+) -> (Tensor<B, 2, Int>, Vec<Tensor<B, 2>>) {
+    let [batch_size, seq_len] = input_tokens.dims();
+    
+    // Start with the input tokens
+    let mut all_tokens = input_tokens.clone();
+    let mut current_hidden = hidden_states;
+    
+    // Generate one token at a time
+    for _ in 0..max_new_tokens {
+        // Get next token distribution
+        let (logits, next_hidden) = model.forward(all_tokens.clone(), current_hidden);
+        current_hidden = Some(next_hidden);
+        
+        // Sample the next token with top-k
+        let next_token = sample_with_top_k(&logits, temperature, top_k, device);
+        
+        // Add the new token to the sequence
+        all_tokens = torch_cat_tokens(all_tokens, next_token, device);
+    }
+    
+    (all_tokens, current_hidden.unwrap_or_default())
+}
+
+// Helper function to concatenate tokens, mimicking torch.cat
+fn torch_cat_tokens<B: Backend>(
+    tokens: Tensor<B, 2, Int>,
+    new_token: Tensor<B, 1, Int>,
+    device: &B::Device
+) -> Tensor<B, 2, Int> {
+    let [batch_size, seq_len] = tokens.dims();
+    
+    // Reshape new token to [batch_size, 1]
+    let new_token = new_token.unsqueeze(1);
+    
+    // Create a new tensor with room for the additional token
+    let mut result = Tensor::zeros([batch_size, seq_len + 1], device).to_dtype::<Int>();
+    
+    // Copy existing tokens
+    result = result.slice_assign([0..batch_size, 0..seq_len], tokens);
+    
+    // Add new token at the end
+    result = result.slice_assign([0..batch_size, seq_len..seq_len+1], new_token);
+    
+    result
+}
+
+// Sample the next token using top-k sampling
+fn sample_with_top_k<B: Backend>(
+    logits: &Tensor<B, 3>,
+    temperature: f64,
+    k: usize,
+    device: &B::Device
+) -> Tensor<B, 1, Int> {
+    let [batch_size, seq_len, vocab_size] = logits.dims();
+    
+    // Get logits for last position in sequence
+    let last_pos_logits = logits.slice([0..batch_size, seq_len-1..seq_len, 0..vocab_size]).squeeze(1);
+    
+    // Apply temperature scaling
+    let scaled_logits = if temperature == 0.0 {
+        last_pos_logits.clone()
+    } else {
+        last_pos_logits / temperature
+    };
+    
+    // If k is 0 or >= vocab_size, use regular sampling (equivalent to top-k with k=vocab_size)
+    if k == 0 || k >= vocab_size {
+        return scaled_logits.softmax(1).multinomial(1, true).squeeze(1).to_dtype();
+    }
+    
+    // Otherwise, perform top-k sampling
+    
+    // Find the top-k values for each batch item
+    // Sort logits along vocab dimension (descending)
+    let (sorted_logits, sorted_indices) = scaled_logits.sort(1, true);
+    
+    // Keep only the top-k values
+    let top_k_logits = sorted_logits.slice([0..batch_size, 0..k]);
+    let top_k_indices = sorted_indices.slice([0..batch_size, 0..k]);
+    
+    // Apply softmax to get probabilities for just the top-k
+    let top_k_probs = top_k_logits.softmax(1);
+    
+    // Sample from the top-k distribution
+    let sampled_top_k_indices = top_k_probs.multinomial(1, true).squeeze(1).to_dtype::<Int>();
+    
+    // Map back to original vocabulary indices
+    let batch_indices = Tensor::arange(0, batch_size as i64, device).to_dtype::<Int>();
+    let final_indices = top_k_indices.gather(1, sampled_top_k_indices.unsqueeze(1)).squeeze(1);
+    
+    final_indices
+}
+
 // Generate text with chunking and hidden state passing
 fn generate_text<B: Backend>(
     model: &MinGRULM<B>,
@@ -236,6 +339,7 @@ fn generate_text<B: Backend>(
     length: usize,
     chunk_size: usize,
     temperature: f64,
+    top_k: usize,
     device: &B::Device
 ) -> String {
     // Handle empty prompt
@@ -292,7 +396,13 @@ fn generate_text<B: Backend>(
         let seed_tensor = Tensor::<B, 1, Int>::from_data(&*seed_tokens, device).unsqueeze::<2>();
         
         // Generate the next chunk
-        let (generated_tokens, next_hidden) = model.generate(seed_tensor, gen_count, temperature, hidden_states);
+        let (generated_tokens, next_hidden) = if top_k > 0 {
+            // Use custom top-k sampling if enabled
+            generate_with_top_k(&model, seed_tensor, gen_count, temperature, top_k, hidden_states.clone(), device)
+        } else {
+            // Use regular sampling if top-k is disabled
+            model.generate(seed_tensor, gen_count, temperature, hidden_states)
+        };
         hidden_states = Some(next_hidden);
         
         // Convert tokens to text
@@ -337,6 +447,7 @@ fn main() {
     let mut length = 100;
     let mut chunk_size = 64;
     let mut temperature = 0.8;
+    let mut top_k: usize = 0; // 0 means disabled (use full distribution)
     let mut config_path = "mingru_artifacts/config.json".to_string();
     let mut device_id: usize = 0;
     
@@ -412,6 +523,16 @@ fn main() {
                     }
                 }
             },
+            "--top-k" => {
+                if i + 1 < args.len() {
+                    if let Ok(k) = args[i + 1].parse() {
+                        top_k = k;
+                        println!("Top-k sampling set to: {}", top_k);
+                    } else {
+                        eprintln!("Warning: Invalid top-k value: {}", args[i + 1]);
+                    }
+                }
+            },
             // For backward compatibility
             "--seed" => {
                 if i + 1 < args.len() {
@@ -459,10 +580,13 @@ fn main() {
     println!("Model loaded successfully. Ready to generate text.");
     println!("Prompt: \"{}\"", prompt);
     println!("Generating {} characters with temperature {}", length, temperature);
+    if top_k > 0 {
+        println!("Using top-k sampling with k = {}", top_k);
+    }
     println!("Using chunk size of {} characters", chunk_size);
     
     // Generate text
-    let output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, &device);
+    let output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, top_k, &device);
     
     // Display the generated text
     println!("\nGenerated text:");
