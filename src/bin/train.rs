@@ -302,9 +302,44 @@ fn main() {
     // Train the model
     println!("Starting training for {} epochs", config.num_epochs);
     let start_time = Instant::now();
-    let model_trained = learner.fit(train_dataloader, valid_dataloader);
+    let mut last_train_loss = 0.0;
+    let mut last_valid_loss = 0.0;
+    
+    // Custom callback to monitor loss and calculate perplexity
+    let callback = |event: burn::train::LearnerEvent<_, _, _>| {
+        match event {
+            burn::train::LearnerEvent::TrainEnd(result) => {
+                if let Some(metrics) = result.metrics.numeric.get("loss") {
+                    if !metrics.is_empty() {
+                        last_train_loss = metrics.last().unwrap().value;
+                    }
+                }
+            },
+            burn::train::LearnerEvent::ValidEnd(result) => {
+                if let Some(metrics) = result.metrics.numeric.get("loss") {
+                    if !metrics.is_empty() {
+                        last_valid_loss = metrics.last().unwrap().value;
+                        // Print perplexity after each validation
+                        let train_ppl = (last_train_loss as f64).exp();
+                        let valid_ppl = (last_valid_loss as f64).exp();
+                        println!("Train Loss: {:.6} (PPL: {:.2}), Valid Loss: {:.6} (PPL: {:.2})", 
+                                 last_train_loss, train_ppl, last_valid_loss, valid_ppl);
+                    }
+                }
+            },
+            _ => {}
+        }
+    };
+    
+    let model_trained = learner.with_callback(callback).fit(train_dataloader, valid_dataloader);
     let duration = start_time.elapsed();
+    
+    // Final perplexity values
+    let train_ppl = (last_train_loss as f64).exp();
+    let valid_ppl = (last_valid_loss as f64).exp();
     println!("Training completed in {:.2} seconds", duration.as_secs_f64());
+    println!("Final metrics - Train Loss: {:.6} (PPL: {:.2}), Valid Loss: {:.6} (PPL: {:.2})",
+             last_train_loss, train_ppl, last_valid_loss, valid_ppl);
     
     // Save the trained model
     let model_path = format!("{}/model_final.bin", artifact_dir);

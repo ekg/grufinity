@@ -647,10 +647,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Finalize metrics
         let epoch_loss = total_loss / batch_count as f32;
         self.metrics.update_batch_loss(epoch_loss);
+        
+        // Calculate perplexity from loss
+        let perplexity = (epoch_loss as f64).exp();
+        self.metrics.record_metric("perplexity", perplexity as f32);
 
         progress_bar.finish_with_message(format!(
-            "Epoch complete - Processed {} chunks, Avg loss: {:.6}",
-            batch_count, epoch_loss
+            "Epoch complete - Processed {} chunks, Avg loss: {:.6}, Perplexity: {:.2}",
+            batch_count, epoch_loss, perplexity
         ));
 
         epoch_loss
@@ -847,9 +851,13 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         }
 
         let avg_loss = total_loss / batch_count as f32;
+        
+        // Calculate perplexity from validation loss
+        let perplexity = (avg_loss as f64).exp();
+        
         progress_bar.finish_with_message(format!(
-            "Validation complete - Processed {} chunks, Avg loss: {:.6}",
-            batch_count, avg_loss
+            "Validation complete - Processed {} chunks, Avg loss: {:.6}, Perplexity: {:.2}",
+            batch_count, avg_loss, perplexity
         ));
 
         avg_loss
@@ -1052,9 +1060,13 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
             train_loss
         };
 
+        // Calculate perplexity values
+        let train_ppl = (train_loss as f64).exp();
+        let valid_ppl = (valid_loss as f64).exp();
+        
         println!(
-            "Epoch {}/{} - Train Loss: {:.6}, Valid Loss: {:.6}",
-            epoch, max_training_epochs, train_loss, valid_loss
+            "Epoch {}/{} - Train Loss: {:.6} (PPL: {:.2}), Valid Loss: {:.6} (PPL: {:.2})",
+            epoch, max_training_epochs, train_loss, train_ppl, valid_loss, valid_ppl
         );
 
         // Save best model
