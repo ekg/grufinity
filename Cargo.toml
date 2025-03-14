@@ -36,7 +36,6 @@ candle-fusion = ["candle", "fusion", "autodiff"]
 
 # Combined CUDA features - these are opt-in only
 cuda-full = ["cuda-jit", "fusion", "autodiff"]
-candle-cuda = ["candle", "burn/candle-cuda"]
 candle-cuda-full = ["candle", "candle-cuda", "fusion", "autodiff"]
 
 # Apple Metal support for Candle
