@@ -276,7 +276,7 @@ fn torch_cat_tokens<B: Backend>(
     let mut result = Tensor::<B, 2, Int>::zeros([batch_size, seq_len + 1], device);
     
     // Copy existing tokens - manually create the tensor by concatenating
-    let mut token_data = Vec::with_capacity(batch_size * (seq_len + 1));
+    let mut token_data: Vec<i32> = Vec::with_capacity(batch_size * (seq_len + 1));
     
     // Extract data from existing tokens and new token
     let tokens_data = tokens.to_data().into_vec().unwrap();
@@ -293,7 +293,7 @@ fn torch_cat_tokens<B: Backend>(
     }
     
     // Create new tensor from the collected data
-    result = Tensor::from_data(&*token_data, device).reshape([batch_size, seq_len + 1]);
+    result = Tensor::<B, 1, Int>::from_data(&*token_data, device).reshape::<2>([batch_size, seq_len + 1]);
     
     result
 }
@@ -327,7 +327,7 @@ fn sample_with_top_k<B: Backend>(
         
         // Simple argmax for deterministic sampling (temperature=0 case)
         if temperature == 0.0 {
-            return probs.argmax(1).to_dtype::<Int>().dtype::<Int>();
+            return probs.argmax(1).dtype::<Int>();
         }
         
         // Instead of multinomial, we'll use a simple sampling method
@@ -416,7 +416,8 @@ fn sample_with_top_k<B: Backend>(
     let final_idx = top_k_indices[selected_idx];
     
     // Return as a tensor
-    Tensor::<B, 1, Int>::from_data(&[final_idx], device)
+    let indices = vec![final_idx];
+    Tensor::<B, 1, Int>::from_data(&*indices, device)
 }
 
 // Generate text with chunking and hidden state passing
