@@ -272,9 +272,6 @@ fn torch_cat_tokens<B: Backend>(
     // Reshape new token to [batch_size, 1]
     let new_token = new_token.unsqueeze::<2>();
     
-    // Create a new tensor with room for the additional token
-    let mut result = Tensor::<B, 2, Int>::zeros([batch_size, seq_len + 1], device);
-    
     // Copy existing tokens - manually create the tensor by concatenating
     let mut token_data: Vec<i32> = Vec::with_capacity(batch_size * (seq_len + 1));
     
@@ -327,7 +324,10 @@ fn sample_with_top_k<B: Backend>(
         
         // Simple argmax for deterministic sampling (temperature=0 case)
         if temperature == 0.0 {
-            return probs.argmax(1).to_dtype::<Int>();
+            // Convert to Int tensor type without to_dtype 
+            // (which doesn't exist in this version of Burn)
+            let indices = probs.argmax(1).to_data().into_vec().unwrap();
+            return Tensor::<B, 1, Int>::from_data(&*indices, device);
         }
         
         // Instead of multinomial, we'll use a simple sampling method
