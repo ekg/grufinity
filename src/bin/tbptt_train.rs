@@ -86,6 +86,7 @@ fn main() {
     let mut data_path = "data/sample.txt".to_string();
     let mut artifact_dir = "tbptt_artifacts".to_string();
     let mut config_path = "".to_string();
+    let mut device_id: usize = 0; // Default to first GPU device
     
     // Token-based parameters (will be converted to chunks)
     let mut update_tokens: Option<usize> = None;
