@@ -151,12 +151,12 @@ fn locate_config_file(config_path: &mut String, model_path: &str) {
 }
 
 // Load model configuration with fallbacks
-fn load_model_config(config_path: &str, chunk_size: usize) -> MinGRULMConfig {
+fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) -> MinGRULMConfig {
     if !std::path::Path::new(config_path).exists() {
         println!("Config file not found at: {}", config_path);
         println!("Using default configuration instead");
         
-        return MinGRULMConfig::new(256, 1024)
+        return MinGRULMConfig::new(vocab_size, 1024)
             .with_depth(3)
             .with_ff_mult(3.0)
             .with_expansion_factor(1.5)
@@ -164,6 +164,33 @@ fn load_model_config(config_path: &str, chunk_size: usize) -> MinGRULMConfig {
     }
     
     println!("Attempting to load config from: {}", config_path);
+    
+    // Try to load and parse configuration manually first to check for missing fields
+    if let Ok(content) = std::fs::read_to_string(config_path) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if json.get("num_tokens").is_none() {
+                println!("Config file is missing 'num_tokens' field. Adding it with value: {}", vocab_size);
+                
+                // Create a modified config with the missing field
+                let mut modified_json = json.as_object().unwrap_or(&serde_json::Map::new()).clone();
+                modified_json.insert("num_tokens".to_string(), serde_json::Value::Number(vocab_size.into()));
+                
+                // Directly construct config from modified JSON
+                if let Ok(config_str) = serde_json::to_string(&modified_json) {
+                    if let Ok(mut config) = serde_json::from_str::<MinGRULMConfig>(&config_str) {
+                        println!("Successfully loaded model configuration with added num_tokens field");
+                        println!("Model dimensions: {}, layers: {}", config.dim(), config.depth());
+                        
+                        // Update chunk size to match CLI argument
+                        config = config.with_chunk_size(chunk_size);
+                        return config;
+                    }
+                }
+            }
+        }
+    }
+    
+    // If manual parsing failed, try normal loading
     match MinGRULMConfig::load(config_path) {
         Ok(mut config) => {
             println!("Successfully loaded model configuration");
@@ -177,7 +204,7 @@ fn load_model_config(config_path: &str, chunk_size: usize) -> MinGRULMConfig {
         Err(e) => {
             eprintln!("Error loading config file: {}", e);
             eprintln!("The file was found but could not be parsed");
-            println!("Using default configuration");
+            println!("Using default configuration with vocab size: {}", vocab_size);
             
             // Try to read the file contents to help debug
             match std::fs::read_to_string(config_path) {
@@ -196,7 +223,7 @@ fn load_model_config(config_path: &str, chunk_size: usize) -> MinGRULMConfig {
             }
             
             // Create a default config
-            MinGRULMConfig::new(256, 1024)
+            MinGRULMConfig::new(vocab_size, 1024)
                 .with_depth(3)
                 .with_ff_mult(3.0)
                 .with_expansion_factor(1.5)
@@ -657,7 +684,7 @@ fn main() {
     locate_config_file(&mut config_path, &model_path);
     
     // Load model configuration
-    let config = load_model_config(&config_path, chunk_size);
+    let config = load_model_config(&config_path, chunk_size, vocab.size());
     
     // Initialize and load model
     let model = initialize_model::<RawBackend>(&config, &model_path, &device);
