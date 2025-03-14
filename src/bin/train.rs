@@ -94,7 +94,7 @@ fn main() {
     };
     
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
-    let device = {
+    let mut device = {
         use burn::backend::candle::CandleDevice;
         device_initialized = true;
         println!("Using Candle CUDA device");
@@ -171,7 +171,7 @@ fn main() {
         {
             use burn::backend::wgpu::WgpuDevice;
             device = WgpuDevice::default();
-            device_initialized = true;
+            _device_initialized = true;
             println!("Using WGPU device (fallback)");
         }
         
