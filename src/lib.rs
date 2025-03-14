@@ -65,13 +65,21 @@ pub type RawBackend = Candle<f32>;
 pub type BackendDevice = CandleDevice;
 
 // WGPU backend (third priority if enabled)
-#[cfg(all(feature = "wgpu", feature = "autodiff", not(any(feature = "cuda-jit", feature = "candle-cuda", feature = "candle-metal"))))]
+#[cfg(all(feature = "wgpu", feature = "autodiff", 
+          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
 pub type BackendWithAutodiff = Autodiff<Wgpu<f32, i32>>;
-#[cfg(all(feature = "wgpu", not(feature = "autodiff"), not(any(feature = "cuda-jit", feature = "candle-cuda", feature = "candle-metal"))))]
+#[cfg(all(feature = "wgpu", not(feature = "autodiff"), 
+          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
 pub type BackendWithAutodiff = Wgpu<f32, i32>;
-#[cfg(all(feature = "wgpu", not(any(feature = "cuda-jit", feature = "candle-cuda", feature = "candle-metal"))))]
+#[cfg(all(feature = "wgpu", 
+          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
 pub type RawBackend = Wgpu<f32, i32>;
-#[cfg(all(feature = "wgpu", not(any(feature = "cuda-jit", feature = "candle-cuda", feature = "candle-metal"))))]
+#[cfg(all(feature = "wgpu", 
+          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
 pub type BackendDevice = WgpuDevice;
 
 // Candle Metal backend (third priority)

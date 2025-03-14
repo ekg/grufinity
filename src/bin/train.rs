@@ -107,10 +107,14 @@ fn main() {
         println!("Using Candle Metal device");
     }
     
-    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"), not(all(feature = "candle", feature = "candle-cuda"))))]
+    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"),
+              not(feature = "candle"), not(feature = "candle-cuda"),
+              not(feature = "candle-metal")))]
     {
         use burn::backend::wgpu::WgpuDevice;
         device = WgpuDevice::default();
+        _device_initialized = true;
+        println!("Using WGPU device");
     }
     
     #[cfg(all(feature = "candle", not(any(feature = "cuda-jit", feature = "wgpu"))))]
