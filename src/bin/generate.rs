@@ -39,69 +39,59 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
     let mut device_initialized = false;
     
-    // Use appropriate device type for each backend
+    // Create a device based on the backend type
+    let device = B::Device::default();
+    
+    // Log the device type being used based on enabled features
     #[cfg(feature = "cuda-jit")]
-    let device = {
+    {
         use burn::backend::cuda_jit::CudaDevice;
         device_initialized = true;
         println!("Using CUDA JIT device {}", device_id);
-        CudaDevice::new(device_id)
-    };
+    }
     
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
-    let device = {
-        use burn::backend::candle::CandleDevice;
+    {
         device_initialized = true;
         println!("Using Candle CUDA device {}", device_id);
-        CandleDevice::cuda(device_id)
-    };
+    }
     
     #[cfg(all(feature = "candle-metal", not(feature = "cuda-jit"), 
               not(all(feature = "candle", feature = "candle-cuda"))))]
-    let device = {
-        use burn::backend::candle::CandleDevice;
+    {
         device_initialized = true;
         println!("Using Candle Metal device {}", device_id);
-        CandleDevice::metal(device_id)
-    };
+    }
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"),
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
               not(feature = "candle")))]
-    let device = {
-        use burn::backend::wgpu::WgpuDevice;
+    {
         device_initialized = true;
         println!("Using WGPU device");
-        WgpuDevice::default()
-    };
+    }
     
     #[cfg(all(feature = "candle", not(feature = "candle-cuda"), not(feature = "cuda-jit"), 
               not(feature = "wgpu"), not(feature = "candle-metal")))]
-    let device = {
-        use burn::backend::candle::CandleDevice;
+    {
         device_initialized = true;
         println!("Using Candle CPU device");
-        CandleDevice::cpu()
-    };
+    }
     
     #[cfg(all(feature = "ndarray", not(feature = "cuda-jit"), not(feature = "wgpu"), 
               not(feature = "candle"), not(feature = "candle-metal"), not(feature = "candle-cuda")))]
-    let device = {
-        use burn::backend::ndarray::NdArrayDevice;
+    {
         device_initialized = true;
         println!("Using NdArray device");
-        NdArrayDevice
-    };
+    }
     
     #[cfg(all(feature = "tch", not(feature = "cuda-jit"), not(feature = "wgpu"), 
               not(feature = "candle"), not(feature = "ndarray"), not(feature = "candle-metal"), 
               not(feature = "candle-cuda")))]
-    let device = {
-        use burn::backend::libtorch::LibTorchDevice;
+    {
         device_initialized = true;
         println!("Using LibTorch CPU device");
-        LibTorchDevice::Cpu
-    };
+    }
     
     // Error if no backend feature is enabled
     #[cfg(not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle", 
@@ -265,7 +255,7 @@ fn generate_text<B: Backend>(
             let new_tokens = generated_tokens.clone()
                 .slice([0..1, seed_tokens.len()..generated_tokens.dims()[1]]);
             
-            let reshaped = new_tokens.reshape([new_tokens.dims()[0] * new_tokens.dims()[1]]);
+            let reshaped = new_tokens.clone().reshape([new_tokens.dims()[0] * new_tokens.dims()[1]]);
             let values: Vec<i32> = reshaped.to_data().into_vec()
                 .expect("Failed to convert tensor data to vector");
             let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
