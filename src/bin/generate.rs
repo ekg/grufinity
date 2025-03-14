@@ -273,7 +273,7 @@ fn torch_cat_tokens<B: Backend>(
     let new_token = new_token.unsqueeze::<2>();
     
     // Create a new tensor with room for the additional token
-    let mut result = Tensor::zeros([batch_size, seq_len + 1], device).to_dtype::<Int>();
+    let mut result = Tensor::<B, 2, Int>::zeros([batch_size, seq_len + 1], device);
     
     // Copy existing tokens - manually create the tensor by concatenating
     let mut token_data = Vec::with_capacity(batch_size * (seq_len + 1));
@@ -293,7 +293,7 @@ fn torch_cat_tokens<B: Backend>(
     }
     
     // Create new tensor from the collected data
-    result = Tensor::from_data(&token_data, device).reshape([batch_size, seq_len + 1]);
+    result = Tensor::from_data(&*token_data, device).reshape([batch_size, seq_len + 1]);
     
     result
 }
@@ -327,7 +327,7 @@ fn sample_with_top_k<B: Backend>(
         
         // Simple argmax for deterministic sampling (temperature=0 case)
         if temperature == 0.0 {
-            return probs.argmax(1).to_dtype::<Int>();
+            return probs.argmax(1).to_dtype::<Int>().dtype::<Int>();
         }
         
         // Instead of multinomial, we'll use a simple sampling method
@@ -352,7 +352,7 @@ fn sample_with_top_k<B: Backend>(
         
         // Create a tensor with the selected index
         let indices = vec![selected_idx as i32];
-        return Tensor::from_data(&indices, device);
+        return Tensor::<B, 1, Int>::from_data(&*indices, device);
     }
     
     // Otherwise, perform top-k sampling
@@ -361,7 +361,7 @@ fn sample_with_top_k<B: Backend>(
     // Since sorting with descending option isn't available, we'll use a different approach
     
     // We'll find the top k values ourselves
-    let logits_vec = scaled_logits.to_data().into_vec().unwrap();
+    let logits_vec: Vec<f32> = scaled_logits.to_data().into_vec().unwrap();
     let mut top_k_indices = Vec::with_capacity(k);
     let mut top_k_values = Vec::with_capacity(k);
     
@@ -416,7 +416,7 @@ fn sample_with_top_k<B: Backend>(
     let final_idx = top_k_indices[selected_idx];
     
     // Return as a tensor
-    Tensor::from_data(&[final_idx], device)
+    Tensor::<B, 1, Int>::from_data(&[final_idx], device)
 }
 
 // Generate text with chunking and hidden state passing
