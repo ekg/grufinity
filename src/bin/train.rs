@@ -80,10 +80,79 @@ fn main() {
     use_configured_backend!();
     
     // Get the device from the macro
-    #[allow(unused_assignments)]
-    let mut device: grufinity::BackendDevice;
+    // Initialize device based on enabled features - each cfg block has its own device variable
     #[allow(unused_assignments)]
     let mut device_initialized = false;
+    
+    // Use appropriate device type for each backend
+    #[cfg(feature = "cuda-jit")]
+    let device = {
+        use burn::backend::cuda_jit::CudaDevice;
+        device_initialized = true;
+        println!("Using CUDA JIT device");
+        CudaDevice::new(0)
+    };
+    
+    #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
+    let device = {
+        use burn::backend::candle::CandleDevice;
+        device_initialized = true;
+        println!("Using Candle CUDA device");
+        CandleDevice::cuda(0)
+    };
+    
+    #[cfg(all(feature = "candle-metal", not(feature = "cuda-jit"), 
+              not(all(feature = "candle", feature = "candle-cuda"))))]
+    let device = {
+        use burn::backend::candle::CandleDevice;
+        device_initialized = true;
+        println!("Using Candle Metal device");
+        CandleDevice::metal(0)
+    };
+    
+    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"),
+              not(feature = "candle-cuda"), not(feature = "candle-metal"),
+              not(feature = "candle")))]
+    let device = {
+        use burn::backend::wgpu::WgpuDevice;
+        device_initialized = true;
+        println!("Using WGPU device");
+        WgpuDevice::default()
+    };
+    
+    #[cfg(all(feature = "candle", not(feature = "candle-cuda"), not(feature = "cuda-jit"), 
+              not(feature = "wgpu"), not(feature = "candle-metal")))]
+    let device = {
+        use burn::backend::candle::CandleDevice;
+        device_initialized = true;
+        println!("Using Candle CPU device");
+        CandleDevice::cpu()
+    };
+    
+    #[cfg(all(feature = "ndarray", not(feature = "cuda-jit"), not(feature = "wgpu"), 
+              not(feature = "candle"), not(feature = "candle-metal"), not(feature = "candle-cuda")))]
+    let device = {
+        use burn::backend::ndarray::NdArrayDevice;
+        device_initialized = true;
+        println!("Using NdArray device");
+        NdArrayDevice
+    };
+    
+    #[cfg(all(feature = "tch", not(feature = "cuda-jit"), not(feature = "wgpu"), 
+              not(feature = "candle"), not(feature = "ndarray"), not(feature = "candle-metal"), 
+              not(feature = "candle-cuda")))]
+    let device = {
+        use burn::backend::libtorch::LibTorchDevice;
+        device_initialized = true;
+        println!("Using LibTorch CPU device");
+        LibTorchDevice::Cpu
+    };
+    
+    // Error if no backend feature is enabled
+    #[cfg(not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle", 
+                  feature = "ndarray", feature = "tch", feature = "candle-metal", 
+                  feature = "candle-cuda")))]
+    compile_error!("No backend feature was enabled. Please enable at least one: cuda-jit, wgpu, candle, ndarray, etc.");
     
     #[cfg(feature = "cuda-jit")]
     let device = {
