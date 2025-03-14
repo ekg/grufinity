@@ -85,7 +85,7 @@ fn main() {
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
     {
         use burn::backend::candle::CandleDevice;
-        device = CandleDevice::Cuda(0);
+        device = CandleDevice::cuda(0);
         device_initialized = true;
         println!("Using Candle CUDA device");
     }
