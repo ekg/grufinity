@@ -676,7 +676,7 @@ fn main() {
         CudaDevice::new(0) // Use first CUDA device with JIT
     };
     
-    #[cfg(all(feature = "candle", feature = "candle-cuda", not(feature = "cuda-jit")))]
+    #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
     let device = {
         use burn::backend::candle::CandleDevice;
         device_initialized = true;
