@@ -159,42 +159,50 @@ macro_rules! use_configured_backend {
             println!("Using Candle CUDA backend");
         }
         
-        #[cfg(all(feature = "candle-metal", feature = "fusion", feature = "autodiff", not(any(feature = "cuda-jit", all(feature = "candle", feature = "candle-cuda")))))]
+        #[cfg(all(feature = "candle-metal", feature = "fusion", feature = "autodiff", 
+                  not(feature = "cuda-jit"), not(feature = "candle-cuda")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-metal";
             println!("Using Candle Metal backend with fusion optimization");
         }
         
-        #[cfg(all(feature = "candle-metal", feature = "autodiff", not(feature = "fusion"), not(any(feature = "cuda-jit", all(feature = "candle", feature = "candle-cuda")))))]
+        #[cfg(all(feature = "candle-metal", feature = "autodiff", not(feature = "fusion"), 
+                  not(feature = "cuda-jit"), not(feature = "candle-cuda")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-metal";
             println!("Using Candle Metal backend");
         }
         
-        #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff", not(any(feature = "cuda-jit", all(feature = "candle", feature = "candle-cuda")))))]
+        #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff", 
+                  not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "wgpu-fusion";
             println!("Using WGPU backend with fusion optimization");
         }
         
-        #[cfg(all(feature = "wgpu", feature = "autodiff", not(feature = "fusion"), not(any(feature = "cuda-jit", all(feature = "candle", feature = "candle-cuda")))))]
+        #[cfg(all(feature = "wgpu", feature = "autodiff", not(feature = "fusion"), 
+                  not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "wgpu";
             println!("Using WGPU backend");
         }
         
-        #[cfg(all(feature = "candle", feature = "fusion", feature = "autodiff", not(any(feature = "cuda-jit", feature = "wgpu"))))]
+        #[cfg(all(feature = "candle", feature = "fusion", feature = "autodiff", 
+                  not(feature = "cuda-jit"), not(feature = "candle-cuda"), 
+                  not(feature = "candle-metal"), not(feature = "wgpu")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-fusion";
             println!("Using Candle CPU backend with fusion optimization");
         }
         
-        #[cfg(all(feature = "candle", feature = "autodiff", not(feature = "fusion"), not(any(feature = "cuda-jit", feature = "wgpu"))))]
+        #[cfg(all(feature = "candle", feature = "autodiff", not(feature = "fusion"), 
+                  not(feature = "cuda-jit"), not(feature = "candle-cuda"),
+                  not(feature = "candle-metal"), not(feature = "wgpu")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle";
