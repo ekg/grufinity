@@ -52,10 +52,6 @@ name = "generate"
 path = "src/bin/generate.rs"
 
 [[bin]]
-name = "simple_generate"
-path = "src/bin/simple_generate.rs"
-
-[[bin]]
 name = "tbptt_train"
 path = "src/bin/tbptt_train.rs"
 
