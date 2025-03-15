@@ -44,10 +44,6 @@ candle-metal = ["candle", "burn/metal"]
 candle-metal-full = ["candle", "burn/metal", "fusion", "autodiff"]
 
 [[bin]]
-name = "train"
-path = "src/bin/train.rs"
-
-[[bin]]
 name = "generate"
 path = "src/bin/generate.rs"
 
