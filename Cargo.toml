@@ -48,6 +48,6 @@ name = "generate"
 path = "src/bin/generate.rs"
 
 [[bin]]
-name = "tbptt_train"
-path = "src/bin/tbptt_train.rs"
+name = "train"
+path = "src/bin/train.rs"
 
