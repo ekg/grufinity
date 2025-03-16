@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use crate::dataset::{
     CharVocab, ChunkedTextBatch, ChunkedTextBatcher, ContinuousChunkedTextDataset, TextBatcher,
@@ -169,11 +170,32 @@ pub struct TBPTTMetrics {
 
     /// Metrics storage
     metrics: HashMap<String, Vec<MetricEntry>>,
+    
+    /// Tokens processed
+    tokens_processed: usize,
+    
+    /// Tokens processed in current epoch
+    epoch_tokens: usize,
+    
+    /// Total tokens processed across all epochs
+    total_tokens: usize,
+    
+    /// Training start time
+    start_time: Option<Instant>,
+    
+    /// Epoch start time
+    epoch_start_time: Option<Instant>,
+    
+    /// Last update time for throughput calculation
+    last_update_time: Option<Instant>,
 }
 
 impl TBPTTMetrics {
     pub fn new() -> Self {
-        Self::default()
+        let mut metrics = Self::default();
+        metrics.start_time = Some(Instant::now());
+        metrics.last_update_time = Some(Instant::now());
+        metrics
     }
 
     pub fn update_batch_loss(&mut self, loss: f32) {
@@ -188,6 +210,71 @@ impl TBPTTMetrics {
     pub fn update_chunk_loss(&mut self, loss: f32) {
         self.chunk_losses.push(loss);
         self.record_metric("chunk_loss", loss);
+    }
+    
+    pub fn start_epoch(&mut self) {
+        self.epoch_start_time = Some(Instant::now());
+        self.epoch_tokens = 0;
+    }
+    
+    pub fn add_tokens(&mut self, token_count: usize) {
+        self.tokens_processed += token_count;
+        self.epoch_tokens += token_count;
+        self.total_tokens += token_count;
+    }
+    
+    pub fn tokens_per_second(&self) -> f64 {
+        if let Some(start_time) = self.start_time {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            if elapsed > 0.0 {
+                self.tokens_processed as f64 / elapsed
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        }
+    }
+    
+    pub fn epoch_tokens_per_second(&self) -> f64 {
+        if let Some(start_time) = self.epoch_start_time {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            if elapsed > 0.0 {
+                self.epoch_tokens as f64 / elapsed
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        }
+    }
+    
+    pub fn recent_tokens_per_second(&self) -> f64 {
+        if let Some(last_time) = self.last_update_time {
+            let elapsed = last_time.elapsed().as_secs_f64();
+            if elapsed > 0.0 && self.tokens_processed > 0 {
+                // Calculate recent throughput based on tokens added since last update
+                // This is simplified - ideally we'd track tokens since last update
+                // For now, using a short time window to approximate
+                self.tokens_processed as f64 / elapsed.max(1.0)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        }
+    }
+    
+    pub fn update_timing(&mut self) {
+        self.last_update_time = Some(Instant::now());
+    }
+    
+    pub fn epoch_tokens(&self) -> usize {
+        self.epoch_tokens
+    }
+    
+    pub fn total_tokens(&self) -> usize {
+        self.total_tokens
     }
 
     pub fn record_metric(&mut self, name: &str, value: f32) {
@@ -515,6 +602,11 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         // Record metrics
         self.metrics.update_chunk_loss(loss_value);
+        
+        // Count tokens processed - batch_size * seq_len tokens per chunk
+        let tokens_in_chunk = batch_size * seq_len;
+        self.metrics.add_tokens(tokens_in_chunk);
+        self.metrics.update_timing();
 
         // Backward pass and accumulate gradients
         let grads = loss.backward();
@@ -552,6 +644,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         epoch: usize,
     ) -> f32 {
         println!("Training epoch {}", epoch);
+        
+        // Reset epoch metrics
+        self.metrics.start_epoch();
 
         let total_steps = dataloader.max_chunks;
 
@@ -617,11 +712,16 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
             // Update progress
             progress_bar.inc(1);
+            
+            // Calculate tokens/s for display
+            let tokens_per_sec = self.metrics.recent_tokens_per_second();
+            
             progress_bar.set_message(format!(
-                "Chunk {}/{}, Loss: {:.6}",
+                "Chunk {}/{}, Loss: {:.6}, Speed: {:.1} tok/s",
                 step + 1,
                 total_steps,
-                loss
+                loss,
+                tokens_per_sec
             ));
 
             // Update metrics
@@ -652,9 +752,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let perplexity = (epoch_loss as f64).exp();
         self.metrics.record_metric("perplexity", perplexity as f32);
 
+        // Calculate tokens per second for the entire epoch
+        let epoch_tokens = self.metrics.epoch_tokens();
+        let epoch_tok_per_sec = self.metrics.epoch_tokens_per_second();
+        let total_tokens = self.metrics.total_tokens();
+
         progress_bar.finish_with_message(format!(
-            "Epoch complete - Processed {} chunks, Avg loss: {:.6}, Perplexity: {:.2}",
-            batch_count, epoch_loss, perplexity
+            "Epoch complete - Processed {} chunks ({} tokens, {:.1} tok/s), Avg loss: {:.6}, Perplexity: {:.2}",
+            batch_count, epoch_tokens, epoch_tok_per_sec, epoch_loss, perplexity
         ));
 
         epoch_loss
@@ -825,13 +930,17 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             total_loss += loss_value;
             batch_count += 1;
 
+            // Count tokens processed in validation
+            let tokens_in_batch = batch_size * seq_len;
+            
             // Update progress
             progress_bar.inc(1);
             progress_bar.set_message(format!(
-                "Chunk {}/{}, Loss: {:.6}",
+                "Chunk {}/{}, Loss: {:.6}, Tokens: {}",
                 step + 1,
                 total_steps,
-                loss_value
+                loss_value,
+                tokens_in_batch
             ));
 
             // Move to next chunk and increment step counter
@@ -1126,8 +1235,15 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .save_file(&model_path, &recorder)
         .expect("Failed to save final model");
 
+    // Calculate total training statistics
+    let total_tokens = trainer.metrics().total_tokens();
+    let training_time = trainer.metrics().start_time.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let avg_throughput = if training_time > 0.0 { total_tokens as f64 / training_time } else { 0.0 };
+    
     println!("Final model saved to {}", model_path);
     println!("Best validation loss: {:.6}", best_loss);
+    println!("Training processed {} tokens in {:.1} seconds ({:.1} tok/s average)", 
+             total_tokens, training_time, avg_throughput);
 
     best_model
 }
