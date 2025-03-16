@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-burn = { git = "https://github.com/Tracel-AI/burn", rev = "5e63b69d30552939a05c60a01d39b9a61c03da78", default-features = false, features = ["autodiff", "autotune", "train", "metrics"] }
+burn = { git = "https://github.com/Tracel-AI/burn", rev = "5e63b69d30552939a05c60a01d39b9a61c03da78", default-features = false, features = ["autodiff", "autotune", "train", "metrics", "wgpu", "fusion", "candle", "tch", "ndarray", "candle-cuda", "cuda-jit", "metal"] }
 rand = "0.8.5"
 indicatif = "0.17.7"
 bincode = "=2.0.0-rc.3"
