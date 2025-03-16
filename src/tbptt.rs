@@ -180,6 +180,9 @@ pub struct TBPTTMetrics {
     /// Total tokens processed across all epochs
     total_tokens: usize,
     
+    /// Tokens processed since last timing update (for recent throughput)
+    recent_tokens: usize,
+    
     /// Training start time
     start_time: Option<Instant>,
     
@@ -195,6 +198,7 @@ impl TBPTTMetrics {
         let mut metrics = Self::default();
         metrics.start_time = Some(Instant::now());
         metrics.last_update_time = Some(Instant::now());
+        metrics.recent_tokens = 0;
         metrics
     }
 
@@ -221,6 +225,7 @@ impl TBPTTMetrics {
         self.tokens_processed += token_count;
         self.epoch_tokens += token_count;
         self.total_tokens += token_count;
+        self.recent_tokens += token_count;
     }
     
     pub fn tokens_per_second(&self) -> f64 {
@@ -252,11 +257,9 @@ impl TBPTTMetrics {
     pub fn recent_tokens_per_second(&self) -> f64 {
         if let Some(last_time) = self.last_update_time {
             let elapsed = last_time.elapsed().as_secs_f64();
-            if elapsed > 0.0 && self.tokens_processed > 0 {
-                // Calculate recent throughput based on tokens added since last update
-                // This is simplified - ideally we'd track tokens since last update
-                // For now, using a short time window to approximate
-                self.tokens_processed as f64 / elapsed.max(1.0)
+            if elapsed > 0.0 && self.recent_tokens > 0 {
+                // Calculate throughput based on tokens added since last timing update
+                self.recent_tokens as f64 / elapsed
             } else {
                 0.0
             }
@@ -266,7 +269,10 @@ impl TBPTTMetrics {
     }
     
     pub fn update_timing(&mut self) {
-        self.last_update_time = Some(Instant::now());
+        // Record the tokens processed since last update, then reset counter
+        let now = Instant::now();
+        self.last_update_time = Some(now);
+        self.recent_tokens = 0;
     }
     
     pub fn epoch_tokens(&self) -> usize {
