@@ -22,9 +22,9 @@ pub use burn::{
 // Import backend types at the crate level
 // Only import CUDA types when explicitly requested
 #[cfg(feature = "cuda")]
-pub use burn::backend::CudaJit;
+pub use burn::backend::Cuda;
 #[cfg(feature = "cuda")]
-pub use burn::backend::cuda_jit::CudaDevice as CudaJitDevice;
+pub use burn::backend::cuda::CudaDevice;
 
 #[cfg(feature = "wgpu")]
 pub use burn::backend::wgpu::{Wgpu, WgpuDevice};
@@ -44,15 +44,15 @@ pub use burn::backend::autodiff::Autodiff;
 // Define the backend types conditionally - only one will be active at a time
 // based on the feature flags and their priority
 
-// CUDA-JIT backend (highest priority)
+// CUDA backend (highest priority)
 #[cfg(all(feature = "cuda", feature = "autodiff"))]
-pub type BackendWithAutodiff = Autodiff<CudaJit<f32>>;
+pub type BackendWithAutodiff = Autodiff<Cuda<f32>>;
 #[cfg(all(feature = "cuda", not(feature = "autodiff")))]
-pub type BackendWithAutodiff = CudaJit<f32>;
+pub type BackendWithAutodiff = Cuda<f32>;
 #[cfg(feature = "cuda")]
-pub type RawBackend = CudaJit<f32>;
+pub type RawBackend = Cuda<f32>;
 #[cfg(feature = "cuda")]
-pub type BackendDevice = CudaJitDevice;
+pub type BackendDevice = CudaDevice;
 
 // Candle CUDA backend (second priority)
 #[cfg(all(feature = "candle-cuda", feature = "autodiff", not(feature = "cuda")))]
@@ -135,14 +135,14 @@ macro_rules! use_configured_backend {
         {
             // For reporting
             const BACKEND_NAME: &str = "cuda";
-            println!("Using CUDA JIT backend with fusion optimization");
+            println!("Using CUDA backend with fusion optimization");
         }
         
         #[cfg(all(feature = "cuda", feature = "autodiff", not(feature = "fusion")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "cuda-basic";
-            println!("Using CUDA JIT backend");
+            println!("Using CUDA backend");
         }
         
         #[cfg(all(feature = "candle-cuda", feature = "fusion", feature = "autodiff", not(feature = "cuda")))]

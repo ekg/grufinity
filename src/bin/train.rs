@@ -682,10 +682,10 @@ fn main() {
     
     #[cfg(feature = "cuda")]
     let device = {
-        use burn::backend::cuda_jit::CudaDevice;
+        use burn::backend::cuda::CudaDevice;
         device_initialized = true;
-        println!("Using CUDA JIT device {}", device_id);
-        CudaDevice::new(device_id) // Use specified CUDA device with JIT
+        println!("Using CUDA device {}", device_id);
+        CudaDevice::new(device_id) // Use specified CUDA device
     };
     
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]

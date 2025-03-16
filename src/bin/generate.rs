@@ -50,7 +50,7 @@ fn initialize_device<B: Backend>(_device_id: usize) -> B::Device {
     #[cfg(feature = "cuda")]
     {
         device_initialized = true;
-        println!("Using CUDA JIT device {}", device_id);
+        println!("Using CUDA device {}", device_id);
     }
     
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
