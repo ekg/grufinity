@@ -948,20 +948,13 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // Count tokens processed in validation
             let tokens_in_batch = batch_size * seq_len;
             
-            // Track validation tokens like training tokens
-            let mut validation_metrics = &mut TBPTTMetrics::new();
-            validation_metrics.add_tokens(tokens_in_batch);
-            let val_tokens_per_sec = validation_metrics.recent_tokens_per_second();
-            validation_metrics.update_timing();
-            
             // Update progress
             progress_bar.inc(1);
             progress_bar.set_message(format!(
-                "Chunk {}/{}, Loss: {:.6}, Speed: {:.1} tok/s",
+                "Chunk {}/{}, Loss: {:.6}",
                 step + 1,
                 total_steps,
-                loss_value,
-                val_tokens_per_sec
+                loss_value
             ));
 
             // Move to next chunk and increment step counter
@@ -1258,13 +1251,13 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 
     // Calculate total training statistics
     let total_tokens = trainer.metrics().total_tokens();
-    let training_time = trainer.metrics().start_time.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
-    let avg_throughput = if training_time > 0.0 { total_tokens as f64 / training_time } else { 0.0 };
+    let total_time = trainer.metrics().start_time.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let avg_throughput = if total_time > 0.0 { total_tokens as f64 / total_time } else { 0.0 };
     
     println!("Final model saved to {}", model_path);
     println!("Best validation loss: {:.6}", best_loss);
-    println!("Training processed {} tokens in {:.1} seconds ({:.1} tok/s average)", 
-             total_tokens, training_time, avg_throughput);
+    println!("Training processed {} tokens in {:.1} seconds ({:.1} tok/s average, including validation)", 
+             total_tokens, total_time, avg_throughput);
 
     best_model
 }
