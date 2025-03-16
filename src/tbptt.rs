@@ -261,7 +261,15 @@ impl TBPTTMetrics {
                 // Calculate throughput based on tokens added since last timing update
                 self.recent_tokens as f64 / elapsed
             } else {
-                0.0
+                // Fall back to overall rate if no recent data
+                if self.tokens_processed > 0 {
+                    let total_elapsed = self.start_time
+                        .map(|t| t.elapsed().as_secs_f64())
+                        .unwrap_or(1.0);
+                    self.tokens_processed as f64 / total_elapsed.max(0.001)
+                } else {
+                    0.0
+                }
             }
         } else {
             0.0
@@ -270,8 +278,7 @@ impl TBPTTMetrics {
     
     pub fn update_timing(&mut self) {
         // Record the tokens processed since last update, then reset counter
-        let now = Instant::now();
-        self.last_update_time = Some(now);
+        self.last_update_time = Some(Instant::now());
         self.recent_tokens = 0;
     }
     
@@ -612,7 +619,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Count tokens processed - batch_size * seq_len tokens per chunk
         let tokens_in_chunk = batch_size * seq_len;
         self.metrics.add_tokens(tokens_in_chunk);
-        self.metrics.update_timing();
+        
+        // Don't reset the counter until we're about to display the rate
 
         // Backward pass and accumulate gradients
         let grads = loss.backward();
@@ -719,8 +727,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // Update progress
             progress_bar.inc(1);
             
-            // Calculate tokens/s for display
+            // Calculate tokens/s for display and reset counter for next time
             let tokens_per_sec = self.metrics.recent_tokens_per_second();
+            self.metrics.update_timing();
             
             progress_bar.set_message(format!(
                 "Chunk {}/{}, Loss: {:.6}, Speed: {:.1} tok/s",
@@ -939,14 +948,20 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // Count tokens processed in validation
             let tokens_in_batch = batch_size * seq_len;
             
+            // Track validation tokens like training tokens
+            let mut validation_metrics = &mut TBPTTMetrics::new();
+            validation_metrics.add_tokens(tokens_in_batch);
+            let val_tokens_per_sec = validation_metrics.recent_tokens_per_second();
+            validation_metrics.update_timing();
+            
             // Update progress
             progress_bar.inc(1);
             progress_bar.set_message(format!(
-                "Chunk {}/{}, Loss: {:.6}, Tokens: {}",
+                "Chunk {}/{}, Loss: {:.6}, Speed: {:.1} tok/s",
                 step + 1,
                 total_steps,
                 loss_value,
-                tokens_in_batch
+                val_tokens_per_sec
             ));
 
             // Move to next chunk and increment step counter
