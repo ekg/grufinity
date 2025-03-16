@@ -45,26 +45,26 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     let device = B::Device::default();
     
     // Log the device type being used based on enabled features
-    #[cfg(feature = "cuda-jit")]
+    #[cfg(feature = "cuda")]
     {
         device_initialized = true;
         println!("Using CUDA JIT device {}", device_id);
     }
     
-    #[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
+    #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
     {
         device_initialized = true;
         println!("Using Candle CUDA device {}", device_id);
     }
     
-    #[cfg(all(feature = "candle-metal", not(feature = "cuda-jit"), 
+    #[cfg(all(feature = "candle-metal", not(feature = "cuda"), 
               not(all(feature = "candle", feature = "candle-cuda"))))]
     {
         device_initialized = true;
         println!("Using Candle Metal device {}", device_id);
     }
     
-    #[cfg(all(feature = "wgpu", not(feature = "cuda-jit"),
+    #[cfg(all(feature = "wgpu", not(feature = "cuda"),
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
               not(feature = "candle")))]
     {
@@ -72,21 +72,21 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
         println!("Using WGPU device");
     }
     
-    #[cfg(all(feature = "candle", not(feature = "candle-cuda"), not(feature = "cuda-jit"), 
+    #[cfg(all(feature = "candle", not(feature = "candle-cuda"), not(feature = "cuda"), 
               not(feature = "wgpu"), not(feature = "candle-metal")))]
     {
         device_initialized = true;
         println!("Using Candle CPU device");
     }
     
-    #[cfg(all(feature = "ndarray", not(feature = "cuda-jit"), not(feature = "wgpu"), 
+    #[cfg(all(feature = "ndarray", not(feature = "cuda"), not(feature = "wgpu"), 
               not(feature = "candle"), not(feature = "candle-metal"), not(feature = "candle-cuda")))]
     {
         device_initialized = true;
         println!("Using NdArray device");
     }
     
-    #[cfg(all(feature = "tch", not(feature = "cuda-jit"), not(feature = "wgpu"), 
+    #[cfg(all(feature = "tch", not(feature = "cuda"), not(feature = "wgpu"), 
               not(feature = "candle"), not(feature = "ndarray"), not(feature = "candle-metal"), 
               not(feature = "candle-cuda")))]
     {
@@ -95,10 +95,10 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     }
     
     // Error if no backend feature is enabled
-    #[cfg(not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle", 
+    #[cfg(not(any(feature = "cuda", feature = "wgpu", feature = "candle", 
                   feature = "ndarray", feature = "tch", feature = "candle-metal", 
                   feature = "candle-cuda")))]
-    compile_error!("No backend feature was enabled. Please enable at least one: cuda-jit, wgpu, candle, ndarray, etc.");
+    compile_error!("No backend feature was enabled. Please enable at least one: cuda, wgpu, candle, ndarray, etc.");
     
     if !device_initialized {
         println!("WARNING: No device was properly initialized. Using fallback if available.");

@@ -21,9 +21,9 @@ pub use burn::{
 
 // Import backend types at the crate level
 // Only import CUDA types when explicitly requested
-#[cfg(feature = "cuda-jit")]
+#[cfg(feature = "cuda")]
 pub use burn::backend::CudaJit;
-#[cfg(feature = "cuda-jit")]
+#[cfg(feature = "cuda")]
 pub use burn::backend::cuda_jit::CudaDevice as CudaJitDevice;
 
 #[cfg(feature = "wgpu")]
@@ -45,85 +45,85 @@ pub use burn::backend::autodiff::Autodiff;
 // based on the feature flags and their priority
 
 // CUDA-JIT backend (highest priority)
-#[cfg(all(feature = "cuda-jit", feature = "autodiff"))]
+#[cfg(all(feature = "cuda", feature = "autodiff"))]
 pub type BackendWithAutodiff = Autodiff<CudaJit<f32>>;
-#[cfg(all(feature = "cuda-jit", not(feature = "autodiff")))]
+#[cfg(all(feature = "cuda", not(feature = "autodiff")))]
 pub type BackendWithAutodiff = CudaJit<f32>;
-#[cfg(feature = "cuda-jit")]
+#[cfg(feature = "cuda")]
 pub type RawBackend = CudaJit<f32>;
-#[cfg(feature = "cuda-jit")]
+#[cfg(feature = "cuda")]
 pub type BackendDevice = CudaJitDevice;
 
 // Candle CUDA backend (second priority)
-#[cfg(all(feature = "candle-cuda", feature = "autodiff", not(feature = "cuda-jit")))]
+#[cfg(all(feature = "candle-cuda", feature = "autodiff", not(feature = "cuda")))]
 pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
-#[cfg(all(feature = "candle-cuda", not(feature = "autodiff"), not(feature = "cuda-jit")))]
+#[cfg(all(feature = "candle-cuda", not(feature = "autodiff"), not(feature = "cuda")))]
 pub type BackendWithAutodiff = Candle<f32>;
-#[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
+#[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
 pub type RawBackend = Candle<f32>;
-#[cfg(all(feature = "candle-cuda", not(feature = "cuda-jit")))]
+#[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
 pub type BackendDevice = CandleDevice;
 
 // WGPU backend (third priority if enabled)
 #[cfg(all(feature = "wgpu", feature = "autodiff", 
-          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendWithAutodiff = Autodiff<Wgpu<f32, i32>>;
 #[cfg(all(feature = "wgpu", not(feature = "autodiff"), 
-          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendWithAutodiff = Wgpu<f32, i32>;
 #[cfg(all(feature = "wgpu", 
-          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type RawBackend = Wgpu<f32, i32>;
 #[cfg(all(feature = "wgpu", 
-          not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendDevice = WgpuDevice;
 
 // Candle Metal backend (third priority)
-#[cfg(all(feature = "candle-metal", feature = "autodiff", not(any(feature = "cuda-jit", feature = "wgpu"))))]
+#[cfg(all(feature = "candle-metal", feature = "autodiff", not(any(feature = "cuda", feature = "wgpu"))))]
 pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
-#[cfg(all(feature = "candle-metal", not(feature = "autodiff"), not(any(feature = "cuda-jit", feature = "wgpu"))))]
+#[cfg(all(feature = "candle-metal", not(feature = "autodiff"), not(any(feature = "cuda", feature = "wgpu"))))]
 pub type BackendWithAutodiff = Candle<f32>;
-#[cfg(all(feature = "candle-metal", not(any(feature = "cuda-jit", feature = "wgpu"))))]
+#[cfg(all(feature = "candle-metal", not(any(feature = "cuda", feature = "wgpu"))))]
 pub type RawBackend = Candle<f32>;
-#[cfg(all(feature = "candle-metal", not(any(feature = "cuda-jit", feature = "wgpu"))))]
+#[cfg(all(feature = "candle-metal", not(any(feature = "cuda", feature = "wgpu"))))]
 pub type BackendDevice = CandleDevice;
 
 // Candle backend (fourth priority)
 #[cfg(all(feature = "candle", feature = "autodiff", 
-         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
+         not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
 #[cfg(all(feature = "candle", not(feature = "autodiff"), 
-         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
+         not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type BackendWithAutodiff = Candle<f32>;
 #[cfg(all(feature = "candle", 
-         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
+         not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type RawBackend = Candle<f32>;
 #[cfg(all(feature = "candle", 
-         not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
+         not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle-cuda"))))]
 pub type BackendDevice = CandleDevice;
 
 // LibTorch backend (fifth priority)
-#[cfg(all(feature = "tch", feature = "autodiff", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
+#[cfg(all(feature = "tch", feature = "autodiff", not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
 pub type BackendWithAutodiff = Autodiff<LibTorch<f32>>;
-#[cfg(all(feature = "tch", not(feature = "autodiff"), not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
+#[cfg(all(feature = "tch", not(feature = "autodiff"), not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
 pub type BackendWithAutodiff = LibTorch<f32>;
-#[cfg(all(feature = "tch", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
+#[cfg(all(feature = "tch", not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
 pub type RawBackend = LibTorch<f32>;
-#[cfg(all(feature = "tch", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
+#[cfg(all(feature = "tch", not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle"))))]
 pub type BackendDevice = LibTorchDevice;
 
 // NdArray backend (lowest priority)
-#[cfg(all(feature = "ndarray", feature = "autodiff", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
+#[cfg(all(feature = "ndarray", feature = "autodiff", not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
 pub type BackendWithAutodiff = Autodiff<NdArray<f32>>;
-#[cfg(all(feature = "ndarray", not(feature = "autodiff"), not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
+#[cfg(all(feature = "ndarray", not(feature = "autodiff"), not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
 pub type BackendWithAutodiff = NdArray<f32>;
-#[cfg(all(feature = "ndarray", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
+#[cfg(all(feature = "ndarray", not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
 pub type RawBackend = NdArray<f32>;
-#[cfg(all(feature = "ndarray", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
+#[cfg(all(feature = "ndarray", not(any(feature = "cuda", feature = "wgpu", feature = "candle-metal", feature = "candle", feature = "tch"))))]
 pub type BackendDevice = NdArrayDevice;
 
 /// Run with the appropriate backend based on configured features
@@ -131,28 +131,28 @@ pub type BackendDevice = NdArrayDevice;
 macro_rules! use_configured_backend {
     () => {
         // Determine which backend to use based on features
-        #[cfg(all(feature = "cuda-jit", feature = "fusion", feature = "autodiff"))]
+        #[cfg(all(feature = "cuda", feature = "fusion", feature = "autodiff"))]
         {
             // For reporting
-            const BACKEND_NAME: &str = "cuda-jit";
+            const BACKEND_NAME: &str = "cuda";
             println!("Using CUDA JIT backend with fusion optimization");
         }
         
-        #[cfg(all(feature = "cuda-jit", feature = "autodiff", not(feature = "fusion")))]
+        #[cfg(all(feature = "cuda", feature = "autodiff", not(feature = "fusion")))]
         {
             // For reporting
-            const BACKEND_NAME: &str = "cuda-jit-basic";
+            const BACKEND_NAME: &str = "cuda-basic";
             println!("Using CUDA JIT backend");
         }
         
-        #[cfg(all(feature = "candle-cuda", feature = "fusion", feature = "autodiff", not(feature = "cuda-jit")))]
+        #[cfg(all(feature = "candle-cuda", feature = "fusion", feature = "autodiff", not(feature = "cuda")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-cuda";
             println!("Using Candle CUDA backend with fusion optimization");
         }
         
-        #[cfg(all(feature = "candle-cuda", feature = "autodiff", not(feature = "fusion"), not(feature = "cuda-jit")))]
+        #[cfg(all(feature = "candle-cuda", feature = "autodiff", not(feature = "fusion"), not(feature = "cuda")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-cuda";
@@ -160,7 +160,7 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "candle-metal", feature = "fusion", feature = "autodiff", 
-                  not(feature = "cuda-jit"), not(feature = "candle-cuda")))]
+                  not(feature = "cuda"), not(feature = "candle-cuda")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-metal";
@@ -168,7 +168,7 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "candle-metal", feature = "autodiff", not(feature = "fusion"), 
-                  not(feature = "cuda-jit"), not(feature = "candle-cuda")))]
+                  not(feature = "cuda"), not(feature = "candle-cuda")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "candle-metal";
@@ -176,7 +176,7 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff", 
-                  not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
+                  not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "wgpu-fusion";
@@ -184,7 +184,7 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "wgpu", feature = "autodiff", not(feature = "fusion"), 
-                  not(feature = "cuda-jit"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
+                  not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "wgpu";
@@ -192,7 +192,7 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "candle", feature = "fusion", feature = "autodiff", 
-                  not(feature = "cuda-jit"), not(feature = "candle-cuda"), 
+                  not(feature = "cuda"), not(feature = "candle-cuda"), 
                   not(feature = "candle-metal"), not(feature = "wgpu")))]
         {
             // For reporting
@@ -201,7 +201,7 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "candle", feature = "autodiff", not(feature = "fusion"), 
-                  not(feature = "cuda-jit"), not(feature = "candle-cuda"),
+                  not(feature = "cuda"), not(feature = "candle-cuda"),
                   not(feature = "candle-metal"), not(feature = "wgpu")))]
         {
             // For reporting
@@ -209,14 +209,14 @@ macro_rules! use_configured_backend {
             println!("Using Candle CPU backend");
         }
         
-        #[cfg(all(feature = "tch", feature = "autodiff", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle"))))]
+        #[cfg(all(feature = "tch", feature = "autodiff", not(any(feature = "cuda", feature = "wgpu", feature = "candle"))))]
         {
             // For reporting
             const BACKEND_NAME: &str = "libtorch";
             println!("Using LibTorch backend");
         }
         
-        #[cfg(all(feature = "ndarray", feature = "autodiff", not(any(feature = "cuda-jit", feature = "wgpu", feature = "candle", feature = "tch"))))]
+        #[cfg(all(feature = "ndarray", feature = "autodiff", not(any(feature = "cuda", feature = "wgpu", feature = "candle", feature = "tch"))))]
         {
             // For reporting
             const BACKEND_NAME: &str = "ndarray";
@@ -224,7 +224,7 @@ macro_rules! use_configured_backend {
         }
         
         // Default fallback to WGPU if no specific combination is enabled but wgpu is available
-        #[cfg(all(feature = "wgpu", not(feature = "autodiff"), not(any(feature = "cuda-jit", all(feature = "candle", feature = "candle-cuda")))))]
+        #[cfg(all(feature = "wgpu", not(feature = "autodiff"), not(any(feature = "cuda", all(feature = "candle", feature = "candle-cuda")))))]
         {
             // For reporting
             const BACKEND_NAME: &str = "wgpu-basic";
@@ -233,13 +233,13 @@ macro_rules! use_configured_backend {
         
         // We need to ensure one backend is always selected
         #[cfg(not(any(
-            feature = "cuda-jit",
+            feature = "cuda",
             feature = "wgpu", 
             feature = "candle",
             feature = "tch",
             feature = "ndarray"
         )))]
-        compile_error!("At least one backend feature must be enabled: 'cuda-jit', 'wgpu', 'candle', 'tch', or 'ndarray'");
+        compile_error!("At least one backend feature must be enabled: 'cuda', 'wgpu', 'candle', 'tch', or 'ndarray'");
         
         // Ensure autodiff is available for training
         #[cfg(not(feature = "autodiff"))]

@@ -28,7 +28,7 @@ cd grufinity
 cargo build --release --features wgpu,fusion,autodiff,optimizer-adam
 
 # Or build with CUDA support
-cargo build --release --features cuda-jit,fusion,autodiff,optimizer-adam
+cargo build --release --features cuda,fusion,autodiff,optimizer-adam
 ```
 
 ## Feature Flags
@@ -43,13 +43,13 @@ GRUfinity supports various backends through feature flags:
 - `optimizer-sgd` - Use SGD optimizer (alternative to Adam)
 
 ### Accelerated Backends
-- `cuda-jit` - CUDA JIT backend for NVIDIA GPUs
+- `cuda` - CUDA JIT backend for NVIDIA GPUs
 - `candle-cuda` - Candle CUDA backend (alternative CUDA implementation)
 - `candle-metal` - Metal backend for Apple Silicon
 
 ### Combinations
 - `wgpu-fusion` = `wgpu` + `fusion` + `autodiff` + `autotune`
-- `cuda-full` = `cuda-jit` + `fusion` + `autodiff`
+- `cuda-full` = `cuda` + `fusion` + `autodiff`
 - `candle-cuda-full` = `candle` + `candle-cuda` + `fusion` + `autodiff`
 
 ## Getting Training Data
@@ -87,7 +87,7 @@ cargo run --release --bin train --features wgpu,fusion,autodiff,optimizer-adam -
 ### Training with CUDA (for CUDA-capable systems)
 
 ```bash
-cargo run --release --bin train --features cuda-jit,fusion,autodiff,optimizer-adam -- \
+cargo run --release --bin train --features cuda,fusion,autodiff,optimizer-adam -- \
   --data data/tinyshakespeare.txt \
   --output out \
   --update-tokens 256 \
