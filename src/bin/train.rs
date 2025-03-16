@@ -771,6 +771,9 @@ fn main() {
     // Handle token-based parameters
     let chunk_size = modified_config.chunk_size;
     
+    // Default update_tokens to chunk_size if not specified
+    let update_tokens = update_tokens.or(Some(chunk_size));
+    
     if let Some(tokens) = update_tokens {
         let k1 = calculate_chunks_for_tokens(chunk_size, tokens);
         modified_config.tbptt_k1 = k1;
