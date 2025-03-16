@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use burn::{
     record::{BinFileRecorder, FullPrecisionSettings, Recorder},
     tensor::{Tensor, Int, backend::Backend},
@@ -37,7 +39,7 @@ fn print_help() {
 }
 
 // Initialize appropriate device based on enabled features
-fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
+fn initialize_device<B: Backend>(_device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
     let mut device_initialized = false;
     
