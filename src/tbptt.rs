@@ -771,10 +771,12 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let epoch_tokens = self.metrics.epoch_tokens();
         let epoch_tok_per_sec = self.metrics.epoch_tokens_per_second();
 
-        progress_bar.finish_with_message(format!(
+        // Finish progress bar first, then print the summary on a new line
+        progress_bar.finish();
+        println!(
             "Epoch complete - Processed {} chunks ({} tokens, {:.1} tok/s), Avg loss: {:.6}, Perplexity: {:.2}",
             batch_count, epoch_tokens, epoch_tok_per_sec, epoch_loss, perplexity
-        ));
+        );
 
         epoch_loss
     }
@@ -974,10 +976,12 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Calculate perplexity from validation loss
         let perplexity = (avg_loss as f64).exp();
         
-        progress_bar.finish_with_message(format!(
+        // Finish progress bar first, then print the summary on a new line
+        progress_bar.finish();
+        println!(
             "Validation complete - Processed {} chunks, Avg loss: {:.6}, Perplexity: {:.2}",
             batch_count, avg_loss, perplexity
-        ));
+        );
 
         avg_loss
     }
