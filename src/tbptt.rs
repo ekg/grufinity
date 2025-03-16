@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::dataset::{
     CharVocab, ChunkedTextBatch, ChunkedTextBatcher, ContinuousChunkedTextDataset, TextBatcher,
@@ -770,7 +770,6 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Calculate tokens per second for the entire epoch
         let epoch_tokens = self.metrics.epoch_tokens();
         let epoch_tok_per_sec = self.metrics.epoch_tokens_per_second();
-        let total_tokens = self.metrics.total_tokens();
 
         progress_bar.finish_with_message(format!(
             "Epoch complete - Processed {} chunks ({} tokens, {:.1} tok/s), Avg loss: {:.6}, Perplexity: {:.2}",
@@ -945,9 +944,6 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             total_loss += loss_value;
             batch_count += 1;
 
-            // Count tokens processed in validation
-            let tokens_in_batch = batch_size * seq_len;
-            
             // Update progress
             progress_bar.inc(1);
             progress_bar.set_message(format!(
