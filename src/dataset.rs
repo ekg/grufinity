@@ -521,14 +521,11 @@ impl<B: Backend> TextBatcher<B> {
     }
 }
 
-impl<B: Backend> Batcher<(String, String), TextBatch<B>> for TextBatcher<B> {
-    fn batch(&self, items: Vec<(String, String)>) -> TextBatch<B> {
+impl<B: Backend> Batcher<(String, String), Option<TextBatch<B>>> for TextBatcher<B> {
+    fn batch(&self, items: Vec<(String, String)>) -> Option<TextBatch<B>> {
         if items.is_empty() {
-            // Return empty batch
-            return TextBatch {
-                input: Tensor::zeros([0, 0], &self.device),
-                target: Tensor::zeros([0, 0], &self.device),
-            };
+            // Return None for empty batch
+            return None;
         }
         
         // Find the maximum sequence length we'll use for all items
@@ -565,11 +562,16 @@ impl<B: Backend> Batcher<(String, String), TextBatch<B>> for TextBatcher<B> {
             targets.push(Tensor::<B, 1, Int>::from_data(&*padded_target, &self.device));
         }
         
+        // Check if we have any valid inputs after potential skips
+        if inputs.is_empty() {
+            return None;
+        }
+        
         // Batch tensors (now all have the same shape)
         let input = Tensor::stack(inputs, 0);
         let target = Tensor::stack(targets, 0);
         
-        TextBatch { input, target }
+        Some(TextBatch { input, target })
     }
 }
 
@@ -599,18 +601,11 @@ pub struct ChunkedTextBatch<B: Backend> {
     pub is_padded: Vec<bool>,
 }
 
-impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<B> {
-    fn batch(&self, items: Vec<TextChunk>) -> ChunkedTextBatch<B> {
+impl<B: Backend> Batcher<TextChunk, Option<ChunkedTextBatch<B>>> for ChunkedTextBatcher<B> {
+    fn batch(&self, items: Vec<TextChunk>) -> Option<ChunkedTextBatch<B>> {
         if items.is_empty() {
-            // Return empty batch
-            return ChunkedTextBatch {
-                input: Tensor::zeros([0, 0], &self.device),
-                target: Tensor::zeros([0, 0], &self.device),
-                doc_ids: Vec::new(),
-                chunk_indices: Vec::new(),
-                is_last_chunks: Vec::new(),
-                is_padded: Vec::new(),
-            };
+            // Return None for empty batch
+            return None;
         }
         
         // Extract document tracking information
@@ -634,6 +629,7 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
             // Use byte slices instead of character slices
             let bytes = chunk.text.as_bytes();
             if bytes.len() < 2 {
+                // If we don't have enough content for input/target, skip this chunk
                 continue;
             }
             
@@ -665,13 +661,13 @@ impl<B: Backend> Batcher<TextChunk, ChunkedTextBatch<B>> for ChunkedTextBatcher<
         let input = Tensor::stack(inputs, 0);
         let target = Tensor::stack(targets, 0);
         
-        ChunkedTextBatch { 
+        Some(ChunkedTextBatch { 
             input, 
             target, 
             doc_ids, 
             chunk_indices, 
             is_last_chunks,
             is_padded
-        }
+        })
     }
 }

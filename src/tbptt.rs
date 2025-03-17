@@ -693,12 +693,30 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // Create batch from chunks
             let chunked_batcher =
                 ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
-            let batch = chunked_batcher.batch(chunks);
+            let batch_opt = chunked_batcher.batch(chunks);
 
-            // Ensure we have valid input data
+            // Check if we got a valid batch
+            if batch_opt.is_none() {
+                progress_bar.inc(1);
+                progress_bar.set_message("Skipped batch - empty");
+
+                // We need to still move to next chunk and count even if we skip
+                if !dataloader.next_chunk() {
+                    // If we can't advance, reset and resample to get fresh chunks
+                    dataloader.reset();
+                    dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
+                }
+
+                step += 1;
+                continue;
+            }
+            
+            let batch = batch_opt.unwrap();
+
+            // Double-check tensor dimensions to ensure they're valid
             if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
                 progress_bar.inc(1);
-                progress_bar.set_message("Skipped batch");
+                progress_bar.set_message("Skipped batch - invalid dimensions");
 
                 // We need to still move to next chunk and count even if we skip
                 if !dataloader.next_chunk() {
@@ -817,11 +835,30 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             let chunks = dataloader.get_current_chunks();
             let chunked_batcher =
                 ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
-            let batch = chunked_batcher.batch(chunks);
+            let batch_opt = chunked_batcher.batch(chunks);
 
+            // Check if we got a valid batch
+            if batch_opt.is_none() {
+                progress_bar.inc(1);
+                progress_bar.set_message("Skipped batch - empty");
+                
+                // We need to still move to next chunk and count even if we skip
+                if !dataloader.next_chunk() {
+                    // If we can't advance, reset and resample to get fresh chunks
+                    dataloader.reset();
+                    dataloader.resample_positions(step as u64 + 10000);
+                }
+                step += 1;
+                continue;
+            }
+            
+            let batch = batch_opt.unwrap();
+            
             // Skip chunks that don't have valid dimensions
             if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
                 progress_bar.inc(1);
+                progress_bar.set_message("Skipped batch - invalid dimensions");
+                
                 // We need to still move to next chunk and count even if we skip
                 if !dataloader.next_chunk() {
                     // If we can't advance, reset and resample to get fresh chunks
