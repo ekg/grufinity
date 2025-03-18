@@ -66,7 +66,7 @@ pub type BackendDevice = CandleDevice;
 
 // Import Vulkan backend when the feature is enabled
 #[cfg(feature = "wgpu-spirv")]
-pub use burn::backend::wgpu::{Vulkan, WgpuDevice};
+pub use burn::backend::wgpu::Vulkan;
 
 // WGPU-SPIRV backend (third priority)
 #[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), feature = "autodiff", 
