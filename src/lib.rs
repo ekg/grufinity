@@ -274,12 +274,13 @@ macro_rules! use_configured_backend {
         // We need to ensure one backend is always selected
         #[cfg(not(any(
             feature = "cuda",
-            feature = "wgpu", 
+            feature = "wgpu",
+            feature = "wgpu-spirv", 
             feature = "candle",
             feature = "tch",
             feature = "ndarray"
         )))]
-        compile_error!("At least one backend feature must be enabled: 'cuda', 'wgpu', 'candle', 'tch', or 'ndarray'");
+        compile_error!("At least one backend feature must be enabled: 'cuda', 'wgpu', 'wgpu-spirv', 'candle', 'tch', or 'ndarray'");
         
         // Ensure autodiff is available for training
         #[cfg(not(feature = "autodiff"))]
