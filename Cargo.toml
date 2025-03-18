@@ -16,6 +16,7 @@ default = []  # No default backend - user must explicitly choose
 
 # Core features - no dependencies included here
 wgpu = ["burn/wgpu"]
+wgpu-spirv = ["burn/vulkan", "burn/autotune"]
 fusion = ["burn/fusion"]
 candle = ["burn/candle"]
 tch = ["burn/tch"]
