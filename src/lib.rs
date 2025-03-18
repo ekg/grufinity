@@ -69,19 +69,19 @@ pub type BackendDevice = CandleDevice;
 pub use burn::backend::wgpu::{Vulkan, WgpuDevice};
 
 // WGPU-SPIRV backend (third priority)
-#[cfg(all(feature = "wgpu-spirv", feature = "autodiff", 
+#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), feature = "autodiff", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendWithAutodiff = Autodiff<Vulkan<f32, i32>>;
-#[cfg(all(feature = "wgpu-spirv", not(feature = "autodiff"), 
+#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), not(feature = "autodiff"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendWithAutodiff = Vulkan<f32, i32>;
-#[cfg(all(feature = "wgpu-spirv", 
+#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type RawBackend = Vulkan<f32, i32>;
-#[cfg(all(feature = "wgpu-spirv", 
+#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendDevice = WgpuDevice;
@@ -197,7 +197,8 @@ macro_rules! use_configured_backend {
             println!("Using Candle Metal backend");
         }
         
-        #[cfg(all(feature = "wgpu-spirv", feature = "fusion", feature = "autodiff", 
+        #[cfg(all(any(feature = "wgpu-spirv-fusion", 
+                      all(feature = "wgpu-spirv", feature = "fusion", feature = "autodiff")), 
                   not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting
@@ -206,6 +207,7 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "wgpu-spirv", feature = "autodiff", not(feature = "fusion"), 
+                  not(feature = "wgpu-spirv-fusion"),
                   not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting

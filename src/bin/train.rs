@@ -705,10 +705,10 @@ fn main() {
     };
     
     #[cfg(any(
+        feature = "wgpu-spirv-fusion",
         all(feature = "wgpu-spirv", not(feature = "cuda"),
             not(feature = "candle-cuda"), not(feature = "candle-metal"),
-            not(feature = "candle")),
-        feature = "wgpu-spirv-fusion"
+            not(feature = "candle"))
     ))]
     let device = {
         use burn::backend::wgpu::WgpuDevice;
