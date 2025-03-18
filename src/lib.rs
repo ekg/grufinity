@@ -64,22 +64,44 @@ pub type RawBackend = Candle<f32>;
 #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
 pub type BackendDevice = CandleDevice;
 
-// WGPU backend (third priority if enabled)
-#[cfg(all(feature = "wgpu", feature = "autodiff", 
+// Import Vulkan backend when the feature is enabled
+#[cfg(feature = "wgpu-spirv")]
+pub use burn::backend::wgpu::Vulkan;
+
+// WGPU-SPIRV backend (third priority)
+#[cfg(all(feature = "wgpu-spirv", feature = "autodiff", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
+pub type BackendWithAutodiff = Autodiff<Vulkan<f32, i32>>;
+#[cfg(all(feature = "wgpu-spirv", not(feature = "autodiff"), 
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
+pub type BackendWithAutodiff = Vulkan<f32, i32>;
+#[cfg(all(feature = "wgpu-spirv", 
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
+pub type RawBackend = Vulkan<f32, i32>;
+#[cfg(all(feature = "wgpu-spirv", 
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
+pub type BackendDevice = WgpuDevice;
+
+// WGPU backend (fourth priority if enabled)
+#[cfg(all(feature = "wgpu", feature = "autodiff", 
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle"), not(feature = "wgpu-spirv")))]
 pub type BackendWithAutodiff = Autodiff<Wgpu<f32, i32>>;
 #[cfg(all(feature = "wgpu", not(feature = "autodiff"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
-          not(feature = "candle")))]
+          not(feature = "candle"), not(feature = "wgpu-spirv")))]
 pub type BackendWithAutodiff = Wgpu<f32, i32>;
 #[cfg(all(feature = "wgpu", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
-          not(feature = "candle")))]
+          not(feature = "candle"), not(feature = "wgpu-spirv")))]
 pub type RawBackend = Wgpu<f32, i32>;
 #[cfg(all(feature = "wgpu", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
-          not(feature = "candle")))]
+          not(feature = "candle"), not(feature = "wgpu-spirv")))]
 pub type BackendDevice = WgpuDevice;
 
 // Candle Metal backend (third priority)
@@ -175,8 +197,25 @@ macro_rules! use_configured_backend {
             println!("Using Candle Metal backend");
         }
         
-        #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff", 
+        #[cfg(all(feature = "wgpu-spirv", feature = "fusion", feature = "autodiff", 
                   not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
+        {
+            // For reporting
+            const BACKEND_NAME: &str = "wgpu-spirv-fusion";
+            println!("Using WGPU SPIRV backend with fusion optimization");
+        }
+        
+        #[cfg(all(feature = "wgpu-spirv", feature = "autodiff", not(feature = "fusion"), 
+                  not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
+        {
+            // For reporting
+            const BACKEND_NAME: &str = "wgpu-spirv";
+            println!("Using WGPU SPIRV backend");
+        }
+        
+        #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff", 
+                  not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
+                  not(feature = "wgpu-spirv")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "wgpu-fusion";
@@ -184,7 +223,8 @@ macro_rules! use_configured_backend {
         }
         
         #[cfg(all(feature = "wgpu", feature = "autodiff", not(feature = "fusion"), 
-                  not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
+                  not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+                  not(feature = "wgpu-spirv")))]
         {
             // For reporting
             const BACKEND_NAME: &str = "wgpu";

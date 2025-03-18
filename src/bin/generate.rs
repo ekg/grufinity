@@ -66,9 +66,17 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
         println!("Using Candle Metal device {}", device_id);
     }
     
-    #[cfg(all(feature = "wgpu", not(feature = "cuda"),
+    #[cfg(all(feature = "wgpu-spirv", not(feature = "cuda"),
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
               not(feature = "candle")))]
+    {
+        device_initialized = true;
+        println!("Using WGPU SPIRV (Vulkan) device");
+    }
+    
+    #[cfg(all(feature = "wgpu", not(feature = "cuda"),
+              not(feature = "candle-cuda"), not(feature = "candle-metal"),
+              not(feature = "candle"), not(feature = "wgpu-spirv")))]
     {
         device_initialized = true;
         println!("Using WGPU device");
