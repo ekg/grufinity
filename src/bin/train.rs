@@ -704,9 +704,19 @@ fn main() {
         CandleDevice::metal(device_id)  // Use specified Metal device
     };
     
-    #[cfg(all(feature = "wgpu", not(feature = "cuda"),
+    #[cfg(all(feature = "wgpu-spirv", not(feature = "cuda"),
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
               not(feature = "candle")))]
+    let device = {
+        use burn::backend::wgpu::WgpuDevice;
+        device_initialized = true;
+        println!("Using WGPU SPIRV (Vulkan) device");
+        WgpuDevice::default()
+    };
+    
+    #[cfg(all(feature = "wgpu", not(feature = "cuda"),
+              not(feature = "candle-cuda"), not(feature = "candle-metal"),
+              not(feature = "candle"), not(feature = "wgpu-spirv")))]
     let device = {
         use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
