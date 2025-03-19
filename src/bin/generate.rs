@@ -43,8 +43,8 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
     let mut device_initialized = false;
     
-    // Create a device based on the backend type
-    let device = B::Device::default();
+    // Default device that will be returned if no specific backend is active
+    let mut device = B::Device::default();
     
     // Log the device type being used based on enabled features
     #[cfg(feature = "cuda")]
@@ -73,7 +73,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
         use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
         println!("Using Vulkan device");
-        device = WgpuDevice::default();
+        return WgpuDevice::default();
     }
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda"),
