@@ -39,7 +39,7 @@ fn print_help() {
 }
 
 // Initialize appropriate device based on enabled features
-fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
+fn initialize_device<B: Backend>(_device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
     let mut device_initialized = false;
     
@@ -361,9 +361,10 @@ fn sample_with_top_k<B: Backend>(
         
         // Simple argmax for deterministic sampling (temperature=0 case)
         if temperature == 0.0 {
-            // Convert to Int tensor type without to_dtype 
-            // (which doesn't exist in this version of Burn)
-            let indices: Vec<i32> = probs.argmax(1).to_data().into_vec().unwrap();
+            // Convert to Int tensor type with i64 to match expected type
+            let indices_i32: Vec<i32> = probs.argmax(1).to_data().into_vec().unwrap();
+            // Convert i32 to i64
+            let indices: Vec<i64> = indices_i32.iter().map(|&x| x as i64).collect();
             return Tensor::<B, 1, Int>::from_data(&*indices, device);
         }
         
@@ -387,8 +388,8 @@ fn sample_with_top_k<B: Backend>(
             }
         }
         
-        // Create a tensor with the selected index
-        let indices = vec![selected_idx as i32];
+        // Create a tensor with the selected index - use i64 to match expected Int type
+        let indices: Vec<i64> = vec![selected_idx as i64];
         return Tensor::<B, 1, Int>::from_data(&*indices, device);
     }
     
@@ -452,8 +453,8 @@ fn sample_with_top_k<B: Backend>(
     // Get the original vocabulary index
     let final_idx = top_k_indices[selected_idx];
     
-    // Return as a tensor
-    let indices = vec![final_idx];
+    // Return as a tensor - convert explicitly to Vec<i64> to match expected Int type
+    let indices: Vec<i64> = vec![final_idx as i64];
     Tensor::<B, 1, Int>::from_data(&*indices, device)
 }
 
