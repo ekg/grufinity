@@ -35,6 +35,8 @@ optimizer-sgd = []   # Use SGD optimizer for TBPTT
 # Combined feature flags for convenience (non-CUDA)
 wgpu-fusion = ["wgpu", "fusion", "autodiff", "autotune"]
 vulkan-fusion = ["vulkan", "fusion", "autodiff", "autotune"]  # Vulkan with optimizations
+# For backward compatibility
+wgpu-spirv-fusion = ["vulkan", "fusion", "autodiff", "autotune"]  # Legacy alias for vulkan-fusion
 candle-fusion = ["candle", "fusion", "autodiff"]
 
 # Combined CUDA features - these are opt-in only
