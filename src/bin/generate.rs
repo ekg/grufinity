@@ -361,10 +361,10 @@ fn sample_with_top_k<B: Backend>(
         
         // Simple argmax for deterministic sampling (temperature=0 case)
         if temperature == 0.0 {
-            // Convert to Int tensor type with i64 to match expected type
+            // Convert to Int tensor type to match expected type
             let indices_i32: Vec<i32> = probs.argmax(1).to_data().into_vec().unwrap();
-            // Convert i32 to i64
-            let indices: Vec<i64> = indices_i32.iter().map(|&x| x as i64).collect();
+            // Use directly without conversion
+            let indices: Vec<i32> = indices_i32;
             return Tensor::<B, 1, Int>::from_data(&*indices, device);
         }
         
@@ -388,8 +388,8 @@ fn sample_with_top_k<B: Backend>(
             }
         }
         
-        // Create a tensor with the selected index - use i64 to match expected Int type
-        let indices: Vec<i64> = vec![selected_idx as i64];
+        // Create a tensor with the selected index - use i32 to match expected Int type
+        let indices: Vec<i32> = vec![selected_idx as i32];
         return Tensor::<B, 1, Int>::from_data(&*indices, device);
     }
     
@@ -453,8 +453,8 @@ fn sample_with_top_k<B: Backend>(
     // Get the original vocabulary index
     let final_idx = top_k_indices[selected_idx];
     
-    // Return as a tensor - convert explicitly to Vec<i64> to match expected Int type
-    let indices: Vec<i64> = vec![final_idx as i64];
+    // Return as a tensor - convert explicitly to Vec<i32> to match expected Int type
+    let indices: Vec<i32> = vec![final_idx];
     Tensor::<B, 1, Int>::from_data(&*indices, device)
 }
 
@@ -507,9 +507,9 @@ fn generate_text<B: Backend>(
         let seed = &generated_text[last_offset..];
         
         // Convert seed to tokens
-        let seed_tokens: Vec<i64> = seed.as_bytes()
+        let seed_tokens: Vec<i32> = seed.as_bytes()
             .iter()
-            .map(|&b| b as i64)
+            .map(|&b| b as i32)
             .collect();
         
         if seed_tokens.is_empty() {
@@ -539,7 +539,7 @@ fn generate_text<B: Backend>(
                 .slice([0..1, seed_tokens.len()..generated_tokens.dims()[1]]);
             
             let reshaped = new_tokens.clone().reshape([new_tokens.dims()[0] * new_tokens.dims()[1]]);
-            let values: Vec<i64> = reshaped.to_data().into_vec()
+            let values: Vec<i32> = reshaped.to_data().into_vec()
                 .expect("Failed to convert tensor data to vector");
             let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
             
