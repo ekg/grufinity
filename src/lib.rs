@@ -65,26 +65,26 @@ pub type RawBackend = Candle<f32>;
 pub type BackendDevice = CandleDevice;
 
 // Import Vulkan backend when the feature is enabled
-#[cfg(feature = "wgpu-spirv")]
-pub use burn::backend::wgpu::Vulkan;
+#[cfg(feature = "vulkan")]
+pub use burn::backend::vulkan::{Vulkan, VulkanDevice};
 
-// WGPU-SPIRV backend (third priority)
-#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), feature = "autodiff", 
+// Vulkan backend (third priority)
+#[cfg(all(feature = "vulkan", feature = "autodiff", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendWithAutodiff = Autodiff<Vulkan<f32, i32>>;
-#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), not(feature = "autodiff"), 
+#[cfg(all(feature = "vulkan", not(feature = "autodiff"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type BackendWithAutodiff = Vulkan<f32, i32>;
-#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), 
+#[cfg(all(feature = "vulkan", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
 pub type RawBackend = Vulkan<f32, i32>;
-#[cfg(all(any(feature = "wgpu-spirv", feature = "wgpu-spirv-fusion"), 
+#[cfg(all(feature = "vulkan", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
-pub type BackendDevice = WgpuDevice;
+pub type BackendDevice = VulkanDevice;
 
 // WGPU backend (fourth priority if enabled)
 #[cfg(all(feature = "wgpu", feature = "autodiff", 
@@ -197,22 +197,20 @@ macro_rules! use_configured_backend {
             println!("Using Candle Metal backend");
         }
         
-        #[cfg(all(any(feature = "wgpu-spirv-fusion", 
-                      all(feature = "wgpu-spirv", feature = "fusion", feature = "autodiff")), 
+        #[cfg(all(feature = "vulkan", feature = "fusion", feature = "autodiff", 
                   not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting
-            const BACKEND_NAME: &str = "wgpu-spirv-fusion";
-            println!("Using WGPU SPIRV backend with fusion optimization");
+            const BACKEND_NAME: &str = "vulkan-fusion";
+            println!("Using Vulkan backend with fusion optimization");
         }
         
-        #[cfg(all(feature = "wgpu-spirv", feature = "autodiff", not(feature = "fusion"), 
-                  not(feature = "wgpu-spirv-fusion"),
+        #[cfg(all(feature = "vulkan", feature = "autodiff", not(feature = "fusion"), 
                   not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal")))]
         {
             // For reporting
-            const BACKEND_NAME: &str = "wgpu-spirv";
-            println!("Using WGPU SPIRV backend");
+            const BACKEND_NAME: &str = "vulkan";
+            println!("Using Vulkan backend");
         }
         
         #[cfg(all(feature = "wgpu", feature = "fusion", feature = "autodiff", 
@@ -277,12 +275,12 @@ macro_rules! use_configured_backend {
         #[cfg(not(any(
             feature = "cuda",
             feature = "wgpu",
-            feature = "wgpu-spirv", 
+            feature = "vulkan", 
             feature = "candle",
             feature = "tch",
             feature = "ndarray"
         )))]
-        compile_error!("At least one backend feature must be enabled: 'cuda', 'wgpu', 'wgpu-spirv', 'candle', 'tch', or 'ndarray'");
+        compile_error!("At least one backend feature must be enabled: 'cuda', 'vulkan', 'wgpu', 'candle', 'tch', or 'ndarray'");
         
         // Ensure autodiff is available for training
         #[cfg(not(feature = "autodiff"))]

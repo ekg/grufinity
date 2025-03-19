@@ -37,6 +37,7 @@ GRUfinity supports various backends through feature flags:
 
 ### Core Features
 - `wgpu` - WebGPU backend (works on most machines)
+- `vulkan` - Vulkan backend for better GPU performance
 - `fusion` - Enable fusion optimization for better performance
 - `autodiff` - Enable automatic differentiation (required for training)
 - `optimizer-adam` - Use Adam optimizer
@@ -49,6 +50,7 @@ GRUfinity supports various backends through feature flags:
 
 ### Combinations
 - `wgpu-fusion` = `wgpu` + `fusion` + `autodiff` + `autotune`
+- `vulkan-fusion` = `vulkan` + `fusion` + `autodiff` + `autotune`
 - `cuda-full` = `cuda` + `fusion` + `autodiff`
 - `candle-cuda-full` = `candle` + `candle-cuda` + `fusion` + `autodiff`
 
@@ -75,6 +77,24 @@ cargo run --release --bin train --features wgpu,fusion,autodiff,optimizer-adam -
   --update-tokens 128 \
   --backprop-tokens 1024 \
   --chunk-size 128 \
+  --context-length 16384 \
+  --learning-rate 0.001 \
+  --num-epochs 100 \
+  --grad-clip 0.5 \
+  --batch-size 32 \
+  --lr-scheduler cosine \
+  --model-dim 128
+```
+
+### Training with Vulkan (for systems with Vulkan support)
+
+```bash
+cargo run --release --bin train --features vulkan,fusion,autodiff,optimizer-adam -- \
+  --data data/tinyshakespeare.txt \
+  --output out \
+  --update-tokens 192 \
+  --backprop-tokens 1536 \
+  --chunk-size 192 \
   --context-length 16384 \
   --learning-rate 0.001 \
   --num-epochs 100 \
