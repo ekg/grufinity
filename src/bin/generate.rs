@@ -73,7 +73,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
         use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
         println!("Using Vulkan device");
-        return WgpuDevice::default();
+        device = WgpuDevice::default();
     }
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda"),
