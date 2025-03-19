@@ -69,12 +69,12 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[cfg(all(feature = "vulkan", not(feature = "cuda"),
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
               not(feature = "candle")))]
-    let device = {
+    {
         use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
         println!("Using Vulkan device");
-        WgpuDevice::default()
-    };
+        device = WgpuDevice::default();
+    }
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda"),
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
