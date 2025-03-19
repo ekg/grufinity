@@ -708,10 +708,10 @@ fn main() {
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
               not(feature = "candle")))]
     let device = {
-        use burn::backend::vulkan::VulkanDevice;
+        use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
         println!("Using Vulkan device");
-        VulkanDevice::default()
+        WgpuDevice::default()
     };
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda"),
