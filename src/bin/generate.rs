@@ -109,8 +109,8 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     // Error if no backend feature is enabled
     #[cfg(not(any(feature = "cuda", feature = "wgpu", feature = "candle", 
                   feature = "ndarray", feature = "tch", feature = "candle-metal", 
-                  feature = "candle-cuda")))]
-    compile_error!("No backend feature was enabled. Please enable at least one: cuda, wgpu, candle, ndarray, etc.");
+                  feature = "candle-cuda", feature = "vulkan")))]
+    compile_error!("No backend feature was enabled. Please enable at least one: cuda, vulkan, wgpu, candle, ndarray, etc.");
     
     if !device_initialized {
         println!("WARNING: No device was properly initialized. Using fallback if available.");
