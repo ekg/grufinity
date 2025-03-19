@@ -37,7 +37,7 @@ GRUfinity supports various backends through feature flags:
 
 ### Core Features
 - `wgpu` - WebGPU backend (works on most machines)
-- `vulkan` - Vulkan backend for better GPU performance
+- `vulkan` - Vulkan backend for better GPU performance on compatible systems
 - `fusion` - Enable fusion optimization for better performance
 - `autodiff` - Enable automatic differentiation (required for training)
 - `optimizer-adam` - Use Adam optimizer
@@ -51,8 +51,38 @@ GRUfinity supports various backends through feature flags:
 ### Combinations
 - `wgpu-fusion` = `wgpu` + `fusion` + `autodiff` + `autotune`
 - `vulkan-fusion` = `vulkan` + `fusion` + `autodiff` + `autotune`
+- `wgpu-spirv-fusion` = Alias for `vulkan-fusion` (backward compatibility)
 - `cuda-full` = `cuda` + `fusion` + `autodiff`
 - `candle-cuda-full` = `candle` + `candle-cuda` + `fusion` + `autodiff`
+
+## Backend Selection
+
+GRUfinity supports multiple compute backends with different performance characteristics:
+
+### Backend Priority Order
+
+When multiple backends are enabled, they are prioritized in this order:
+1. CUDA (NVIDIA GPUs) - Fastest for CUDA-capable hardware
+2. Candle CUDA - Alternative CUDA implementation
+3. Vulkan - High-performance cross-platform GPU acceleration
+4. WebGPU - Portable GPU acceleration (fallback)
+5. Metal (Apple Silicon) - Optimized for Apple hardware
+6. Candle CPU - CPU-only fallback
+7. Others (NdArray, LibTorch) - Further fallbacks
+
+### Vulkan Backend
+
+The Vulkan backend provides efficient GPU acceleration on compatible hardware without requiring CUDA. It's particularly useful for:
+- Linux systems with AMD or Intel GPUs
+- Windows machines with non-NVIDIA GPUs
+- Systems where CUDA is unavailable
+
+To use the Vulkan backend:
+```bash
+cargo run --release --bin train --features vulkan,fusion,autodiff,optimizer-adam -- [OPTIONS]
+```
+
+For backward compatibility, the legacy `wgpu-spirv-fusion` feature name is maintained as an alias for `vulkan-fusion`.
 
 ## Getting Training Data
 
