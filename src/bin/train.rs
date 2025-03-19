@@ -716,7 +716,7 @@ fn main() {
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda"),
               not(feature = "candle-cuda"), not(feature = "candle-metal"),
-              not(feature = "candle"), not(feature = "wgpu-spirv")))]
+              not(feature = "candle"), not(feature = "vulkan")))]
     let device = {
         use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
@@ -749,9 +749,9 @@ fn main() {
     };
     
     // If no device was initialized yet, provide a fallback
-    #[cfg(all(not(feature = "cuda"), not(feature = "wgpu"), not(feature = "candle"), 
+    #[cfg(all(not(feature = "cuda"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), 
              not(feature = "ndarray"), not(feature = "tch"), not(feature = "candle-metal")))]
-    compile_error!("No backend feature was enabled. Please enable at least one: cuda, wgpu, candle, ndarray, etc.");
+    compile_error!("No backend feature was enabled. Please enable at least one: cuda, vulkan, wgpu, candle, ndarray, etc.");
 
     // This check is now just for logging
     if !device_initialized {
