@@ -486,9 +486,9 @@ fn generate_text<B: Backend>(
         let end = (i + chunk_size).min(prompt.len());
         let chunk = &prompt[i..end];
         
-        let chunk_tokens: Vec<i64> = chunk.as_bytes()
+        let chunk_tokens: Vec<i32> = chunk.as_bytes()
             .iter()
-            .map(|&b| b as i64)
+            .map(|&b| b as i32)
             .collect();
         
         if chunk_tokens.is_empty() {
