@@ -539,7 +539,7 @@ fn generate_text<B: Backend>(
                 .slice([0..1, seed_tokens.len()..generated_tokens.dims()[1]]);
             
             let reshaped = new_tokens.clone().reshape([new_tokens.dims()[0] * new_tokens.dims()[1]]);
-            let values: Vec<i32> = reshaped.to_data().into_vec()
+            let values: Vec<i64> = reshaped.to_data().into_vec()
                 .expect("Failed to convert tensor data to vector");
             let ids: Vec<usize> = values.into_iter().map(|x| x as usize).collect();
             
