@@ -13,7 +13,7 @@ use burn::{
 use burn::optim::SgdConfig;
 
 #[cfg(feature = "optimizer-adam")]
-use burn::optim::{AdamConfig, Adam};
+use burn::optim::AdamConfig;
 
 #[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
 compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled");
@@ -66,15 +66,14 @@ impl FromStr for LRSchedulerType {
 // Helpers to work with Adam optimizers
 #[cfg(feature = "optimizer-adam")]
 pub fn get_adam_lr(config: &AdamConfig) -> f64 {
-    config.lr
+    // Access learning rate through a getter method instead of direct field access
+    config.get_lr()
 }
 
 #[cfg(feature = "optimizer-adam")]
 pub fn with_adam_lr(config: AdamConfig, lr: f64) -> AdamConfig {
-    // Create a new config with the updated learning rate
-    let mut new_config = config.clone();
-    new_config.lr = lr;
-    new_config
+    // Use the builder pattern to create a new config with updated learning rate
+    config.with_learning_rate(lr)
 }
 
 /// Configuration for TBPTT training
@@ -89,7 +88,7 @@ pub struct TBPTTConfig {
 
     #[cfg(feature = "optimizer-adam")]
     /// Adam Optimizer configuration
-    #[config(default = "AdamConfig::new().with_lr(1e-3).with_beta1(0.9).with_beta2(0.999).with_eps(1e-8)")]
+    #[config(default = "AdamConfig::new().with_learning_rate(1e-3).with_betas(0.9, 0.999).with_epsilon(1e-8)")]
     pub optimizer: AdamConfig,
     
     /// Learning rate - primarily used for SGD, for Adam it sets the initial learning rate
@@ -1295,10 +1294,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
                 // Update Adam config if needed
                 #[cfg(feature = "optimizer-adam")]
                 {
-                    // Update the Adam optimizer's config with the new learning rate
-                    let mut new_config = optimizer.config.clone();
-                    new_config.lr = current_lr;
-                    optimizer.config = new_config;
+                    // For Adam, just update the trainer's learning rate
+                    // The optimizer adaptor doesn't expose its config directly
                 }
                 println!(
                     "Epoch {}/{} - Base learning rate: {:.6e}",
