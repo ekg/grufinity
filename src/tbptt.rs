@@ -13,7 +13,7 @@ use burn::{
 use burn::optim::SgdConfig;
 
 #[cfg(feature = "optimizer-adam")]
-use burn::optim::{AdamConfig, Adam, Optimizer as BurnOptimizer};
+use burn::optim::{AdamConfig, Adam};
 
 #[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
 compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled");
@@ -63,25 +63,18 @@ impl FromStr for LRSchedulerType {
     }
 }
 
-// Extension trait to access learning rate from optimizers
+// Helpers to work with Adam optimizers
 #[cfg(feature = "optimizer-adam")]
-pub trait OptimizerExt {
-    fn lr(&self) -> f64;
-    fn with_lr(&self, lr: f64) -> Self;
+pub fn get_adam_lr(config: &AdamConfig) -> f64 {
+    config.lr
 }
 
 #[cfg(feature = "optimizer-adam")]
-impl<M: Module<B>, B: burn::tensor::backend::AutodiffBackend> OptimizerExt for Adam<M, B> {
-    fn lr(&self) -> f64 {
-        // Get the learning rate from Adam's config
-        self.config.lr
-    }
-    
-    fn with_lr(&self, lr: f64) -> Self {
-        // Create a new Adam optimizer with updated learning rate
-        let new_config = self.config.clone().with_lr(lr);
-        Adam::new(new_config, self.state.clone())
-    }
+pub fn with_adam_lr(config: AdamConfig, lr: f64) -> AdamConfig {
+    // Create a new config with the updated learning rate
+    let mut new_config = config.clone();
+    new_config.lr = lr;
+    new_config
 }
 
 /// Configuration for TBPTT training
@@ -664,19 +657,15 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Apply gradients if needed
         if do_update && *accumulation_current >= self.tbptt_k1 {
             let grads = accumulator.grads();
-            // Adam handles learning rate adaptation internally
-            #[cfg(feature = "optimizer-adam")]
-            let model = optimizer.step(self.model.clone(), grads);
-            // For SGD, we still need to provide the learning rate
-            #[cfg(feature = "optimizer-sgd")]
-            let model = optimizer.step(self.learning_rate, self.model.clone(), grads);
                 
+            // All optimizers need learning rate parameter
+            let model = optimizer.step(self.learning_rate, self.model.clone(), grads);
             self.model = model;
             *accumulation_current = 0;
                 
             // Update metrics with current learning rate
             #[cfg(feature = "optimizer-adam")]
-            self.metrics.update_lr(optimizer.lr());
+            self.metrics.update_lr(self.learning_rate);
             #[cfg(feature = "optimizer-sgd")]
             self.metrics.update_lr(self.learning_rate);
         }
@@ -1102,7 +1091,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     #[cfg(feature = "optimizer-adam")]
     let mut optimizer = {
         // Use the learning_rate from config to update the Adam config
-        let adam_config = config.optimizer.clone().with_lr(config.learning_rate);
+        let mut adam_config = config.optimizer.clone();
+        adam_config.lr = config.learning_rate;
         adam_config.init()
     };
     
@@ -1299,8 +1289,17 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
                     config.learning_rate
                 };
                 
-                // Update global learning rate scale for Adam
-                optimizer = optimizer.with_lr(current_lr);
+                // Update the learning rate for the next steps
+                trainer.learning_rate = current_lr;
+                
+                // Update Adam config if needed
+                #[cfg(feature = "optimizer-adam")]
+                {
+                    // Update the Adam optimizer's config with the new learning rate
+                    let mut new_config = optimizer.config.clone();
+                    new_config.lr = current_lr;
+                    optimizer.config = new_config;
+                }
                 println!(
                     "Epoch {}/{} - Base learning rate: {:.6e}",
                     epoch, max_training_epochs, current_lr
