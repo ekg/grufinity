@@ -69,20 +69,69 @@ impl FromStr for LRSchedulerType {
     }
 }
 
-// Helpers for Adam optimizer
-#[cfg(feature = "optimizer-adam")]
-pub fn get_adam_lr(_config: &AdamConfig) -> f64 {
-    // In Burn's implementation, Adam doesn't store the learning rate in its config
-    // Instead, learning rate is passed directly to optimizer.step() calls
-    // This matches the pattern in custom_training_loop.rs
-    1e-3  // Just return a default for display
+/// Learning rate scheduler that works with both Adam and SGD
+pub struct LearningRateScheduler {
+    base_lr: f64,
+    current_lr: f64,
+    min_lr_factor: f64,
+    scheduler_type: LRSchedulerType,
+    warmup_epochs: usize,
+    total_epochs: usize,
 }
 
-#[cfg(feature = "optimizer-adam")]
-pub fn with_adam_lr(config: AdamConfig, _lr: f64) -> AdamConfig {
-    // Adam applies learning rate during step() calls, not in its config
-    // This matches the pattern in custom_training_loop.rs
-    config  // Return unchanged
+impl LearningRateScheduler {
+    pub fn new(
+        base_lr: f64,
+        min_lr_factor: f64,
+        scheduler_type: LRSchedulerType,
+        warmup_epochs: usize,
+        total_epochs: usize,
+    ) -> Self {
+        let current_lr = if warmup_epochs > 0 {
+            // Start with min_lr if warmup is enabled
+            base_lr * min_lr_factor
+        } else {
+            base_lr
+        };
+        
+        Self {
+            base_lr,
+            current_lr,
+            min_lr_factor,
+            scheduler_type,
+            warmup_epochs,
+            total_epochs,
+        }
+    }
+    
+    pub fn get_lr_for_epoch(&mut self, epoch: usize) -> f64 {
+        let min_lr = self.base_lr * self.min_lr_factor;
+        
+        self.current_lr = if epoch <= self.warmup_epochs {
+            // Linear warmup from min_lr to base_lr
+            min_lr + (self.base_lr - min_lr) * (epoch as f64 / self.warmup_epochs.max(1) as f64)
+        } else if self.scheduler_type == LRSchedulerType::Cosine {
+            // Cosine annealing
+            let progress = (epoch - self.warmup_epochs) as f64
+                / (self.total_epochs - self.warmup_epochs).max(1) as f64;
+            let cosine_decay = 0.5 * (1.0 + (std::f64::consts::PI * progress).cos());
+            min_lr + (self.base_lr - min_lr) * cosine_decay
+        } else if self.scheduler_type == LRSchedulerType::Linear {
+            // Linear decay
+            let progress = (epoch - self.warmup_epochs) as f64
+                / (self.total_epochs - self.warmup_epochs).max(1) as f64;
+            self.base_lr - (self.base_lr - min_lr) * progress.min(1.0)
+        } else {
+            // Constant learning rate
+            self.base_lr
+        };
+        
+        self.current_lr
+    }
+    
+    pub fn get_current_lr(&self) -> f64 {
+        self.current_lr
+    }
 }
 
 /// Configuration for TBPTT training
@@ -346,6 +395,9 @@ impl TBPTTMetrics {
     pub fn update_lr(&mut self, lr: f64) {
         self.current_lr = lr;
         self.record_metric("learning_rate", lr as f32);
+        
+        // Also record directly as a learning rate metric entry for easier tracking
+        self.record_metric("lr", lr as f32);
     }
 
     pub fn update_progress(&mut self, progress: f32) {
@@ -1222,12 +1274,14 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         config.num_epochs
     };
 
-    // Setup learning rate scheduling (for SGD or if explicitly requested with Adam)
-    let use_cosine = config.lr_scheduler == LRSchedulerType::Cosine;
-    let use_linear = config.lr_scheduler == LRSchedulerType::Linear;
-    // Anything other than Cosine or Linear will use constant learning rate
-    let warmup_epochs = config.warmup_epochs;
-    let min_lr = config.learning_rate * config.min_lr_factor;
+    // Initialize learning rate scheduler
+    let mut lr_scheduler = LearningRateScheduler::new(
+        config.learning_rate,
+        config.min_lr_factor,
+        config.lr_scheduler,
+        config.warmup_epochs,
+        max_training_epochs,
+    );
 
     println!("Training for up to {} epochs", max_training_epochs);
     if config.target_valid_loss > 0.0 {
@@ -1243,105 +1297,47 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         );
     }
 
-    // Print learning rate info
+    // Print learning rate schedule info
+    println!("Learning rate configuration:");
+    println!("- Base learning rate: {}", config.learning_rate);
+    println!("- Minimum learning rate: {}", config.learning_rate * config.min_lr_factor);
+    println!("- Scheduler type: {:?}", config.lr_scheduler);
+    
+    if config.warmup_epochs > 0 {
+        println!("- Using {} warmup epochs with linear ramp", config.warmup_epochs);
+    }
+    
     #[cfg(feature = "optimizer-adam")]
     {
-        // Print Adam configuration - following custom_training_loop.rs pattern
-        println!("Using Adam optimizer with adaptive parameter-specific learning rates");
-        println!("Base learning rate: {}", config.learning_rate); 
-        println!("Adam automatically adapts learning rates for each parameter based on gradient history");
-        
-        // Explain that Adam doesn't need elaborate scheduling
-        if warmup_epochs > 0 || use_cosine || use_linear {
-            println!("Note: Learning rate scheduling is generally not needed with Adam");
-            println!("      Using fixed learning rate of {} as per best practice", config.learning_rate);
-        }
+        println!("- Using Adam optimizer with adaptive parameter-specific learning rates");
+        println!("- Adam applies base learning rate to all parameters and adapts based on gradient history");
     }
     
     #[cfg(feature = "optimizer-sgd")]
     {
-        // Print learning rate schedule info for SGD
-        if warmup_epochs > 0 {
-            println!("Using {} warmup epochs with linear ramp", warmup_epochs);
-        }
-        if use_cosine {
-            println!(
-                "Using cosine annealing schedule from lr={} to min_lr={}",
-                config.learning_rate, min_lr
-            );
-        } else if use_linear {
-            println!(
-                "Using linear decay schedule from lr={} to min_lr={}",
-                config.learning_rate, min_lr
-            );
-        } else {
-            println!("Using constant learning rate: {}", config.learning_rate);
-        }
+        println!("- Using SGD optimizer with momentum: {}", 
+                 config.optimizer.momentum.as_ref().map_or(0.0, |m| m.momentum));
     }
 
     for epoch in 1..=max_training_epochs {
+        // Get learning rate for this epoch from the scheduler
+        let current_lr = lr_scheduler.get_lr_for_epoch(epoch);
+        
+        // Update trainer's learning rate
+        trainer.learning_rate = current_lr;
+        
+        // Print learning rate information
         #[cfg(feature = "optimizer-sgd")]
-        {
-            // Calculate learning rate for this epoch (only needed for SGD)
-            let current_lr = if epoch <= warmup_epochs {
-                // Linear warmup from min_lr to max_lr
-                min_lr + (config.learning_rate - min_lr) * (epoch as f64 / warmup_epochs.max(1) as f64)
-            } else if use_cosine {
-                // Cosine annealing
-                let progress = (epoch - warmup_epochs) as f64
-                    / (max_training_epochs - warmup_epochs).max(1) as f64;
-                let cosine_decay = 0.5 * (1.0 + (std::f64::consts::PI * progress).cos());
-                min_lr + (config.learning_rate - min_lr) * cosine_decay
-            } else if use_linear {
-                // Linear decay
-                let progress = (epoch - warmup_epochs) as f64
-                    / (max_training_epochs - warmup_epochs).max(1) as f64;
-                config.learning_rate - (config.learning_rate - min_lr) * progress
-            } else {
-                // Constant learning rate
-                config.learning_rate
-            };
-
-            // Update trainer's learning rate for SGD
-            trainer.learning_rate = current_lr;
-            println!(
-                "Epoch {}/{} - Learning rate: {:.6e}",
-                epoch, max_training_epochs, current_lr
-            );
-        }
+        println!(
+            "Epoch {}/{} - Learning rate: {:.6e}",
+            epoch, max_training_epochs, current_lr
+        );
         
         #[cfg(feature = "optimizer-adam")]
-        {
-            // Calculate learning rate for this epoch (even for Adam)
-            // While Adam adapts per-parameter learning rates, scheduling the base rate can still be helpful
-            let current_lr = if epoch <= warmup_epochs {
-                // Linear warmup from min_lr to max_lr
-                min_lr + (config.learning_rate - min_lr) * (epoch as f64 / warmup_epochs.max(1) as f64)
-            } else if use_cosine {
-                // Cosine annealing
-                let progress = (epoch - warmup_epochs) as f64
-                    / (max_training_epochs - warmup_epochs).max(1) as f64;
-                let cosine_decay = 0.5 * (1.0 + (std::f64::consts::PI * progress).cos());
-                min_lr + (config.learning_rate - min_lr) * cosine_decay
-            } else if use_linear {
-                // Linear decay
-                let progress = (epoch - warmup_epochs) as f64
-                    / (max_training_epochs - warmup_epochs).max(1) as f64;
-                config.learning_rate - (config.learning_rate - min_lr) * progress
-            } else {
-                // Constant learning rate
-                config.learning_rate
-            };
-            
-            // Update trainer's learning rate
-            trainer.learning_rate = current_lr;
-            
-            // Don't print the base learning rate - Adam uses dynamic per-parameter rates
-            println!(
-                "Epoch {}/{} - Adam base learning rate: {:.6e}",
-                epoch, max_training_epochs, current_lr
-            );
-        }
+        println!(
+            "Epoch {}/{} - Adam base learning rate: {:.6e}",
+            epoch, max_training_epochs, current_lr
+        );
 
         // Resample starting positions for each epoch with different seeds
         println!("Resampling positions for epoch {}...", epoch);
