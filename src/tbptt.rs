@@ -211,7 +211,7 @@ pub struct TBPTTConfig {
     pub target_test_loss: f32,
 
     /// Learning rate scheduler type
-    #[config(default = "LRSchedulerType::Constant")]
+    #[config(default = "LRSchedulerType::Cosine")]
     pub lr_scheduler: LRSchedulerType,
 
     /// Minimum learning rate for scheduler (as fraction of base lr)
