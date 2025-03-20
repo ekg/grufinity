@@ -453,11 +453,11 @@ fn main() {
                             // For Adam, store the weight decay in our own copy
                             modified_config.weight_decay = Some(decay as f32);
                             
-                            // Update the Adam optimizer config with all parameters
+                            // Update the optimizer config with weight decay and preserve existing Adam parameters
                             modified_config.optimizer = AdamConfig::new()
-                                .with_beta_1(config.adam_beta1)
-                                .with_beta_2(config.adam_beta2)
-                                .with_epsilon(config.adam_epsilon)
+                                .with_beta_1(modified_config.adam_beta1)
+                                .with_beta_2(modified_config.adam_beta2)
+                                .with_epsilon(modified_config.adam_epsilon)
                                 .with_weight_decay(Some(WeightDecayConfig::new(decay as f32)));
                         }
                         println!("Setting weight decay to: {}", decay);
@@ -545,9 +545,13 @@ fn main() {
                             // Store our own copy of beta1
                             modified_config.adam_beta1 = beta1 as f32;
                             
-                            // Preserve existing parameter settings from config
-                            modified_config.adam_beta2 = config.adam_beta2;
-                            modified_config.adam_epsilon = config.adam_epsilon;
+                            // Use default values for other parameters if not set
+                            if !config_path.is_empty() && modified_config.adam_beta2 == 0.0 {
+                                modified_config.adam_beta2 = 0.999; // Default beta2
+                            }
+                            if !config_path.is_empty() && modified_config.adam_epsilon == 0.0 {
+                                modified_config.adam_epsilon = 1e-8; // Default epsilon
+                            }
 
                             // Update the optimizer config
                             modified_config.optimizer = AdamConfig::new()
@@ -555,9 +559,10 @@ fn main() {
                                 .with_beta_2(modified_config.adam_beta2)
                                 .with_epsilon(modified_config.adam_epsilon);
                             
-                            // Keep weight decay if it exists in original config
-                            if let Some(penalty) = config.weight_decay {
-                                modified_config.weight_decay = Some(penalty);
+                            // Keep existing weight decay if any
+                            if let Some(penalty) = modified_config.weight_decay {
+                                modified_config.optimizer = modified_config.optimizer
+                                    .with_weight_decay(Some(WeightDecayConfig::new(penalty)));
                             }
                         }
                         
@@ -586,9 +591,13 @@ fn main() {
                             // Store our own copy of beta2
                             modified_config.adam_beta2 = beta2 as f32;
                             
-                            // Preserve existing parameter settings from config
-                            modified_config.adam_beta1 = config.adam_beta1;
-                            modified_config.adam_epsilon = config.adam_epsilon;
+                            // Use default values or preserve existing settings
+                            if !config_path.is_empty() && modified_config.adam_beta1 == 0.0 {
+                                modified_config.adam_beta1 = 0.9; // Default beta1
+                            }
+                            if !config_path.is_empty() && modified_config.adam_epsilon == 0.0 {
+                                modified_config.adam_epsilon = 1e-8; // Default epsilon
+                            }
                             
                             // Update the optimizer config
                             modified_config.optimizer = AdamConfig::new()
@@ -596,9 +605,10 @@ fn main() {
                                 .with_beta_2(modified_config.adam_beta2)
                                 .with_epsilon(modified_config.adam_epsilon);
                             
-                            // Keep weight decay if it exists in original config
-                            if let Some(penalty) = config.weight_decay {
-                                modified_config.weight_decay = Some(penalty);
+                            // Keep existing weight decay if any
+                            if let Some(penalty) = modified_config.weight_decay {
+                                modified_config.optimizer = modified_config.optimizer
+                                    .with_weight_decay(Some(WeightDecayConfig::new(penalty)));
                             }
                         }
                         
@@ -627,9 +637,13 @@ fn main() {
                             // Store our own copy of epsilon
                             modified_config.adam_epsilon = epsilon as f32;
                             
-                            // Preserve existing parameter settings from config
-                            modified_config.adam_beta1 = config.adam_beta1;
-                            modified_config.adam_beta2 = config.adam_beta2;
+                            // Use default values or preserve existing settings
+                            if !config_path.is_empty() && modified_config.adam_beta1 == 0.0 {
+                                modified_config.adam_beta1 = 0.9; // Default beta1
+                            }
+                            if !config_path.is_empty() && modified_config.adam_beta2 == 0.0 {
+                                modified_config.adam_beta2 = 0.999; // Default beta2
+                            }
                             
                             // Update the optimizer config
                             modified_config.optimizer = AdamConfig::new()
@@ -637,9 +651,10 @@ fn main() {
                                 .with_beta_2(modified_config.adam_beta2)
                                 .with_epsilon(modified_config.adam_epsilon);
                             
-                            // Keep weight decay if it exists in original config
-                            if let Some(penalty) = config.weight_decay {
-                                modified_config.weight_decay = Some(penalty);
+                            // Keep existing weight decay if any
+                            if let Some(penalty) = modified_config.weight_decay {
+                                modified_config.optimizer = modified_config.optimizer
+                                    .with_weight_decay(Some(WeightDecayConfig::new(penalty)));
                             }
                         }
                         
@@ -1081,7 +1096,7 @@ fn create_default_config() -> TBPTTConfig {
     
     #[cfg(feature = "optimizer-adam")]
     // Configure Adam with recommended defaults from custom_training_loop.rs pattern
-    let optimizer_config = AdamConfig::new()
+    let _optimizer_config = AdamConfig::new()
         .with_beta_1(0.9)        // Default: Controls momentum decay rate 
         .with_beta_2(0.999)      // Default: Controls variance decay rate
         .with_epsilon(1e-8);     // Improved stability compared to default 1e-5

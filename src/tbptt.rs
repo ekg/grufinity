@@ -1230,7 +1230,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     let use_linear = config.lr_scheduler == LRSchedulerType::Linear;
     // Anything other than Cosine or Linear will use constant learning rate
     let warmup_epochs = config.warmup_epochs;
-    let min_lr = config.learning_rate * config.min_lr_factor;
+    let _min_lr = config.learning_rate * config.min_lr_factor;
 
     println!("Training for up to {} epochs", max_training_epochs);
     if config.target_valid_loss > 0.0 {
