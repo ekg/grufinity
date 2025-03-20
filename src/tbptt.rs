@@ -94,6 +94,19 @@ pub struct TBPTTConfig {
     #[config(default = "AdamConfig::new()")]
     pub optimizer: AdamConfig,
     
+    // Store our own copies of Adam parameters (since they're private in AdamConfig)
+    #[cfg(feature = "optimizer-adam")]
+    #[config(default = 0.9)]
+    pub adam_beta1: f32,
+    
+    #[cfg(feature = "optimizer-adam")]
+    #[config(default = 0.999)]
+    pub adam_beta2: f32,
+    
+    #[cfg(feature = "optimizer-adam")]
+    #[config(default = 1e-8)]
+    pub adam_epsilon: f32,
+    
     /// Learning rate - used for both SGD and Adam
     /// For Adam, this is passed during optimizer.step() calls
     #[config(default = 1e-3)]
