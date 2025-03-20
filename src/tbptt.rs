@@ -1090,8 +1090,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     #[cfg(feature = "optimizer-adam")]
     let mut optimizer = {
         // Use the learning_rate from config to update the Adam config
-        let mut adam_config = config.optimizer.clone();
-        adam_config.lr = config.learning_rate;
+        let adam_config = config.optimizer.clone()
+            .with_learning_rate(config.learning_rate);
         adam_config.init()
     };
     
