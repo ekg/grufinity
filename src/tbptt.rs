@@ -10,10 +10,16 @@ use burn::{
 };
 
 #[cfg(feature = "optimizer-sgd")]
-use burn::optim::SgdConfig;
+use burn::{
+    optim::SgdConfig,
+    optim::decay::WeightDecayConfig,
+};
 
 #[cfg(feature = "optimizer-adam")]
-use burn::optim::AdamConfig;
+use burn::{
+    optim::AdamConfig,
+    optim::decay::WeightDecayConfig,
+};
 
 #[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
 compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled");
