@@ -66,14 +66,16 @@ impl FromStr for LRSchedulerType {
 // Helpers to work with Adam optimizers
 #[cfg(feature = "optimizer-adam")]
 pub fn get_adam_lr(config: &AdamConfig) -> f64 {
-    // Access learning rate from the config using its methods
-    config.learning_rate()
+    // Access learning rate directly from the config
+    config.learning_rate
 }
 
 #[cfg(feature = "optimizer-adam")]
 pub fn with_adam_lr(config: AdamConfig, lr: f64) -> AdamConfig {
-    // Update learning rate using the builder pattern
-    config.with_learning_rate(lr)
+    // Create a new config with the updated learning rate
+    let mut new_config = config.clone();
+    new_config.learning_rate = lr;
+    new_config
 }
 
 /// Configuration for TBPTT training
@@ -88,7 +90,7 @@ pub struct TBPTTConfig {
 
     #[cfg(feature = "optimizer-adam")]
     /// Adam Optimizer configuration
-    #[config(default = "AdamConfig::new().with_learning_rate(1e-3).with_betas(0.9, 0.999).with_epsilon(1e-8)")]
+    #[config(default = "AdamConfig::new()")]
     pub optimizer: AdamConfig,
     
     /// Learning rate - primarily used for SGD, for Adam it sets the initial learning rate
@@ -1090,8 +1092,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     #[cfg(feature = "optimizer-adam")]
     let mut optimizer = {
         // Use the learning_rate from config to update the Adam config
-        let adam_config = config.optimizer.clone()
-            .with_learning_rate(config.learning_rate);
+        let mut adam_config = config.optimizer.clone();
+        adam_config.learning_rate = config.learning_rate;
         adam_config.init()
     };
     
