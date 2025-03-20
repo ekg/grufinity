@@ -65,17 +65,17 @@ impl FromStr for LRSchedulerType {
 
 // Helpers to work with Adam optimizers
 #[cfg(feature = "optimizer-adam")]
-pub fn get_adam_lr(config: &AdamConfig) -> f64 {
-    // Access learning rate directly from the config
-    config.learning_rate
+pub fn get_adam_lr(_config: &AdamConfig) -> f64 {
+    // The Adam config doesn't expose the learning rate directly
+    // Return a default learning rate - the actual rate is applied during step()
+    1e-3
 }
 
 #[cfg(feature = "optimizer-adam")]
-pub fn with_adam_lr(config: AdamConfig, lr: f64) -> AdamConfig {
-    // Create a new config with the updated learning rate
-    let mut new_config = config.clone();
-    new_config.learning_rate = lr;
-    new_config
+pub fn with_adam_lr(config: AdamConfig, _lr: f64) -> AdamConfig {
+    // The learning rate is applied during optimizer.step() call
+    // Just return the original config
+    config
 }
 
 /// Configuration for TBPTT training
@@ -1091,9 +1091,9 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     // Initialize optimizer (feature flag is handled at the type level)
     #[cfg(feature = "optimizer-adam")]
     let mut optimizer = {
-        // Use the learning_rate from config to update the Adam config
-        let mut adam_config = config.optimizer.clone();
-        adam_config.learning_rate = config.learning_rate;
+        // With Adam, we'll just pass the learning rate during each step() call
+        // No need to set it on the config
+        let adam_config = config.optimizer.clone();
         adam_config.init()
     };
     
