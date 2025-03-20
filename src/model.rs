@@ -1,7 +1,7 @@
 use burn::{
     module::Module,
     tensor::{backend::Backend, Tensor, Int, activation},
-    nn::{Embedding, EmbeddingConfig, Linear, LinearConfig, RmsNorm, RmsNormConfig},
+    nn::{Embedding, EmbeddingConfig, Linear, LinearConfig, RmsNorm, RmsNormConfig, SwiGlu, SwiGluConfig},
     config::Config,
     train::{ClassificationOutput, TrainOutput, TrainStep, ValidStep},
 };
@@ -21,8 +21,8 @@ impl FeedForwardConfig {
         let dim_inner = (self.dim as f64 * self.mult) as usize;
         
         FeedForward {
-            linear1: LinearConfig::new(self.dim, dim_inner).init(device),
-            linear2: LinearConfig::new(dim_inner, self.dim).init(device),
+            swiglu: SwiGluConfig::new(self.dim, dim_inner).init(device),
+            proj: LinearConfig::new(dim_inner, self.dim).init(device),
         }
     }
 }
@@ -30,15 +30,14 @@ impl FeedForwardConfig {
 /// Feed Forward module
 #[derive(Module, Debug)]
 pub struct FeedForward<B: Backend> {
-    linear1: Linear<B>,
-    linear2: Linear<B>,
+    swiglu: SwiGlu<B>,
+    proj: Linear<B>,
 }
 
 impl<B: Backend> FeedForward<B> {
     pub fn forward(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
-        let x = self.linear1.forward(x);
-        let x = activation::gelu(x);
-        self.linear2.forward(x)
+        let x = self.swiglu.forward(x);
+        self.proj.forward(x)
     }
 }
 
