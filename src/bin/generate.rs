@@ -564,7 +564,7 @@ fn generate_text<B: Backend>(
 /// Examples: "1k" -> 1000, "2m" -> 2000000, "1.5g" -> 1500000000
 fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
 where 
-    T: std::str::FromStr + std::ops::Mul<f64, Output = T> + From<f64>,
+    T: std::str::FromStr,
     <T as std::str::FromStr>::Err: std::fmt::Display
 {
     // Check if the string ends with a known suffix
@@ -579,9 +579,26 @@ where
         (s, 1.0)
     };
     
-    // Parse the numeric part
+    // Parse the numeric part to f64 first
     match value_str.parse::<f64>() {
-        Ok(num) => Ok((num * multiplier).into()),
+        Ok(num) => {
+            let result = num * multiplier;
+            // Now convert to the target type based on what T is
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                // Safety: we've verified the type is usize
+                let as_usize = result as usize;
+                // This is safe because we've verified T is usize
+                let ptr = &as_usize as *const usize as *const T;
+                Ok(unsafe { *ptr })
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                // Safety: we've verified the type is f64
+                let ptr = &result as *const f64 as *const T;
+                Ok(unsafe { *ptr })
+            } else {
+                // For other types, try parsing directly
+                s.parse::<T>().map_err(|e| format!("Failed to parse '{}': {}", s, e))
+            }
+        },
         Err(e) => Err(format!("Failed to parse '{}': {}", s, e))
     }
 }
