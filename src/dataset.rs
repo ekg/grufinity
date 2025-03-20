@@ -39,7 +39,17 @@ impl CharVocab {
             self.byte_to_idx.insert(i, i as usize);
             self.idx_to_byte.insert(i as usize, i);
         }
-        self.size = 256; // Fixed size for all possible bytes
+        
+        // Add special EOS token (index 256)
+        self.byte_to_idx.insert(0xFF, 256);
+        self.idx_to_byte.insert(256, 0xFF);
+        
+        self.size = 257; // 256 bytes + 1 special token
+    }
+    
+    // Get the EOS token index
+    pub fn eos_token(&self) -> usize {
+        256 // Special EOS token index
     }
 
     pub fn char_to_index(&self, c: char) -> Option<usize> {
@@ -567,6 +577,23 @@ impl<B: Backend> Batcher<(String, String), Option<TextBatch<B>>> for TextBatcher
             return None;
         }
         
+        // Add safety check to ensure we're not stacking empty tensors
+        if inputs.len() == 0 {
+            return None;
+        }
+        
+        // Create placeholder batch if needed (instead of returning None)
+        // This is a better approach than letting the stack operation fail
+        if inputs.len() < 1 {
+            // Create a single dummy sample with EOS tokens
+            let eos_idx = self.vocab.eos_token() as i64;
+            let dummy = vec![eos_idx; sequence_length];
+            
+            let dummy_tensor = Tensor::<B, 1, Int>::from_data(&*dummy, &self.device);
+            inputs = vec![dummy_tensor.clone()];
+            targets = vec![dummy_tensor];
+        }
+        
         // Batch tensors (now all have the same shape)
         let input = Tensor::stack(inputs, 0);
         let target = Tensor::stack(targets, 0);
@@ -655,6 +682,30 @@ impl<B: Backend> Batcher<TextChunk, Option<ChunkedTextBatch<B>>> for ChunkedText
             
             inputs.push(Tensor::<B, 1, Int>::from_data(&*padded_input, &self.device));
             targets.push(Tensor::<B, 1, Int>::from_data(&*padded_target, &self.device));
+        }
+        
+        // Check if we have any valid inputs after processing
+        if inputs.is_empty() {
+            return None;
+        }
+        
+        // Create placeholder batch if needed
+        if inputs.len() < 1 {
+            // Create a single dummy sample with EOS tokens
+            let eos_idx = self.vocab.eos_token() as i64;
+            let dummy = vec![eos_idx; max_seq_len];
+            
+            let dummy_tensor = Tensor::<B, 1, Int>::from_data(&*dummy, &self.device);
+            inputs = vec![dummy_tensor.clone()];
+            targets = vec![dummy_tensor];
+            
+            // Add dummy document tracking info
+            if doc_ids.is_empty() {
+                doc_ids = vec![0];
+                chunk_indices = vec![0];
+                is_last_chunks = vec![true];
+                is_padded = vec![true];
+            }
         }
         
         // Batch tensors (now all have the same shape)

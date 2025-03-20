@@ -729,6 +729,22 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 continue;
             }
 
+            // Double-check that the batch is valid - tensors should have reasonable dimensions
+            if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
+                progress_bar.inc(1);
+                progress_bar.set_message("Skipped batch - invalid dimensions");
+                
+                // We need to still move to next chunk and count even if we skip
+                if !dataloader.next_chunk() {
+                    // If we can't advance, reset and resample to get fresh chunks
+                    dataloader.reset();
+                    dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
+                }
+                
+                step += 1;
+                continue;
+            }
+
             // Process chunk and update model if needed
             let do_update = (step + 1) % self.tbptt_k1 == 0 || step == total_steps - 1;
             let loss = self.process_chunk(
