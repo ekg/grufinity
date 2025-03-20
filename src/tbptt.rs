@@ -1321,9 +1321,10 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
             // Just set the base learning rate directly
             trainer.learning_rate = config.learning_rate;
             
+            // Don't print the base learning rate - Adam uses dynamic per-parameter rates
             println!(
-                "Epoch {}/{} - Adam learning rate: {:.6e}",
-                epoch, max_training_epochs, config.learning_rate
+                "Epoch {}/{}",
+                epoch, max_training_epochs
             );
         }
 
