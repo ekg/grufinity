@@ -689,10 +689,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             self.model = model;
             *accumulation_current = 0;
                 
-            // Update metrics with current learning rate
-            #[cfg(feature = "optimizer-adam")]
-            self.metrics.update_lr(self.learning_rate);
-            #[cfg(feature = "optimizer-sgd")]
+            // Update metrics with current learning rate (for both Adam and SGD)
             self.metrics.update_lr(self.learning_rate);
         }
 
@@ -1315,16 +1312,34 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         
         #[cfg(feature = "optimizer-adam")]
         {
-            // For Adam, we use a fixed learning rate - no scheduling needed
-            // Adam automatically adapts learning rates for each parameter
+            // Calculate learning rate for this epoch (even for Adam)
+            // While Adam adapts per-parameter learning rates, scheduling the base rate can still be helpful
+            let current_lr = if epoch <= warmup_epochs {
+                // Linear warmup from min_lr to max_lr
+                min_lr + (config.learning_rate - min_lr) * (epoch as f64 / warmup_epochs.max(1) as f64)
+            } else if use_cosine {
+                // Cosine annealing
+                let progress = (epoch - warmup_epochs) as f64
+                    / (max_training_epochs - warmup_epochs).max(1) as f64;
+                let cosine_decay = 0.5 * (1.0 + (std::f64::consts::PI * progress).cos());
+                min_lr + (config.learning_rate - min_lr) * cosine_decay
+            } else if use_linear {
+                // Linear decay
+                let progress = (epoch - warmup_epochs) as f64
+                    / (max_training_epochs - warmup_epochs).max(1) as f64;
+                config.learning_rate - (config.learning_rate - min_lr) * progress
+            } else {
+                // Constant learning rate
+                config.learning_rate
+            };
             
-            // Just set the base learning rate directly
-            trainer.learning_rate = config.learning_rate;
+            // Update trainer's learning rate
+            trainer.learning_rate = current_lr;
             
             // Don't print the base learning rate - Adam uses dynamic per-parameter rates
             println!(
-                "Epoch {}/{}",
-                epoch, max_training_epochs
+                "Epoch {}/{} - Adam base learning rate: {:.6e}",
+                epoch, max_training_epochs, current_lr
             );
         }
 
