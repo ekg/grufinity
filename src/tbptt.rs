@@ -169,6 +169,10 @@ pub struct TBPTTConfig {
     /// Gradient clipping value (0.0 to disable)
     #[config(default = 0.0)]
     pub grad_clip: f32,
+    
+    /// Weight decay penalty factor (0.0 to disable)
+    #[config(default = "None")]
+    pub weight_decay: Option<f32>,
 }
 
 /// TBPTT metrics for tracking training progress
@@ -1095,17 +1099,22 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     let mut optimizer = {
         // Initialize Adam optimizer with customized hyperparameters
         // from the config, following the pattern in custom_training_loop.rs
-        let adam_config = AdamConfig::new()
-            .with_beta_1(config.optimizer.beta_1)
-            .with_beta_2(config.optimizer.beta_2)
-            .with_epsilon(config.optimizer.epsilon)
-            .with_weight_decay(config.optimizer.weight_decay.clone());
+        let mut adam_config = AdamConfig::new()
+            .with_beta_1(config.adam_beta1)
+            .with_beta_2(config.adam_beta2)
+            .with_epsilon(config.adam_epsilon);
+            
+        // Apply weight decay if configured (using our stored copy from CLI args)
+        if let Some(penalty) = config.weight_decay {
+            adam_config = adam_config.with_weight_decay(Some(WeightDecayConfig::new(penalty)));
+        }
         
         println!("Initializing Adam optimizer:");
-        println!("  - beta_1: {}", config.optimizer.beta_1);
-        println!("  - beta_2: {}", config.optimizer.beta_2);
-        println!("  - epsilon: {}", config.optimizer.epsilon);
-        println!("  - weight_decay: {}", config.optimizer.weight_decay.as_ref().map_or("None".to_string(), |wd| format!("{}", wd.penalty)));
+        println!("  - beta_1: {}", config.adam_beta1);
+        println!("  - beta_2: {}", config.adam_beta2);
+        println!("  - epsilon: {}", config.adam_epsilon);
+        println!("  - weight_decay: {}", config.weight_decay.map_or("None".to_string(), 
+                                                                 |wd| format!("{}", wd)));
         
         // Initialize optimizer - learning rate will be applied during step() calls
         adam_config.init()
