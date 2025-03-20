@@ -636,10 +636,10 @@ impl<B: Backend> Batcher<TextChunk, Option<ChunkedTextBatch<B>>> for ChunkedText
         }
         
         // Extract document tracking information
-        let doc_ids: Vec<_> = items.iter().map(|chunk| chunk.doc_id).collect();
-        let chunk_indices: Vec<_> = items.iter().map(|chunk| chunk.chunk_idx).collect();
-        let is_last_chunks: Vec<_> = items.iter().map(|chunk| chunk.is_last_chunk).collect();
-        let is_padded: Vec<_> = items.iter().map(|chunk| chunk.is_padded).collect();
+        let mut doc_ids: Vec<_> = items.iter().map(|chunk| chunk.doc_id).collect();
+        let mut chunk_indices: Vec<_> = items.iter().map(|chunk| chunk.chunk_idx).collect();
+        let mut is_last_chunks: Vec<_> = items.iter().map(|chunk| chunk.is_last_chunk).collect();
+        let mut is_padded: Vec<_> = items.iter().map(|chunk| chunk.is_padded).collect();
         
         // Find maximum sequence length for this batch
         // Each chunk should ideally have the same length, but let's be safe
