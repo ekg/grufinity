@@ -13,7 +13,7 @@ use burn::{
 use burn::optim::SgdConfig;
 
 #[cfg(feature = "optimizer-adam")]
-use burn::optim::{AdamConfig, Adam};
+use burn::optim::{AdamConfig, Adam, Optimizer as BurnOptimizer};
 
 #[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
 compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled");
@@ -60,6 +60,27 @@ impl FromStr for LRSchedulerType {
             "linear" => Ok(LRSchedulerType::Linear),
             _ => Err(format!("Unknown scheduler type: {}", s)),
         }
+    }
+}
+
+// Extension trait to access learning rate from optimizers
+#[cfg(feature = "optimizer-adam")]
+pub trait OptimizerExt {
+    fn lr(&self) -> f64;
+    fn with_lr(&self, lr: f64) -> Self;
+}
+
+#[cfg(feature = "optimizer-adam")]
+impl<M: Module<B>, B: burn::tensor::backend::AutodiffBackend> OptimizerExt for Adam<M, B> {
+    fn lr(&self) -> f64 {
+        // Get the learning rate from Adam's config
+        self.config.lr
+    }
+    
+    fn with_lr(&self, lr: f64) -> Self {
+        // Create a new Adam optimizer with updated learning rate
+        let new_config = self.config.clone().with_lr(lr);
+        Adam::new(new_config, self.state.clone())
     }
 }
 
@@ -1078,6 +1099,14 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         .init::<B>(device);
 
     // Initialize optimizer (feature flag is handled at the type level)
+    #[cfg(feature = "optimizer-adam")]
+    let mut optimizer = {
+        // Use the learning_rate from config to update the Adam config
+        let adam_config = config.optimizer.clone().with_lr(config.learning_rate);
+        adam_config.init()
+    };
+    
+    #[cfg(feature = "optimizer-sgd")]
     let mut optimizer = config.optimizer.init();
 
     // Create TBPTT trainer
