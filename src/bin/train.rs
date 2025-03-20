@@ -12,7 +12,7 @@ use burn::{
 };
 
 #[cfg(feature = "optimizer-adam")]
-use burn::optim::AdamConfig;
+use burn::optim::{AdamConfig, decay::WeightDecayConfig};
 
 use grufinity::{
     model::MinGRULMConfig,
@@ -58,9 +58,12 @@ fn print_help() {
     println!("  --log-interval NUM             Log interval in batches (default: 10)");
     println!("  --checkpoint-interval NUM      Checkpoint interval in epochs (default: 1)");
     println!("  --momentum VALUE               Momentum factor for SGD (default: 0.0)");
-    println!("  --weight-decay VALUE           Weight decay (L2 penalty) for SGD (default: 0.0)");
+    println!("  --weight-decay VALUE           Weight decay (L2 penalty) (default: 0.0)");
     println!("  --dampening VALUE              Dampening for momentum (default: 0.0)");
     println!("  --nesterov BOOL                Enable Nesterov momentum (default: false)");
+    println!("  --beta1 VALUE                  Beta1 parameter for Adam (default: 0.9)");
+    println!("  --beta2 VALUE                  Beta2 parameter for Adam (default: 0.999)");
+    println!("  --epsilon VALUE                Epsilon parameter for Adam (default: 1e-5)");
     println!("  --lr-scheduler TYPE            Learning rate scheduler (constant, cosine, linear) (default: constant)");
     println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
     println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
@@ -444,12 +447,12 @@ fn main() {
                             let weight_decay_config = WeightDecayConfig { penalty: decay as f32 };
                             modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
                         }
-                        
+                
                         #[cfg(feature = "optimizer-adam")]
                         {
-                            println!("Note: Weight decay parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
-                            // Keep the default Adam config
-                            modified_config.optimizer = AdamConfig::new();
+                            // Adam also supports weight decay - apply it directly
+                            let weight_decay_config = WeightDecayConfig::new(decay as f32);
+                            modified_config.optimizer = AdamConfig::new().with_weight_decay(Some(weight_decay_config));
                         }
                         println!("Setting weight decay to: {}", decay);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
@@ -516,6 +519,114 @@ fn main() {
                             modified_config.optimizer = AdamConfig::new();
                         }
                         println!("Setting nesterov to: {}", nesterov);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--beta1" => {
+                if i + 1 < args.len() {
+                    if let Ok(beta1) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        #[cfg(feature = "optimizer-adam")]
+                        {
+                            // Update beta1 parameter for Adam
+                            modified_config.optimizer = AdamConfig::new()
+                                .with_beta_1(beta1 as f32)
+                                // Preserve existing config if possible
+                                .with_beta_2(config.optimizer.beta_2)
+                                .with_epsilon(config.optimizer.epsilon);
+
+                            // Keep weight decay if it exists in original config
+                            if let Some(wd) = &config.optimizer.weight_decay {
+                                modified_config.optimizer = modified_config.optimizer
+                                    .with_weight_decay(Some(WeightDecayConfig::new(wd.penalty)));
+                            }
+                        }
+                        
+                        #[cfg(feature = "optimizer-sgd")]
+                        {
+                            println!("Note: Beta1 parameter is only applicable when using Adam optimizer (--features=\"optimizer-adam\")");
+                        }
+                        
+                        println!("Setting Adam beta1 to: {}", beta1);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--beta2" => {
+                if i + 1 < args.len() {
+                    if let Ok(beta2) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        #[cfg(feature = "optimizer-adam")]
+                        {
+                            // Update beta2 parameter for Adam
+                            modified_config.optimizer = AdamConfig::new()
+                                .with_beta_2(beta2 as f32)
+                                // Preserve existing config if possible
+                                .with_beta_1(config.optimizer.beta_1)
+                                .with_epsilon(config.optimizer.epsilon);
+
+                            // Keep weight decay if it exists in original config
+                            if let Some(wd) = &config.optimizer.weight_decay {
+                                modified_config.optimizer = modified_config.optimizer
+                                    .with_weight_decay(Some(WeightDecayConfig::new(wd.penalty)));
+                            }
+                        }
+                        
+                        #[cfg(feature = "optimizer-sgd")]
+                        {
+                            println!("Note: Beta2 parameter is only applicable when using Adam optimizer (--features=\"optimizer-adam\")");
+                        }
+                        
+                        println!("Setting Adam beta2 to: {}", beta2);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--epsilon" => {
+                if i + 1 < args.len() {
+                    if let Ok(epsilon) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        #[cfg(feature = "optimizer-adam")]
+                        {
+                            // Update epsilon parameter for Adam
+                            modified_config.optimizer = AdamConfig::new()
+                                .with_epsilon(epsilon as f32)
+                                // Preserve existing config if possible
+                                .with_beta_1(config.optimizer.beta_1)
+                                .with_beta_2(config.optimizer.beta_2);
+
+                            // Keep weight decay if it exists in original config
+                            if let Some(wd) = &config.optimizer.weight_decay {
+                                modified_config.optimizer = modified_config.optimizer
+                                    .with_weight_decay(Some(WeightDecayConfig::new(wd.penalty)));
+                            }
+                        }
+                        
+                        #[cfg(feature = "optimizer-sgd")]
+                        {
+                            println!("Note: Epsilon parameter is only applicable when using Adam optimizer (--features=\"optimizer-adam\")");
+                        }
+                        
+                        println!("Setting Adam epsilon to: {}", epsilon);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }
@@ -947,7 +1058,12 @@ fn create_default_config() -> TBPTTConfig {
     let optimizer_config = SgdConfig::new();
     
     #[cfg(feature = "optimizer-adam")]
-    let optimizer_config = AdamConfig::new();
+    // Configure Adam with recommended defaults from custom_training_loop.rs pattern
+    let optimizer_config = AdamConfig::new()
+        .with_beta_1(0.9)        // Default: Controls momentum decay rate 
+        .with_beta_2(0.999)      // Default: Controls variance decay rate
+        .with_epsilon(1e-8)      // Improved stability compared to default 1e-5
+        .with_weight_decay(Some(WeightDecayConfig::new(0.01)));  // Default weight decay
     
     // Calculate chunks for different context lengths
     let desired_context = 64000; // Desired context length in characters

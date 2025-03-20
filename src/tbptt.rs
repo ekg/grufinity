@@ -66,17 +66,17 @@ impl FromStr for LRSchedulerType {
 // Helpers for Adam optimizer
 #[cfg(feature = "optimizer-adam")]
 pub fn get_adam_lr(_config: &AdamConfig) -> f64 {
-    // The Adam config doesn't store the learning rate directly
-    // The learning rate is passed during optimizer.step() calls
-    // Return a default learning rate for display purposes
-    1e-3
+    // In Burn's implementation, Adam doesn't store the learning rate in its config
+    // Instead, learning rate is passed directly to optimizer.step() calls
+    // This matches the pattern in custom_training_loop.rs
+    1e-3  // Just return a default for display
 }
 
 #[cfg(feature = "optimizer-adam")]
 pub fn with_adam_lr(config: AdamConfig, _lr: f64) -> AdamConfig {
-    // For Adam in Burn, the learning rate is applied during optimizer.step() calls
-    // We don't need to modify the config itself
-    config
+    // Adam applies learning rate during step() calls, not in its config
+    // This matches the pattern in custom_training_loop.rs
+    config  // Return unchanged
 }
 
 /// Configuration for TBPTT training
@@ -1093,9 +1093,21 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     // Initialize optimizer (feature flag is handled at the type level)
     #[cfg(feature = "optimizer-adam")]
     let mut optimizer = {
-        // With Adam, we'll just pass the learning rate during each step() call
-        // No need to set it on the config
-        let adam_config = config.optimizer.clone();
+        // Initialize Adam optimizer with customized hyperparameters
+        // from the config, following the pattern in custom_training_loop.rs
+        let adam_config = AdamConfig::new()
+            .with_beta_1(config.optimizer.beta_1)
+            .with_beta_2(config.optimizer.beta_2)
+            .with_epsilon(config.optimizer.epsilon)
+            .with_weight_decay(config.optimizer.weight_decay.clone());
+        
+        println!("Initializing Adam optimizer:");
+        println!("  - beta_1: {}", config.optimizer.beta_1);
+        println!("  - beta_2: {}", config.optimizer.beta_2);
+        println!("  - epsilon: {}", config.optimizer.epsilon);
+        println!("  - weight_decay: {}", config.optimizer.weight_decay.as_ref().map_or("None".to_string(), |wd| format!("{}", wd.penalty)));
+        
+        // Initialize optimizer - learning rate will be applied during step() calls
         adam_config.init()
     };
     
@@ -1209,10 +1221,15 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     // Print learning rate info
     #[cfg(feature = "optimizer-adam")]
     {
-        println!("Using Adam optimizer with adaptive learning rate");
-        println!("Initial learning rate: {}", config.learning_rate);
+        // Print Adam configuration - following custom_training_loop.rs pattern
+        println!("Using Adam optimizer with adaptive parameter-specific learning rates");
+        println!("Base learning rate: {}", config.learning_rate); 
+        println!("Adam automatically adapts learning rates for each parameter based on gradient history");
+        
+        // Explain that Adam doesn't need elaborate scheduling
         if warmup_epochs > 0 || use_cosine || use_linear {
-            println!("Note: For Adam, learning rate schedules are less critical but still applied");
+            println!("Note: Learning rate scheduling is generally not needed with Adam");
+            println!("      Using fixed learning rate of {} as per best practice", config.learning_rate);
         }
     }
     
@@ -1270,28 +1287,15 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         
         #[cfg(feature = "optimizer-adam")]
         {
-            // For Adam, we use a simpler approach to learning rate scheduling
-            // Most of the time, a constant learning rate works well with Adam
-            let current_lr = if warmup_epochs > 0 && epoch <= warmup_epochs {
-                // Apply simple linear warmup if configured
-                min_lr + (config.learning_rate - min_lr) * (epoch as f64 / warmup_epochs.max(1) as f64)
-            } else if use_cosine && config.lr_scheduler == LRSchedulerType::Cosine {
-                // Simple cosine decay for Adam if explicitly configured
-                let progress = (epoch - warmup_epochs) as f64
-                    / (max_training_epochs - warmup_epochs).max(1) as f64;
-                let cosine_decay = 0.5 * (1.0 + (std::f64::consts::PI * progress).cos());
-                min_lr + (config.learning_rate - min_lr) * cosine_decay
-            } else {
-                // Default: constant learning rate for Adam
-                config.learning_rate
-            };
+            // For Adam, we use a fixed learning rate - no scheduling needed
+            // Adam automatically adapts learning rates for each parameter
             
-            // Update the trainer's learning rate for optimizer.step() calls
-            trainer.learning_rate = current_lr;
+            // Just set the base learning rate directly
+            trainer.learning_rate = config.learning_rate;
             
             println!(
                 "Epoch {}/{} - Adam learning rate: {:.6e}",
-                epoch, max_training_epochs, current_lr
+                epoch, max_training_epochs, config.learning_rate
             );
         }
 
