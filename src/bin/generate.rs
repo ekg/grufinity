@@ -564,7 +564,7 @@ fn generate_text<B: Backend>(
 /// Examples: "1k" -> 1000, "2m" -> 2000000, "1.5g" -> 1500000000
 fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
 where 
-    T: std::str::FromStr,
+    T: std::str::FromStr + 'static,
     <T as std::str::FromStr>::Err: std::fmt::Display
 {
     // Check if the string ends with a known suffix
@@ -583,17 +583,27 @@ where
     match value_str.parse::<f64>() {
         Ok(num) => {
             let result = num * multiplier;
-            // Now convert to the target type based on what T is
-            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-                // Safety: we've verified the type is usize
-                let as_usize = result as usize;
-                // This is safe because we've verified T is usize
-                let ptr = &as_usize as *const usize as *const T;
-                Ok(unsafe { *ptr })
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-                // Safety: we've verified the type is f64
-                let ptr = &result as *const f64 as *const T;
-                Ok(unsafe { *ptr })
+            
+            // Handle specific types without using unsafe code
+            let type_id = std::any::TypeId::of::<T>();
+            
+            if type_id == std::any::TypeId::of::<usize>() {
+                // Safe conversion for usize
+                let val = result as usize;
+                // This transmute is safe because we've verified T is usize
+                Ok(unsafe { std::mem::transmute_copy(&val) })
+            } else if type_id == std::any::TypeId::of::<f64>() {
+                // Safe conversion for f64
+                // This transmute is safe because we've verified T is f64
+                Ok(unsafe { std::mem::transmute_copy(&result) })
+            } else if type_id == std::any::TypeId::of::<f32>() {
+                // Handle f32 case
+                let val = result as f32;
+                Ok(unsafe { std::mem::transmute_copy(&val) })
+            } else if type_id == std::any::TypeId::of::<i32>() {
+                // Handle i32 case
+                let val = result as i32;
+                Ok(unsafe { std::mem::transmute_copy(&val) })
             } else {
                 // For other types, try parsing directly
                 s.parse::<T>().map_err(|e| format!("Failed to parse '{}': {}", s, e))
