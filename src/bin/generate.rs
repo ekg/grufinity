@@ -24,9 +24,12 @@ fn print_help() {
     println!("  --vocab PATH                   Path to vocabulary file");
     println!("  --prompt TEXT                  Initial prompt to seed generation");
     println!("  --length NUM                   Number of characters to generate (default: 100)");
+    println!("                                 Suffixes k/m/g supported (e.g., 2k = 2000)");
     println!("  --chunk-size NUM               Characters per chunk for processing (default: 64)");
+    println!("                                 Suffixes k/m/g supported (e.g., 1k = 1000)");
     println!("  --temperature VALUE            Sampling temperature (default: 0.8)");
     println!("  --top-k VALUE                  Top-k sampling value (0 = disabled, default: 0)");
+    println!("                                 Suffixes k/m/g supported (e.g., 10k = 10000)");
     println!("  --config PATH                  Path to model configuration (optional)");
     println!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
     println!("\nExample:");
@@ -557,6 +560,32 @@ fn generate_text<B: Backend>(
     generated_text
 }
 
+/// Parse a string with optional metric suffix (k, m, g) into a number
+/// Examples: "1k" -> 1000, "2m" -> 2000000, "1.5g" -> 1500000000
+fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
+where 
+    T: std::str::FromStr + std::ops::Mul<f64, Output = T> + From<f64>,
+    <T as std::str::FromStr>::Err: std::fmt::Display
+{
+    // Check if the string ends with a known suffix
+    let lower_s = s.to_lowercase();
+    let (value_str, multiplier) = if lower_s.ends_with('k') {
+        (&s[..s.len()-1], 1000.0)
+    } else if lower_s.ends_with('m') {
+        (&s[..s.len()-1], 1000000.0)
+    } else if lower_s.ends_with('g') {
+        (&s[..s.len()-1], 1000000000.0)
+    } else {
+        (s, 1.0)
+    };
+    
+    // Parse the numeric part
+    match value_str.parse::<f64>() {
+        Ok(num) => Ok((num * multiplier).into()),
+        Err(e) => Err(format!("Failed to parse '{}': {}", s, e))
+    }
+}
+
 fn main() {
     // Parse command-line arguments
     let args: Vec<String> = std::env::args().collect();
@@ -606,7 +635,7 @@ fn main() {
             },
             "--length" => {
                 if i + 1 < args.len() {
-                    if let Ok(n) = args[i + 1].parse() {
+                    if let Ok(n) = parse_with_suffix::<usize>(&args[i + 1]) {
                         length = n;
                         println!("Generation length set to: {}", length);
                     } else {
@@ -616,7 +645,7 @@ fn main() {
             },
             "--chunk-size" => {
                 if i + 1 < args.len() {
-                    if let Ok(n) = args[i + 1].parse() {
+                    if let Ok(n) = parse_with_suffix::<usize>(&args[i + 1]) {
                         chunk_size = n;
                         println!("Chunk size set to: {}", chunk_size);
                     } else {
@@ -626,7 +655,7 @@ fn main() {
             },
             "--temperature" => {
                 if i + 1 < args.len() {
-                    if let Ok(t) = args[i + 1].parse() {
+                    if let Ok(t) = parse_with_suffix::<f64>(&args[i + 1]) {
                         temperature = t;
                         println!("Temperature set to: {}", temperature);
                     } else {
@@ -642,7 +671,7 @@ fn main() {
             },
             "--device-id" => {
                 if i + 1 < args.len() {
-                    if let Ok(id) = args[i + 1].parse() {
+                    if let Ok(id) = parse_with_suffix::<usize>(&args[i + 1]) {
                         device_id = id;
                         println!("Device ID set to: {}", device_id);
                     } else {
@@ -652,7 +681,7 @@ fn main() {
             },
             "--top-k" => {
                 if i + 1 < args.len() {
-                    if let Ok(k) = args[i + 1].parse() {
+                    if let Ok(k) = parse_with_suffix::<usize>(&args[i + 1]) {
                         top_k = k;
                         println!("Top-k sampling set to: {}", top_k);
                     } else {

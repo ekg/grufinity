@@ -36,9 +36,13 @@ fn print_help() {
     println!("  --config PATH                  Path to configuration file");
     println!("  --learning-rate RATE           Set learning rate (default: 0.001)");
     println!("  --batch-size SIZE              Number of random start positions (default: 32)");
+    println!("                                 Suffixes k/m/g supported (e.g., 64 or 64k)");
     println!("  --chunk-size SIZE              Characters per chunk (default: 64)");
+    println!("                                 Suffixes k/m/g supported (e.g., 128 or 1k)");
     println!("  --max-chunks-per-epoch NUM     Chunks to process per epoch (default: 1000)");
+    println!("                                 Suffixes k/m/g supported (e.g., 2k or 10k)");
     println!("  --context-length LENGTH        Set context length in characters");
+    println!("                                 Suffixes k/m/g supported (e.g., 16k or 1m)");
     println!("  --num-epochs NUM               Number of training epochs (default: 10)");
     println!("  --max-epochs NUM               Maximum number of epochs if using target loss (default: 1000)");
     println!("  --target-valid-loss VALUE      Target validation loss to stop at (0.0 to ignore)");
@@ -46,7 +50,9 @@ fn print_help() {
     println!("  --update-chunks NUM            Update parameters every NUM chunks (k1 parameter) (default: 4)");
     println!("  --backprop-chunks NUM          Backprop through NUM chunks (k2 parameter) (default: 8)");
     println!("  --update-tokens NUM            Update parameters every ~NUM tokens (converted to chunks)");
+    println!("                                 Suffixes k/m/g supported (e.g., 8k or 16k)");
     println!("  --backprop-tokens NUM          Backprop through ~NUM tokens (converted to chunks)");
+    println!("                                 Suffixes k/m/g supported (e.g., 16k or 32k)");
     println!("  --preserve-hidden-states BOOL  Preserve hidden states between batches (default: true)");
     println!("  --grad-clip VALUE              Gradient clipping value (0.0 to disable)");
     println!("  --log-interval NUM             Log interval in batches (default: 10)");
@@ -72,6 +78,32 @@ fn print_help() {
     println!("  - Context length of 100,000 characters");
     println!("  - Update parameters every ~512 tokens");
     println!("  - Backpropagate through ~1024 tokens");
+}
+
+/// Parse a string with optional metric suffix (k, m, g) into a number
+/// Examples: "1k" -> 1000, "2m" -> 2000000, "1.5g" -> 1500000000
+fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
+where 
+    T: std::str::FromStr + std::ops::Mul<f64, Output = T> + From<f64>,
+    <T as std::str::FromStr>::Err: std::fmt::Display
+{
+    // Check if the string ends with a known suffix
+    let lower_s = s.to_lowercase();
+    let (value_str, multiplier) = if lower_s.ends_with('k') {
+        (&s[..s.len()-1], 1000.0)
+    } else if lower_s.ends_with('m') {
+        (&s[..s.len()-1], 1000000.0)
+    } else if lower_s.ends_with('g') {
+        (&s[..s.len()-1], 1000000000.0)
+    } else {
+        (s, 1.0)
+    };
+    
+    // Parse the numeric part
+    match value_str.parse::<f64>() {
+        Ok(num) => Ok((num * multiplier).into()),
+        Err(e) => Err(format!("Failed to parse '{}': {}", s, e))
+    }
 }
 
 fn main() {
@@ -114,21 +146,21 @@ fn main() {
             },
             "--update-tokens" => {
                 if i + 1 < args.len() {
-                    if let Ok(tokens) = args[i + 1].parse::<usize>() {
+                    if let Ok(tokens) = parse_with_suffix::<usize>(&args[i + 1]) {
                         update_tokens = Some(tokens);
                     }
                 }
             },
             "--backprop-tokens" => {
                 if i + 1 < args.len() {
-                    if let Ok(tokens) = args[i + 1].parse::<usize>() {
+                    if let Ok(tokens) = parse_with_suffix::<usize>(&args[i + 1]) {
                         backprop_tokens = Some(tokens);
                     }
                 }
             },
             "--model-dim" => {
                 if i + 1 < args.len() {
-                    if let Ok(dim) = args[i + 1].parse::<usize>() {
+                    if let Ok(dim) = parse_with_suffix::<usize>(&args[i + 1]) {
                         let mut modified_config = create_default_config();
                         if !config_path.is_empty() {
                             if let Ok(cfg) = TBPTTConfig::load(&config_path) {
@@ -624,7 +656,7 @@ fn main() {
             },
             "--context-length" => {
                 if i + 1 < args.len() {
-                    if let Ok(context_length) = args[i + 1].parse::<usize>() {
+                    if let Ok(context_length) = parse_with_suffix::<usize>(&args[i + 1]) {
                         // We'll create a modified config with this value
                         let mut modified_config = create_default_config();
                         if !config_path.is_empty() {
@@ -644,7 +676,7 @@ fn main() {
             },
             "--learning-rate" => {
                 if i + 1 < args.len() {
-                    if let Ok(lr) = args[i + 1].parse::<f64>() {
+                    if let Ok(lr) = parse_with_suffix::<f64>(&args[i + 1]) {
                         // We'll create a modified config with this value
                         let mut modified_config = create_default_config();
                         if !config_path.is_empty() {
