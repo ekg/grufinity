@@ -23,6 +23,7 @@ tch = ["burn/tch"]
 ndarray = ["burn/ndarray"]
 autodiff = ["burn/autodiff"]
 autotune = ["burn/autotune"]
+swiglu = [] # Use SwiGLU activation (otherwise uses SiLU)
 
 # Optional CUDA features - these should be explicitly requested
 candle-cuda = ["candle", "burn/candle-cuda"]

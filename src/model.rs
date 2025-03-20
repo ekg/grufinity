@@ -1,10 +1,14 @@
 use burn::{
     module::Module,
     tensor::{backend::Backend, Tensor, Int, activation},
-    nn::{Embedding, EmbeddingConfig, Linear, LinearConfig, RmsNorm, RmsNormConfig, SwiGlu, SwiGluConfig},
+    nn::{Embedding, EmbeddingConfig, Linear, LinearConfig, RmsNorm, RmsNormConfig},
     config::Config,
     train::{ClassificationOutput, TrainOutput, TrainStep, ValidStep},
 };
+
+// Conditionally import SwiGlu when feature is enabled
+#[cfg(feature = "swiglu")]
+use burn::nn::{SwiGlu, SwiGluConfig};
 
 use crate::mingru::{MinGRU, MinGRUConfig};
 
@@ -16,6 +20,7 @@ pub struct FeedForwardConfig {
     mult: f64,
 }
 
+#[cfg(feature = "swiglu")]
 impl FeedForwardConfig {
     pub fn init<B: Backend>(&self, device: &B::Device) -> FeedForward<B> {
         let dim_inner = (self.dim as f64 * self.mult) as usize;
@@ -27,16 +32,50 @@ impl FeedForwardConfig {
     }
 }
 
-/// Feed Forward module
+#[cfg(not(feature = "swiglu"))]
+impl FeedForwardConfig {
+    pub fn init<B: Backend>(&self, device: &B::Device) -> FeedForward<B> {
+        let dim_inner = (self.dim as f64 * self.mult) as usize;
+        
+        FeedForward {
+            w1: LinearConfig::new(self.dim, dim_inner).init(device),
+            w2: LinearConfig::new(self.dim, dim_inner).init(device),
+            proj: LinearConfig::new(dim_inner, self.dim).init(device),
+        }
+    }
+}
+
+/// Feed Forward module with SwiGLU activation (when feature is enabled)
+#[cfg(feature = "swiglu")]
 #[derive(Module, Debug)]
 pub struct FeedForward<B: Backend> {
     swiglu: SwiGlu<B>,
     proj: Linear<B>,
 }
 
+#[cfg(feature = "swiglu")]
 impl<B: Backend> FeedForward<B> {
     pub fn forward(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
         let x = self.swiglu.forward(x);
+        self.proj.forward(x)
+    }
+}
+
+/// Feed Forward module with SiLU activation (default)
+#[cfg(not(feature = "swiglu"))]
+#[derive(Module, Debug)]
+pub struct FeedForward<B: Backend> {
+    w1: Linear<B>,
+    w2: Linear<B>,
+    proj: Linear<B>,
+}
+
+#[cfg(not(feature = "swiglu"))]
+impl<B: Backend> FeedForward<B> {
+    pub fn forward(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
+        let x1 = self.w1.forward(x.clone());
+        let x2 = self.w2.forward(x);
+        let x = x1 * activation::silu(x2); // SiLU implementation matching SwiGLU behavior
         self.proj.forward(x)
     }
 }
