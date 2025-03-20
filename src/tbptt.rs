@@ -1191,8 +1191,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     for epoch in 1..=max_training_epochs {
         // Calculate learning rate for this epoch
         let current_lr = if epoch <= warmup_epochs {
-            // Linear warmup
-            config.learning_rate * (epoch as f64 / warmup_epochs.max(1) as f64)
+            // Linear warmup from min_lr to max_lr
+            min_lr + (config.learning_rate - min_lr) * (epoch as f64 / warmup_epochs.max(1) as f64)
         } else if use_cosine {
             // Cosine annealing
             let progress = (epoch - warmup_epochs) as f64
