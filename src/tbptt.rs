@@ -1421,7 +1421,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 
     for epoch in 1..=max_training_epochs {
         // Get learning rate for this epoch from the scheduler
-        let mut current_lr = lr_scheduler.get_lr_for_epoch(epoch);
+        let current_lr = lr_scheduler.get_lr_for_epoch(epoch);
         
         // Update trainer's learning rate
         trainer.learning_rate = current_lr;
