@@ -40,16 +40,12 @@ impl CharVocab {
             self.idx_to_byte.insert(i as usize, i);
         }
         
-        // Add special EOS token (index 256)
-        self.byte_to_idx.insert(0xFF, 256);
-        self.idx_to_byte.insert(256, 0xFF);
-        
-        self.size = 257; // 256 bytes + 1 special token
+        self.size = 256; // All 256 byte values
     }
     
-    // Get the EOS token index
-    pub fn eos_token(&self) -> usize {
-        256 // Special EOS token index
+    // Get a padding token index (using null byte 0)
+    pub fn padding_token(&self) -> usize {
+        0 // Using null byte (0) as padding token
     }
 
     pub fn char_to_index(&self, c: char) -> Option<usize> {
@@ -585,9 +581,9 @@ impl<B: Backend> Batcher<(String, String), Option<TextBatch<B>>> for TextBatcher
         // Create placeholder batch if needed (instead of returning None)
         // This is a better approach than letting the stack operation fail
         if inputs.len() < 1 {
-            // Create a single dummy sample with EOS tokens
-            let eos_idx = self.vocab.eos_token() as i64;
-            let dummy = vec![eos_idx; sequence_length];
+            // Create a single dummy sample with padding tokens
+            let pad_idx = self.vocab.padding_token() as i64;
+            let dummy = vec![pad_idx; sequence_length];
             
             let dummy_tensor = Tensor::<B, 1, Int>::from_data(&*dummy, &self.device);
             inputs = vec![dummy_tensor.clone()];
@@ -691,9 +687,9 @@ impl<B: Backend> Batcher<TextChunk, Option<ChunkedTextBatch<B>>> for ChunkedText
         
         // Create placeholder batch if needed
         if inputs.len() < 1 {
-            // Create a single dummy sample with EOS tokens
-            let eos_idx = self.vocab.eos_token() as i64;
-            let dummy = vec![eos_idx; max_seq_len];
+            // Create a single dummy sample with padding tokens
+            let pad_idx = self.vocab.padding_token() as i64;
+            let dummy = vec![pad_idx; max_seq_len];
             
             let dummy_tensor = Tensor::<B, 1, Int>::from_data(&*dummy, &self.device);
             inputs = vec![dummy_tensor.clone()];
