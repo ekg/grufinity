@@ -74,7 +74,14 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
               not(feature = "candle")))]
     {
         device_initialized = true;
-        println!("Using Vulkan device");
+        // Note: Vulkan backend doesn't support direct device_id selection like CUDA
+        // It uses the default adapter selection mechanism from wgpu
+        if device_id != 0 {
+            println!("Warning: Vulkan backend doesn't support explicit device selection by ID");
+            println!("Using default Vulkan device (device_id parameter ignored)");
+        } else {
+            println!("Using Vulkan device");
+        }
     }
     
     #[cfg(all(feature = "wgpu", not(feature = "cuda"),
@@ -82,7 +89,13 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
               not(feature = "candle"), not(feature = "wgpu-spirv-fusion")))]
     {
         device_initialized = true;
-        println!("Using WGPU device");
+        // Note: WGPU backend doesn't support direct device_id selection like CUDA
+        if device_id != 0 {
+            println!("Warning: WGPU backend doesn't support explicit device selection by ID");
+            println!("Using default WGPU device (device_id parameter ignored)");
+        } else {
+            println!("Using WGPU device");
+        }
     }
     
     #[cfg(all(feature = "candle", not(feature = "candle-cuda"), not(feature = "cuda"), 

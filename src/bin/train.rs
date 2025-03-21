@@ -917,7 +917,12 @@ fn main() {
     let device = {
         use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
-        println!("Using Vulkan device");
+        if device_id != 0 {
+            println!("Warning: Vulkan backend doesn't support explicit device selection by ID");
+            println!("Using default Vulkan device (device_id parameter ignored)");
+        } else {
+            println!("Using Vulkan device");
+        }
         WgpuDevice::default()
     };
     
@@ -927,7 +932,12 @@ fn main() {
     let device = {
         use burn::backend::wgpu::WgpuDevice;
         device_initialized = true;
-        println!("Using WGPU device");
+        if device_id != 0 {
+            println!("Warning: WGPU backend doesn't support explicit device selection by ID");
+            println!("Using default WGPU device (device_id parameter ignored)");
+        } else {
+            println!("Using WGPU device");
+        }
         WgpuDevice::default()
     };
     
