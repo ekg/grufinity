@@ -69,6 +69,8 @@ fn print_help() {
     println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
     println!("  --lr-reduce-threshold VALUE    Threshold for reducing LR on plateau (default: 0.001, 0 to disable)");
     println!("  --lr-reduce-factor VALUE       Factor to reduce LR by on plateau (default: 0.1)");
+    println!("  --stall-threshold NUM          Epochs with low improvement before increasing LR (default: 2)");
+    println!("  --stall-improvement-threshold VALUE Improvement % below which an epoch is considered stalled (default: 0.01)");
     println!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
     println!("\nModel Structure Options:");
     println!("  --model-dim SIZE               Model hidden dimension (default: 1024)");
