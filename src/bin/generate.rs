@@ -6,6 +6,7 @@ use burn::{
     module::Module,
 };
 use rand::Rng;
+use std::io::Write;
 use grufinity::{
     model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
@@ -503,6 +504,7 @@ fn sample_with_top_k<B: Backend>(
 }
 
 // Generate text with chunking and hidden state passing
+// If stream_output is true, will print each chunk as it's generated
 fn generate_text<B: Backend>(
     model: &MinGRULM<B>,
     vocab: &CharVocab,
@@ -511,7 +513,8 @@ fn generate_text<B: Backend>(
     chunk_size: usize,
     temperature: f64,
     top_k: usize,
-    device: &B::Device
+    device: &B::Device,
+    stream_output: bool
 ) -> String {
     // Handle empty prompt
     if prompt.is_empty() {
@@ -589,6 +592,12 @@ fn generate_text<B: Backend>(
             
             let new_text = vocab.decode_text(&ids);
             generated_text.push_str(&new_text);
+            
+            // Stream output if enabled
+            if stream_output {
+                print!("{}", new_text);
+                std::io::stdout().flush().unwrap();
+            }
             
             // Update remaining count
             remaining -= new_text.len();
@@ -819,10 +828,14 @@ fn main() {
         println!("Using chunk size of {} characters (from model config)", chunk_size);
     }
     
-    // Generate text
-    let output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, top_k, &device);
-    
-    // Display the generated text
+    // Display generation header
     println!("\nGenerated text:");
-    println!("{}", output);
+    print!("{}", prompt); // Print the prompt first
+    std::io::stdout().flush().unwrap();
+    
+    // Generate text with streaming enabled
+    let output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, top_k, &device, true);
+    
+    // Add a final newline after generation
+    println!();
 }
