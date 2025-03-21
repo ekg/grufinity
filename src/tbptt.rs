@@ -77,6 +77,10 @@ pub struct LearningRateScheduler {
     scheduler_type: LRSchedulerType,
     warmup_epochs: usize,
     total_epochs: usize,
+    reduce_factor: f64,        // Factor to reduce LR when plateau is detected
+    reduce_threshold: f64,     // % decrease threshold to consider improvement
+    last_valid_loss: f32,      // Last validation loss for comparison
+    plateau_count: usize,      // Count of plateaus detected
 }
 
 impl LearningRateScheduler {
@@ -86,6 +90,8 @@ impl LearningRateScheduler {
         scheduler_type: LRSchedulerType,
         warmup_epochs: usize,
         total_epochs: usize,
+        reduce_threshold: f64,
+        reduce_factor: f64,
     ) -> Self {
         let current_lr = if warmup_epochs > 0 {
             // Start with min_lr if warmup is enabled
@@ -101,6 +107,10 @@ impl LearningRateScheduler {
             scheduler_type,
             warmup_epochs,
             total_epochs,
+            reduce_factor,
+            reduce_threshold,
+            last_valid_loss: f32::MAX,
+            plateau_count: 0,
         }
     }
     
@@ -131,6 +141,48 @@ impl LearningRateScheduler {
     
     pub fn get_current_lr(&self) -> f64 {
         self.current_lr
+    }
+    
+    /// Check if we should reduce learning rate based on validation loss
+    pub fn check_reduce_on_plateau(&mut self, valid_loss: f32) -> bool {
+        // If threshold is 0, the feature is disabled
+        if self.reduce_threshold <= 0.0 {
+            return false;
+        }
+        
+        // If this is the first check, just store the loss
+        if self.last_valid_loss == f32::MAX {
+            self.last_valid_loss = valid_loss;
+            return false;
+        }
+        
+        // Calculate percentage improvement
+        let improvement = (self.last_valid_loss - valid_loss) / self.last_valid_loss;
+        
+        // Update last loss for next comparison
+        self.last_valid_loss = valid_loss;
+        
+        // If improvement is below threshold, reduce learning rate
+        if improvement < self.reduce_threshold as f32 {
+            self.plateau_count += 1;
+            
+            // Apply reduction
+            let min_lr = self.base_lr * self.min_lr_factor;
+            let reduced_lr = (self.current_lr * self.reduce_factor).max(min_lr);
+            
+            // Only apply if it would actually reduce the LR
+            if reduced_lr < self.current_lr {
+                self.current_lr = reduced_lr;
+                println!("🔥 Learning rate reduced to {:.6e} due to plateau (improvement: {:.2}%)", 
+                         self.current_lr, improvement * 100.0);
+                return true;
+            }
+        } else {
+            // Reset plateau count on sufficient improvement
+            self.plateau_count = 0;
+        }
+        
+        false
     }
 }
 
@@ -221,6 +273,16 @@ pub struct TBPTTConfig {
     /// Number of warmup epochs
     #[config(default = 0)]
     pub warmup_epochs: usize,
+    
+    /// Reduce learning rate on plateau threshold (% improvement required)
+    /// Set to 0.0 to disable (default: 0.001 = 0.1%)
+    #[config(default = 0.001)]
+    pub lr_reduce_threshold: f64,
+    
+    /// Learning rate reduction factor when plateau is detected
+    /// (default: 0.1 = reduce to 10% of current rate)
+    #[config(default = 0.1)]
+    pub lr_reduce_factor: f64,
 
     /// Batch size
     #[config(default = 32)]
@@ -1301,6 +1363,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         config.lr_scheduler,
         config.warmup_epochs,
         max_training_epochs,
+        config.lr_reduce_threshold,
+        config.lr_reduce_factor,
     );
 
     println!("Training for up to {} epochs", max_training_epochs);
@@ -1325,6 +1389,14 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     
     if config.warmup_epochs > 0 {
         println!("- Using {} warmup epochs with linear ramp", config.warmup_epochs);
+    }
+    
+    if config.lr_reduce_threshold > 0.0 {
+        println!("- Reduce on plateau: enabled");
+        println!("  - Improvement threshold: {:.2}%", config.lr_reduce_threshold * 100.0);
+        println!("  - Reduction factor: {:.2}x", config.lr_reduce_factor);
+    } else {
+        println!("- Reduce on plateau: disabled");
     }
     
     #[cfg(feature = "optimizer-adam")]
@@ -1384,6 +1456,13 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
             "Epoch {}/{} - Train Loss: {:.6} (PPL: {:.2}), Valid Loss: {:.6} (PPL: {:.2})",
             epoch, max_training_epochs, train_loss, train_ppl, valid_loss, valid_ppl
         );
+        
+        // Check if we should reduce learning rate based on validation loss
+        // This is separate from the normal learning rate schedule
+        if lr_scheduler.check_reduce_on_plateau(valid_loss) {
+            // Update trainer's learning rate
+            trainer.learning_rate = lr_scheduler.get_current_lr();
+        }
 
         // Save best model
         if valid_loss < best_loss {
