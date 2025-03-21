@@ -83,8 +83,8 @@ pub struct LearningRateScheduler {
     plateau_count: usize,      // Count of plateaus detected
     has_reduced: bool,         // Whether we've reduced the learning rate before
     stall_counter: usize,      // Counter for stalling progress after reduction
-    stall_threshold: usize,    // How many epochs of stall to trigger an increase
-    stall_improvement_threshold: f64, // Improvement threshold below which an epoch is considered stalled
+    stall_epochs: usize,       // How many epochs of stall to trigger an increase
+    stall_threshold: f64,      // Improvement threshold below which an epoch is considered stalled
 }
 
 impl LearningRateScheduler {
@@ -96,8 +96,8 @@ impl LearningRateScheduler {
         total_epochs: usize,
         reduce_threshold: f64,
         reduce_factor: f64,
-        stall_threshold: usize,
-        stall_improvement_threshold: f64,
+        stall_epochs: usize,
+        stall_threshold: f64,
     ) -> Self {
         let current_lr = if warmup_epochs > 0 {
             // Start with min_lr if warmup is enabled
@@ -119,8 +119,8 @@ impl LearningRateScheduler {
             plateau_count: 0,
             has_reduced: false,
             stall_counter: 0,
+            stall_epochs,
             stall_threshold,
-            stall_improvement_threshold,
         }
     }
     
@@ -181,14 +181,14 @@ impl LearningRateScheduler {
         self.last_valid_loss = valid_loss;
         
         // Check if we're in a stall situation (after previous reduction)
-        if self.has_reduced && improvement < self.stall_improvement_threshold as f32 {
+        if self.has_reduced && improvement < self.stall_threshold as f32 {
             // Increment stall counter
             self.stall_counter += 1;
             println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <{}% improvement", 
-                     self.stall_counter, self.stall_improvement_threshold * 100.0);
+                     self.stall_counter, self.stall_threshold * 100.0);
             
-            // If we've stalled for stall_threshold epochs, increase the learning rate
-            if self.stall_counter >= self.stall_threshold {
+            // If we've stalled for stall_epochs epochs, increase the learning rate
+            if self.stall_counter >= self.stall_epochs {
                 // Increase learning rate by the reciprocal of the reduce factor (e.g., if reduce=0.1, increase by 10x)
                 let increased_lr = self.current_lr / self.reduce_factor;
                 
@@ -204,7 +204,7 @@ impl LearningRateScheduler {
                 println!("🚀 Learning rate increased to {:.6e} to escape plateau", self.current_lr);
                 return true;
             }
-        } else if improvement >= self.stall_improvement_threshold as f32 {
+        } else if improvement >= self.stall_threshold as f32 {
             // Good improvement, reset stall counter
             if self.stall_counter > 0 {
                 println!("✅ Good improvement detected ({}%), resetting stall counter", 
@@ -345,15 +345,15 @@ pub struct TBPTTConfig {
     #[config(default = 0.1)]
     pub lr_reduce_factor: f64,
     
-    /// Stall improvement threshold - percentage below which an epoch is considered stalled
+    /// Stall threshold - improvement percentage below which an epoch is considered stalled
     /// (default: 0.01 = 1% improvement)
     #[config(default = 0.01)]
-    pub stall_improvement_threshold: f64,
+    pub stall_threshold: f64,
     
-    /// Stall threshold - number of epochs with low improvement to trigger LR increase
+    /// Stall epochs - number of epochs with low improvement to trigger LR increase
     /// (default: 2 epochs)
     #[config(default = 2)]
-    pub stall_threshold: usize,
+    pub stall_epochs: usize,
 
     /// Batch size
     #[config(default = 32)]
@@ -1436,8 +1436,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         max_training_epochs,
         config.lr_reduce_threshold,
         config.lr_reduce_factor,
+        config.stall_epochs,
         config.stall_threshold,
-        config.stall_improvement_threshold,
     );
 
     println!("Training for up to {} epochs", max_training_epochs);
@@ -1469,7 +1469,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         println!("  - Improvement threshold: {:.2}%", config.lr_reduce_threshold * 100.0);
         println!("  - Reduction factor: {:.2}x", config.lr_reduce_factor);
         println!("  - Stall detection: will increase LR after {} epochs of <{}% improvement following a reduction",
-                 config.stall_threshold, config.stall_improvement_threshold * 100.0);
+                 config.stall_epochs, config.stall_threshold * 100.0);
     } else {
         println!("- Reduce on plateau: disabled");
     }
