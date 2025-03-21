@@ -643,15 +643,19 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 })
                 .collect();
 
-            // Apply tanh nonlinearity to hidden states before storing them
-            let doc_next_hidden_nonlinear: Vec<Tensor<B, 2>> = doc_next_hidden
+            // Apply tanh nonlinearity to hidden states before storing them (if feature enabled)
+            #[cfg(feature = "tanh")]
+            let doc_next_hidden_processed: Vec<Tensor<B, 2>> = doc_next_hidden
                 .iter()
                 .map(|h| h.clone().tanh())
                 .collect();
+                
+            #[cfg(not(feature = "tanh"))]
+            let doc_next_hidden_processed = doc_next_hidden;
             
             // Store unless this is the last chunk of a document
             if !is_last_chunk && self.preserve_hidden_states {
-                self.hidden_states.insert(doc_id, doc_next_hidden_nonlinear);
+                self.hidden_states.insert(doc_id, doc_next_hidden_processed);
             } else if is_last_chunk {
                 // Remove hidden state for completed documents
                 self.hidden_states.remove(&doc_id);
@@ -1044,14 +1048,18 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                         })
                         .collect();
 
-                    // Apply tanh nonlinearity to hidden states before storing
-                    let doc_next_hidden_nonlinear: Vec<Tensor<B::InnerBackend, 2>> = doc_next_hidden
+                    // Apply tanh nonlinearity to hidden states before storing (if feature enabled)
+                    #[cfg(feature = "tanh")]
+                    let doc_next_hidden_processed: Vec<Tensor<B::InnerBackend, 2>> = doc_next_hidden
                         .iter()
                         .map(|h| h.clone().tanh())
                         .collect();
+                        
+                    #[cfg(not(feature = "tanh"))]
+                    let doc_next_hidden_processed = doc_next_hidden;
                     
                     // Store for next chunk
-                    hidden_states_map.insert(doc_id, doc_next_hidden_nonlinear);
+                    hidden_states_map.insert(doc_id, doc_next_hidden_processed);
                 } else {
                     // Remove hidden state for padded positions
                     hidden_states_map.remove(&doc_id);
