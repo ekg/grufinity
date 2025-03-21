@@ -1471,9 +1471,6 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         if lr_scheduler.check_reduce_on_plateau(valid_loss) {
             // Update trainer's learning rate
             trainer.learning_rate = lr_scheduler.get_current_lr();
-            
-            // Update current_lr used for display in the next epoch
-            current_lr = trainer.learning_rate;
         }
 
         // Save best model
