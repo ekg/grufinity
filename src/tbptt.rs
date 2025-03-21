@@ -351,8 +351,8 @@ pub struct TBPTTConfig {
     pub stall_threshold: f64,
     
     /// Stall epochs - number of epochs with low improvement to trigger LR increase
-    /// (default: 2 epochs)
-    #[config(default = 2)]
+    /// (default: 0 means disabled, set to a positive value to enable)
+    #[config(default = 0)]
     pub stall_epochs: usize,
 
     /// Batch size
