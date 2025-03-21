@@ -8,7 +8,6 @@ use burn::{
 use burn::{
     optim::SgdConfig,
     optim::momentum::MomentumConfig,
-    optim::decay::WeightDecayConfig,
 };
 
 #[cfg(feature = "optimizer-adam")]
