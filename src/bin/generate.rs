@@ -249,6 +249,19 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
                     } else {
                         println!("File content too large to display ({}b)", content.len());
                     }
+                        
+                    // Even with parse error, try to extract chunk_size from the JSON
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(chunk_size_value) = json.get("chunk_size") {
+                            if let Some(model_chunk_size) = chunk_size_value.as_u64() {
+                                println!("Found chunk_size in config: {}", model_chunk_size);
+                                if model_chunk_size as usize != chunk_size {
+                                    println!("Warning: Using specified chunk size ({}) instead of model's chunk size ({})",
+                                             chunk_size, model_chunk_size);
+                                }
+                            }
+                        }
+                    }
                 },
                 Err(read_err) => {
                     println!("Could not read file: {}", read_err);
