@@ -206,9 +206,16 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
                     if let Ok(mut config) = serde_json::from_str::<MinGRULMConfig>(&config_str) {
                         println!("Successfully loaded model configuration with added num_tokens field");
                         println!("Model dimensions: {}, layers: {}", config.dim(), config.depth());
-                        
-                        // Update chunk size to match CLI argument
-                        config = config.with_chunk_size(chunk_size);
+                        println!("Model was trained with chunk size: {}", config.chunk_size());
+                
+                        // Only update chunk size if explicitly specified on CLI
+                        if chunk_size != config.chunk_size() {
+                            println!("Using specified chunk size: {} (overriding model's chunk size: {})",
+                                     chunk_size, config.chunk_size());
+                            config = config.with_chunk_size(chunk_size);
+                        } else {
+                            println!("Using model's original chunk size: {}", config.chunk_size());
+                        }
                         return config;
                     }
                 }
@@ -249,11 +256,14 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
             }
             
             // Create a default config
-            MinGRULMConfig::new(vocab_size, 1024)
+            let default_config = MinGRULMConfig::new(vocab_size, 1024)
                 .with_depth(3)
                 .with_ff_mult(3.0)
                 .with_expansion_factor(1.5)
-                .with_chunk_size(chunk_size)
+                .with_chunk_size(chunk_size);
+            
+            println!("Created default configuration with chunk size: {}", chunk_size);
+            default_config
         }
     }
 }
@@ -273,6 +283,11 @@ fn initialize_model<B: Backend>(
         Ok(record) => {
             let model = model.load_record(record);
             println!("Model loaded from: {}", model_path);
+            
+            // Print chunk size from the loaded model
+            let loaded_config = model.config();
+            println!("Model was trained with chunk size: {}", loaded_config.chunk_size());
+            
             Some(model)
         },
         Err(e) => {
@@ -687,7 +702,7 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(n) = parse_with_suffix::<usize>(&args[i + 1]) {
                         chunk_size = n;
-                        println!("Chunk size set to: {}", chunk_size);
+                        println!("Chunk size explicitly set to: {}", chunk_size);
                     } else {
                         eprintln!("Warning: Invalid chunk size value: {}", args[i + 1]);
                     }
@@ -779,7 +794,14 @@ fn main() {
     if top_k > 0 {
         println!("Using top-k sampling with k = {}", top_k);
     }
-    println!("Using chunk size of {} characters", chunk_size);
+    // Get the actual chunk size from the model, which could be different from command line
+    let model_chunk_size = model.config().chunk_size();
+    if chunk_size != model_chunk_size {
+        println!("Model was trained with chunk size: {}", model_chunk_size);
+        println!("Using specified chunk size: {} (different from model's chunk size)", chunk_size);
+    } else {
+        println!("Using chunk size of {} characters (from model config)", chunk_size);
+    }
     
     // Generate text
     let output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, top_k, &device);
