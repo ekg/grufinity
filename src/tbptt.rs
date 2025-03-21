@@ -167,8 +167,7 @@ impl LearningRateScheduler {
             self.plateau_count += 1;
             
             // Apply reduction
-            let min_lr = self.base_lr * self.min_lr_factor;
-            let reduced_lr = (self.current_lr * self.reduce_factor);
+            let reduced_lr = self.current_lr * self.reduce_factor;
             
             // Only apply if it would actually reduce the LR
             if reduced_lr < self.current_lr {
