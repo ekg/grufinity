@@ -67,9 +67,8 @@ fn print_help() {
     println!("  --lr-scheduler TYPE            Learning rate scheduler (constant, cosine, linear) (default: constant)");
     println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
     println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
-    println!("  --lr-reduce-threshold VALUE    Threshold for reducing LR on plateau (default: 0.001 = 0.1%, 0 to disable)");
-    println!("  --plateau-threshold VALUE      Same as --lr-reduce-threshold, alternative name (default: 0.001 = 0.1%)");
-    println!("  --lr-reduce-factor VALUE       Factor to reduce LR by on plateau (default: 0.1)");
+    println!("  --plateau-threshold VALUE      Threshold for reducing LR on plateau (default: 0.001 = 0.1%, 0 to disable)");
+    println!("  --plateau-factor VALUE         Factor to reduce LR by on plateau (default: 0.1)");
     println!("  --plateau-epochs NUM           Consecutive epochs below threshold before reducing LR (default: 2)");
     println!("  --stall-epochs NUM             Epochs with low improvement before increasing LR (default: 0, disabled)");
     println!("  --stall-threshold VALUE        Improvement % below which an epoch is considered stalled (default: 0.01)");
@@ -730,7 +729,7 @@ fn main() {
                     }
                 }
             },
-            "--lr-reduce-threshold" | "--plateau-threshold" => {
+            "--plateau-threshold" => {
                 if i + 1 < args.len() {
                     if let Ok(threshold) = args[i + 1].parse::<f64>() {
                         let mut modified_config = create_default_config();
@@ -766,7 +765,7 @@ fn main() {
                     }
                 }
             },
-            "--lr-reduce-factor" => {
+            "--plateau-factor" => {
                 if i + 1 < args.len() {
                     if let Ok(factor) = args[i + 1].parse::<f64>() {
                         let mut modified_config = create_default_config();
@@ -776,7 +775,7 @@ fn main() {
                             }
                         }
                         modified_config.lr_reduce_factor = factor;
-                        println!("Setting learning rate reduction factor to: {}", factor);
+                        println!("Setting plateau factor to: {}", factor);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }

@@ -351,12 +351,12 @@ pub struct TBPTTConfig {
     #[config(default = 0)]
     pub warmup_epochs: usize,
     
-    /// Reduce learning rate on plateau threshold (% improvement required)
+    /// Plateau threshold - improvement % required to avoid reducing learning rate
     /// Set to 0.0 to disable (default: 0.001 = 0.1%)
     #[config(default = 0.001)]
     pub lr_reduce_threshold: f64,
     
-    /// Learning rate reduction factor when plateau is detected
+    /// Plateau factor - amount to reduce learning rate by when plateau is detected
     /// (default: 0.1 = reduce to 10% of current rate)
     #[config(default = 0.1)]
     pub lr_reduce_factor: f64,
