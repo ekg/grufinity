@@ -354,12 +354,12 @@ pub struct TBPTTConfig {
     /// Plateau threshold - improvement % required to avoid reducing learning rate
     /// Set to 0.0 to disable (default: 0.001 = 0.1%)
     #[config(default = 0.001)]
-    pub lr_reduce_threshold: f64,
+    pub plateau_threshold: f64,
     
     /// Plateau factor - amount to reduce learning rate by when plateau is detected
     /// (default: 0.1 = reduce to 10% of current rate)
     #[config(default = 0.1)]
-    pub lr_reduce_factor: f64,
+    pub plateau_factor: f64,
     
     /// Stall threshold - improvement percentage below which an epoch is considered stalled
     /// (default: 0.01 = 1% improvement)
@@ -1455,8 +1455,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         config.lr_scheduler,
         config.warmup_epochs,
         max_training_epochs,
-        config.lr_reduce_threshold,
-        config.lr_reduce_factor,
+        config.plateau_threshold,
+        config.plateau_factor,
         config.stall_epochs,
         config.stall_threshold,
         config.plateau_epochs,
@@ -1486,12 +1486,12 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         println!("- Using {} warmup epochs with linear ramp", config.warmup_epochs);
     }
     
-    if config.lr_reduce_threshold > 0.0 {
+    if config.plateau_threshold > 0.0 {
         println!("- Reduce on plateau: enabled");
-        println!("  - Improvement threshold: {:.2}%", config.lr_reduce_threshold * 100.0);
-        println!("  - Reduction factor: {:.2}x", config.lr_reduce_factor);
+        println!("  - Improvement threshold: {:.2}%", config.plateau_threshold * 100.0);
+        println!("  - Reduction factor: {:.2}x", config.plateau_factor);
         println!("  - Plateau detection: will reduce LR after {} consecutive epochs of <{}% improvement",
-                 config.plateau_epochs, config.lr_reduce_threshold * 100.0);
+                 config.plateau_epochs, config.plateau_threshold * 100.0);
         println!("  - Stall detection: will increase LR after {} epochs of <{}% improvement following a reduction",
                  config.stall_epochs, config.stall_threshold * 100.0);
     } else {

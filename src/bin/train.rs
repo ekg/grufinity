@@ -738,7 +738,7 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        modified_config.lr_reduce_threshold = threshold;
+                        modified_config.plateau_threshold = threshold;
                         if threshold <= 0.0 {
                             println!("Disabling learning rate reduction on plateau");
                         } else {
@@ -774,7 +774,7 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        modified_config.lr_reduce_factor = factor;
+                        modified_config.plateau_factor = factor;
                         println!("Setting plateau factor to: {}", factor);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
