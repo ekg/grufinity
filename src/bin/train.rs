@@ -67,10 +67,11 @@ fn print_help() {
     println!("  --lr-scheduler TYPE            Learning rate scheduler (constant, cosine, linear) (default: constant)");
     println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
     println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
-    println!("  --lr-reduce-threshold VALUE    Threshold for reducing LR on plateau (default: 0.001, 0 to disable)");
+    println!("  --lr-reduce-threshold VALUE    Threshold for reducing LR on plateau (default: 0.001 = 0.1%, 0 to disable)");
     println!("  --lr-reduce-factor VALUE       Factor to reduce LR by on plateau (default: 0.1)");
-    println!("  --stall-epochs NUM            Epochs with low improvement before increasing LR (default: 0, disabled)");
-    println!("  --stall-threshold VALUE       Improvement % below which an epoch is considered stalled (default: 0.01)");
+    println!("  --plateau-epochs NUM           Consecutive epochs below threshold before reducing LR (default: 2)");
+    println!("  --stall-epochs NUM             Epochs with low improvement before increasing LR (default: 0, disabled)");
+    println!("  --stall-threshold VALUE        Improvement % below which an epoch is considered stalled (default: 0.01)");
     println!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
     println!("\nModel Structure Options:");
     println!("  --model-dim SIZE               Model hidden dimension (default: 1024)");
@@ -743,6 +744,22 @@ fn main() {
                         } else {
                             println!("Setting learning rate reduction threshold to: {:.4}%", threshold * 100.0);
                         }
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--plateau-epochs" => {
+                if i + 1 < args.len() {
+                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.plateau_epochs = epochs;
+                        println!("Setting plateau epochs to: {} consecutive epochs", epochs);
                         modified_config.save("temp_config.json").expect("Failed to save temporary config");
                         config_path = "temp_config.json".to_string();
                     }
