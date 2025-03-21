@@ -7,7 +7,6 @@ use burn::{
 };
 use rand::Rng;
 use std::io::Write;
-use std::io::{self, stderr};
 use grufinity::{
     model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
