@@ -37,11 +37,11 @@ fn print_help() {
     eprintln!("  --vocab PATH                   Path to vocabulary file");
     eprintln!("  --prompt TEXT                  Initial prompt to seed generation");
     eprintln!("  --length NUM                   Number of characters to generate (default: 100)");
-    eprintln!("                                 Suffixes k/m/g supported (e.g., 2k = 2048)");
+    eprintln!("                                 Binary suffixes: k=1024, m=1048576, g=1073741824");
     eprintln!("  --chunk-size NUM               Characters per chunk for processing (default: 64)");
     eprintln!("  --temperature VALUE            Sampling temperature (default: 0.8)");
     eprintln!("  --top-k VALUE                  Top-k sampling value (default: 40)");
-    eprintln!("                                 Suffixes k/m/g supported (e.g., 10k = 10000)");
+    eprintln!("                                 Binary suffixes: k=1024, m=1048576, g=1073741824");
     eprintln!("  --config PATH                  Path to model configuration (optional)");
     eprintln!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
     eprintln!("  --verbose, -v                  Enable verbose debug output");
@@ -597,7 +597,8 @@ fn generate_text<B: Backend>(
     generated_text
 }
 
-/// Parse a string with optional metric suffix (k, m, g) into a number
+/// Parse a string with optional binary suffix (k, m, g) into a number
+/// Using binary units: k=1024, m=1024², g=1024³
 /// Examples: "1k" -> 1024, "2m" -> 2097152, "1.5g" -> 1610612736
 fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
 where 
@@ -702,7 +703,12 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(n) = parse_with_suffix::<usize>(&args[i + 1]) {
                         length = n;
-                        println!("Generation length set to: {}", length);
+                        let suffix = args[i + 1].chars().last().unwrap_or('_');
+                        if suffix == 'k' || suffix == 'K' || suffix == 'm' || suffix == 'M' || suffix == 'g' || suffix == 'G' {
+                            println!("Generation length set to: {} (parsed from {})", length, args[i + 1]);
+                        } else {
+                            println!("Generation length set to: {}", length);
+                        }
                     } else {
                         eprintln!("Warning: Invalid length value: {}", args[i + 1]);
                     }
@@ -712,7 +718,12 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(n) = parse_with_suffix::<usize>(&args[i + 1]) {
                         chunk_size = n;
-                        println!("Chunk size explicitly set to: {}", chunk_size);
+                        let suffix = args[i + 1].chars().last().unwrap_or('_');
+                        if suffix == 'k' || suffix == 'K' || suffix == 'm' || suffix == 'M' || suffix == 'g' || suffix == 'G' {
+                            println!("Chunk size explicitly set to: {} (parsed from {})", chunk_size, args[i + 1]);
+                        } else {
+                            println!("Chunk size explicitly set to: {}", chunk_size);
+                        }
                     } else {
                         eprintln!("Warning: Invalid chunk size value: {}", args[i + 1]);
                     }
@@ -748,7 +759,12 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(k) = parse_with_suffix::<usize>(&args[i + 1]) {
                         top_k = k;
-                        debug(&format!("Top-k sampling set to: {}", top_k));
+                        let suffix = args[i + 1].chars().last().unwrap_or('_');
+                        if suffix == 'k' || suffix == 'K' || suffix == 'm' || suffix == 'M' || suffix == 'g' || suffix == 'G' {
+                            debug(&format!("Top-k sampling set to: {} (parsed from {})", top_k, args[i + 1]));
+                        } else {
+                            debug(&format!("Top-k sampling set to: {}", top_k));
+                        }
                     } else {
                         eprintln!("Warning: Invalid top-k value: {}", args[i + 1]);
                     }
