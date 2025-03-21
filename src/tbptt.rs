@@ -117,7 +117,8 @@ impl LearningRateScheduler {
     pub fn get_lr_for_epoch(&mut self, epoch: usize) -> f64 {
         let min_lr = self.base_lr * self.min_lr_factor;
         
-        self.current_lr = if epoch <= self.warmup_epochs {
+        // Calculate the scheduled learning rate without plateau modifications
+        let scheduled_lr = if epoch <= self.warmup_epochs {
             // Linear warmup from min_lr to base_lr
             min_lr + (self.base_lr - min_lr) * (epoch as f64 / self.warmup_epochs.max(1) as f64)
         } else if self.scheduler_type == LRSchedulerType::Cosine {
@@ -135,6 +136,9 @@ impl LearningRateScheduler {
             // Constant learning rate
             self.base_lr
         };
+        
+        // Set the current learning rate to scheduled_lr
+        self.current_lr = scheduled_lr;
         
         self.current_lr
     }
@@ -166,12 +170,18 @@ impl LearningRateScheduler {
         if improvement < self.reduce_threshold as f32 {
             self.plateau_count += 1;
             
-            // Apply reduction
+            // Calculate new learning rate with reduction
             let reduced_lr = self.current_lr * self.reduce_factor;
             
             // Only apply if it would actually reduce the LR
             if reduced_lr < self.current_lr {
+                // Apply the reduction to our actual base learning rate as well
+                // This is key to ensuring future epoch calculations use the reduced base
+                self.base_lr = self.base_lr * self.reduce_factor;
+                
+                // Update current learning rate
                 self.current_lr = reduced_lr;
+                
                 println!("🔥 Learning rate reduced to {:.6e} due to plateau (improvement: {:.2}%)", 
                          self.current_lr, improvement * 100.0);
                 return true;
@@ -1461,6 +1471,9 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         if lr_scheduler.check_reduce_on_plateau(valid_loss) {
             // Update trainer's learning rate
             trainer.learning_rate = lr_scheduler.get_current_lr();
+            
+            // Update current_lr used for display in the next epoch
+            current_lr = trainer.learning_rate;
         }
 
         // Save best model
