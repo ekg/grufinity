@@ -1327,8 +1327,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     
     #[cfg(feature = "optimizer-sgd")]
     {
-        println!("- Using SGD optimizer with momentum: {}", 
-                 config.optimizer.momentum.as_ref().map_or(0.0, |m| m.momentum));
+        println!("- Using SGD optimizer with SGD configuration");
     }
 
     for epoch in 1..=max_training_epochs {
