@@ -181,7 +181,7 @@ impl LearningRateScheduler {
         self.last_valid_loss = valid_loss;
         
         // Check if we're in a stall situation (after previous reduction)
-        if self.has_reduced && improvement < self.stall_improvement_threshold {
+        if self.has_reduced && improvement < self.stall_improvement_threshold as f32 {
             // Increment stall counter
             self.stall_counter += 1;
             println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <{}% improvement", 
@@ -204,7 +204,7 @@ impl LearningRateScheduler {
                 println!("🚀 Learning rate increased to {:.6e} to escape plateau", self.current_lr);
                 return true;
             }
-        } else if improvement >= self.stall_improvement_threshold {
+        } else if improvement >= self.stall_improvement_threshold as f32 {
             // Good improvement, reset stall counter
             if self.stall_counter > 0 {
                 println!("✅ Good improvement detected ({}%), resetting stall counter", 
