@@ -24,7 +24,7 @@ fn print_help() {
     println!("  --vocab PATH                   Path to vocabulary file");
     println!("  --prompt TEXT                  Initial prompt to seed generation");
     println!("  --length NUM                   Number of characters to generate (default: 100)");
-    println!("                                 Suffixes k/m/g supported (e.g., 2k = 2000)");
+    println!("                                 Suffixes k/m/g supported (e.g., 2k = 2048)");
     println!("  --chunk-size NUM               Characters per chunk for processing (default: 64)");
     println!("                                 Suffixes k/m/g supported (e.g., 1k = 1000)");
     println!("  --temperature VALUE            Sampling temperature (default: 0.8)");
@@ -602,7 +602,7 @@ fn generate_text<B: Backend>(
 }
 
 /// Parse a string with optional metric suffix (k, m, g) into a number
-/// Examples: "1k" -> 1000, "2m" -> 2000000, "1.5g" -> 1500000000
+/// Examples: "1k" -> 1024, "2m" -> 2097152, "1.5g" -> 1610612736
 fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
 where 
     T: std::str::FromStr + 'static,
@@ -611,11 +611,11 @@ where
     // Check if the string ends with a known suffix
     let lower_s = s.to_lowercase();
     let (value_str, multiplier) = if lower_s.ends_with('k') {
-        (&s[..s.len()-1], 1000.0)
+        (&s[..s.len()-1], 1024.0)
     } else if lower_s.ends_with('m') {
-        (&s[..s.len()-1], 1000000.0)
+        (&s[..s.len()-1], 1024.0 * 1024.0)
     } else if lower_s.ends_with('g') {
-        (&s[..s.len()-1], 1000000000.0)
+        (&s[..s.len()-1], 1024.0 * 1024.0 * 1024.0)
     } else {
         (s, 1.0)
     };

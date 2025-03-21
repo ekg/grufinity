@@ -88,7 +88,7 @@ fn print_help() {
 }
 
 /// Parse a string with optional metric suffix (k, m, g) into a number
-/// Examples: "1k" -> 1000, "2m" -> 2000000, "1.5g" -> 1500000000
+/// Examples: "1k" -> 1024, "2m" -> 2097152, "1.5g" -> 1610612736
 fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
 where 
     T: std::str::FromStr + 'static,
@@ -97,11 +97,11 @@ where
     // Check if the string ends with a known suffix
     let lower_s = s.to_lowercase();
     let (value_str, multiplier) = if lower_s.ends_with('k') {
-        (&s[..s.len()-1], 1000.0)
+        (&s[..s.len()-1], 1024.0)
     } else if lower_s.ends_with('m') {
-        (&s[..s.len()-1], 1000000.0)
+        (&s[..s.len()-1], 1024.0 * 1024.0)
     } else if lower_s.ends_with('g') {
-        (&s[..s.len()-1], 1000000000.0)
+        (&s[..s.len()-1], 1024.0 * 1024.0 * 1024.0)
     } else {
         (s, 1.0)
     };
