@@ -1262,7 +1262,7 @@ fn create_default_config() -> TBPTTConfig {
     .with_target_test_loss(0.0)   // 0.0 means ignore
     .with_max_epochs(1000)        // Maximum epochs if target not reached
     .with_lr_scheduler(LRSchedulerType::Cosine) // Cosine learning rate by default
-    .with_min_lr_factor(0.1)       // Minimum LR at 10% of max
+    .with_min_lr_factor(0.01)      // Minimum LR at 1% of max
     .with_warmup_epochs(0)         // No warmup by default
     .with_stall_threshold(0.01)    // 1% improvement threshold 
     .with_stall_epochs(0)          // Disabled by default, use positive values to enable
