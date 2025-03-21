@@ -81,6 +81,7 @@ pub struct LearningRateScheduler {
     reduce_threshold: f64,     // % decrease threshold to consider improvement
     last_valid_loss: f32,      // Last validation loss for comparison
     plateau_count: usize,      // Count of plateaus detected
+    plateau_reduction_factor: f64, // Cumulative reduction factor from plateau detection
 }
 
 impl LearningRateScheduler {
@@ -111,13 +112,15 @@ impl LearningRateScheduler {
             reduce_threshold,
             last_valid_loss: f32::MAX,
             plateau_count: 0,
+            plateau_reduction_factor: 1.0, // Start with no reduction
         }
     }
     
     pub fn get_lr_for_epoch(&mut self, epoch: usize) -> f64 {
         let min_lr = self.base_lr * self.min_lr_factor;
         
-        self.current_lr = if epoch <= self.warmup_epochs {
+        // Calculate the base scheduled learning rate without plateau reductions
+        let scheduled_lr = if epoch <= self.warmup_epochs {
             // Linear warmup from min_lr to base_lr
             min_lr + (self.base_lr - min_lr) * (epoch as f64 / self.warmup_epochs.max(1) as f64)
         } else if self.scheduler_type == LRSchedulerType::Cosine {
@@ -135,6 +138,12 @@ impl LearningRateScheduler {
             // Constant learning rate
             self.base_lr
         };
+        
+        // Apply the plateau reduction factor to the scheduled learning rate
+        self.current_lr = scheduled_lr * self.plateau_reduction_factor;
+        
+        // Ensure we don't go below the minimum learning rate
+        self.current_lr = self.current_lr.max(min_lr);
         
         self.current_lr
     }
@@ -165,6 +174,9 @@ impl LearningRateScheduler {
         // If improvement is below threshold, reduce learning rate
         if improvement < self.reduce_threshold as f32 {
             self.plateau_count += 1;
+            
+            // Update the plateau reduction factor
+            self.plateau_reduction_factor *= self.reduce_factor;
             
             // Apply reduction
             let min_lr = self.base_lr * self.min_lr_factor;
