@@ -163,6 +163,10 @@ impl LearningRateScheduler {
         // Calculate percentage improvement
         let improvement = (self.last_valid_loss - valid_loss) / self.last_valid_loss;
         
+        // Always print the improvement percentage
+        println!("Loss improvement: {:.2}% (previous: {:.6}, current: {:.6})", 
+                 improvement * 100.0, self.last_valid_loss, valid_loss);
+        
         // Update last loss for next comparison
         self.last_valid_loss = valid_loss;
         
@@ -182,8 +186,7 @@ impl LearningRateScheduler {
                 // Update current learning rate
                 self.current_lr = reduced_lr;
                 
-                println!("🔥 Learning rate reduced to {:.6e} due to plateau (improvement: {:.2}%)", 
-                         self.current_lr, improvement * 100.0);
+                println!("🔥 Learning rate reduced to {:.6e} due to plateau", self.current_lr);
                 return true;
             }
         } else {
