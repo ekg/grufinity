@@ -848,7 +848,7 @@ fn main() {
             },
             "--chunk-size" => {
                 if i + 1 < args.len() {
-                    if let Ok(chunk_size) = args[i + 1].parse::<usize>() {
+                    if let Ok(chunk_size) = parse_with_suffix::<usize>(&args[i + 1]) {
                         // We'll create a modified config with this value
                         let mut modified_config = create_default_config();
                         if !config_path.is_empty() {
@@ -877,7 +877,25 @@ fn main() {
                                 modified_config = cfg;
                             }
                         }
-                        let chunk_size = modified_config.chunk_size;
+                        
+                        // Get potentially updated chunk size from args if it was specified earlier
+                        let mut chunk_size = modified_config.chunk_size;
+                        
+                        // Look for a chunk-size parameter earlier in the args
+                        for j in 1..i {
+                            if j + 1 < args.len() && args[j] == "--chunk-size" {
+                                if let Ok(size) = parse_with_suffix::<usize>(&args[j + 1]) {
+                                    chunk_size = size;
+                                    println!("Using previously specified chunk size: {}", chunk_size);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Make sure model chunk size is also updated
+                        modified_config.chunk_size = chunk_size;
+                        modified_config.model = modified_config.model.with_chunk_size(chunk_size);
+                        
                         let chunks_needed = calculate_chunks_for_context(chunk_size, context_length);
                         modified_config.max_chunks_per_epoch = chunks_needed;
                         println!("Setting context length to {} characters", context_length);
@@ -1091,8 +1109,19 @@ fn main() {
     println!("Learning rate: {}", config.learning_rate);
     println!("Vocabulary size: {}", vocab.size());
     
+    // Print summary of final configuration
+    println!("\nFinal configuration summary:");
+    println!("- Chunk size: {} characters", config.chunk_size);
+    println!("- Context length: {} characters ({} chunks)", 
+             config.chunk_size * config.max_chunks_per_epoch,
+             config.max_chunks_per_epoch);
+    println!("- Batch size: {} parallel sequences", config.batch_size);
+    println!("- Model dimension: {}", config.model.dim());
+    println!("- Learning rate: {}", config.learning_rate);
+    println!("- TBPTT parameters: k1={}, k2={}", config.tbptt_k1, config.tbptt_k2);
+    
     // Train the model using TBPTT with Learner API
-    println!("Training with TBPTT using Learner API");
+    println!("\nTraining with TBPTT using Learner API");
     let model = train_with_tbptt::<BackendWithAutodiff>(
         &config,
         &device,
