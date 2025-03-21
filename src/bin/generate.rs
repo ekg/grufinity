@@ -692,7 +692,7 @@ fn main() {
             "--vocab" => {
                 if i + 1 < args.len() {
                     vocab_path = args[i + 1].clone();
-                    println!("Vocabulary path set to: {}", vocab_path);
+                    println!("Vocabulary path set to: {} (will use default byte vocabulary if not found)", vocab_path);
                 }
             },
             "--prompt" => {
@@ -780,13 +780,16 @@ fn main() {
     // Initialize device based on enabled features
     let device = initialize_device::<RawBackend>(device_id);
     
-    // Load vocabulary
+    // Load vocabulary or create default byte vocabulary
     let mut vocab = CharVocab::new();
     if let Err(e) = vocab.load_from_file(&vocab_path) {
-        eprintln!("Failed to load vocabulary: {}", e);
-        return;
+        println!("Could not load vocabulary file: {}", e);
+        println!("Creating default byte vocabulary (0-255)");
+        vocab.build_from_text(""); // Creates a full 256-byte vocabulary
+        println!("Created default byte vocabulary with {} tokens", vocab.size());
+    } else {
+        println!("Loaded vocabulary with {} tokens", vocab.size());
     }
-    println!("Loaded vocabulary with {} tokens", vocab.size());
     
     // Try to locate config file
     locate_config_file(&mut config_path, &model_path);
