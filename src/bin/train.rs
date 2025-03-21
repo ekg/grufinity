@@ -8,6 +8,7 @@ use burn::{
 use burn::{
     optim::SgdConfig,
     optim::momentum::MomentumConfig,
+    optim::decay::WeightDecayConfig,
 };
 
 #[cfg(feature = "optimizer-adam")]
@@ -1115,7 +1116,13 @@ fn create_default_config() -> TBPTTConfig {
     let chunks_needed = calculate_chunks_for_context(chunk_size, desired_context);
     println!("Default config using {} chunks for ~{} character context", chunks_needed, desired_context);
     
-    TBPTTConfig::new(model_config)
+    #[cfg(feature = "optimizer-sgd")]
+    let config = TBPTTConfig::new(model_config, SgdConfig::new());
+    
+    #[cfg(feature = "optimizer-adam")]
+    let config = TBPTTConfig::new(model_config);
+    
+    config
     .with_chunk_size(chunk_size)
     .with_tbptt_k1(4)                // Update frequency (every 4 chunks)
     .with_tbptt_k2(8)                // Backprop window (8 chunks = 512 characters)
