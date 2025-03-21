@@ -12,7 +12,7 @@ use burn::{
 #[cfg(feature = "optimizer-sgd")]
 use burn::{
     optim::SgdConfig,
-    optim::decay::WeightDecayConfig,
+    optim::momentum::MomentumConfig,
 };
 
 #[cfg(feature = "optimizer-adam")]
