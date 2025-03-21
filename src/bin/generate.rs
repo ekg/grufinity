@@ -680,7 +680,7 @@ fn main() {
     let mut length = 100;
     let mut chunk_size = 64;
     let mut temperature = 0.8;
-    let mut top_k: usize = 0; // 0 means disabled (use full distribution)
+    let mut top_k: usize = 40; // Default to top-40 sampling
     let mut config_path = "mingru_artifacts/config.json".to_string();
     let mut device_id: usize = 0;
     
