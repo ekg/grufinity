@@ -84,6 +84,7 @@ pub struct LearningRateScheduler {
     has_reduced: bool,         // Whether we've reduced the learning rate before
     stall_counter: usize,      // Counter for stalling progress after reduction
     stall_threshold: usize,    // How many epochs of stall to trigger an increase
+    stall_improvement_threshold: f64, // Improvement threshold below which an epoch is considered stalled
 }
 
 impl LearningRateScheduler {
@@ -95,6 +96,8 @@ impl LearningRateScheduler {
         total_epochs: usize,
         reduce_threshold: f64,
         reduce_factor: f64,
+        stall_threshold: usize,
+        stall_improvement_threshold: f64,
     ) -> Self {
         let current_lr = if warmup_epochs > 0 {
             // Start with min_lr if warmup is enabled
@@ -116,7 +119,8 @@ impl LearningRateScheduler {
             plateau_count: 0,
             has_reduced: false,
             stall_counter: 0,
-            stall_threshold: 2,  // Stall detection after 2 epochs of less than 1% improvement
+            stall_threshold,
+            stall_improvement_threshold,
         }
     }
     
@@ -177,10 +181,11 @@ impl LearningRateScheduler {
         self.last_valid_loss = valid_loss;
         
         // Check if we're in a stall situation (after previous reduction)
-        if self.has_reduced && improvement < 0.01 {  // Less than 1% improvement
+        if self.has_reduced && improvement < self.stall_improvement_threshold {
             // Increment stall counter
             self.stall_counter += 1;
-            println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <1% improvement", self.stall_counter);
+            println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <{}% improvement", 
+                     self.stall_counter, self.stall_improvement_threshold * 100.0);
             
             // If we've stalled for stall_threshold epochs, increase the learning rate
             if self.stall_counter >= self.stall_threshold {
@@ -199,10 +204,11 @@ impl LearningRateScheduler {
                 println!("🚀 Learning rate increased to {:.6e} to escape plateau", self.current_lr);
                 return true;
             }
-        } else if improvement >= 0.01 {
+        } else if improvement >= self.stall_improvement_threshold {
             // Good improvement, reset stall counter
             if self.stall_counter > 0 {
-                println!("✅ Good improvement detected, resetting stall counter");
+                println!("✅ Good improvement detected ({}%), resetting stall counter", 
+                         improvement * 100.0);
             }
             self.stall_counter = 0;
         }
@@ -338,6 +344,16 @@ pub struct TBPTTConfig {
     /// (default: 0.1 = reduce to 10% of current rate)
     #[config(default = 0.1)]
     pub lr_reduce_factor: f64,
+    
+    /// Stall improvement threshold - percentage below which an epoch is considered stalled
+    /// (default: 0.01 = 1% improvement)
+    #[config(default = 0.01)]
+    pub stall_improvement_threshold: f64,
+    
+    /// Stall threshold - number of epochs with low improvement to trigger LR increase
+    /// (default: 2 epochs)
+    #[config(default = 2)]
+    pub stall_threshold: usize,
 
     /// Batch size
     #[config(default = 32)]
@@ -1420,6 +1436,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         max_training_epochs,
         config.lr_reduce_threshold,
         config.lr_reduce_factor,
+        config.stall_threshold,
+        config.stall_improvement_threshold,
     );
 
     println!("Training for up to {} epochs", max_training_epochs);
@@ -1450,7 +1468,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         println!("- Reduce on plateau: enabled");
         println!("  - Improvement threshold: {:.2}%", config.lr_reduce_threshold * 100.0);
         println!("  - Reduction factor: {:.2}x", config.lr_reduce_factor);
-        println!("  - Stall detection: will increase LR after 2 epochs of <1% improvement following a reduction");
+        println!("  - Stall detection: will increase LR after {} epochs of <{}% improvement following a reduction",
+                 config.stall_threshold, config.stall_improvement_threshold * 100.0);
     } else {
         println!("- Reduce on plateau: disabled");
     }

@@ -762,6 +762,38 @@ fn main() {
                     }
                 }
             },
+            "--stall-threshold" => {
+                if i + 1 < args.len() {
+                    if let Ok(threshold) = args[i + 1].parse::<usize>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.stall_threshold = threshold;
+                        println!("Setting stall threshold to: {} epochs", threshold);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
+            "--stall-improvement-threshold" => {
+                if i + 1 < args.len() {
+                    if let Ok(threshold) = args[i + 1].parse::<f64>() {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        modified_config.stall_improvement_threshold = threshold;
+                        println!("Setting stall improvement threshold to: {}% improvement", threshold * 100.0);
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
             "--target-test-loss" => {
                 if i + 1 < args.len() {
                     if let Ok(loss) = args[i + 1].parse::<f32>() {
