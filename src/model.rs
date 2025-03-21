@@ -267,9 +267,14 @@ impl<B: Backend> MinGRULM<B> {
             // Process chunk with current hidden states
             let (chunk_output, next_hidden_states) = self.forward_no_chunking(chunk, hidden_states);
             
-            // Store output and update hidden states for next chunk
+            // Apply tanh nonlinearity to hidden states before passing to next chunk
+            let nonlinear_hidden_states = next_hidden_states.iter()
+                .map(|h| h.clone().tanh())
+                .collect();
+            
+            // Store output and update hidden states with nonlinear version
             outputs.push(chunk_output);
-            hidden_states = Some(next_hidden_states);
+            hidden_states = Some(nonlinear_hidden_states);
         }
         
         // Concatenate outputs from all chunks
@@ -381,8 +386,13 @@ impl<B: Backend> MinGRULM<B> {
             // Forward pass with hidden state
             let (logits, new_hidden_states) = self.forward(last_token, current_hidden_states);
             
-            // Update hidden states
-            current_hidden_states = Some(new_hidden_states);
+            // Apply tanh nonlinearity to hidden states
+            let nonlinear_hidden_states = new_hidden_states.iter()
+                .map(|h| h.clone().tanh())
+                .collect();
+            
+            // Update hidden states with nonlinear version
+            current_hidden_states = Some(nonlinear_hidden_states);
             
             // Get next token by sampling
             let next_token = self.sample_token(logits, temperature);
