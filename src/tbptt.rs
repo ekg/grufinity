@@ -81,6 +81,9 @@ pub struct LearningRateScheduler {
     reduce_threshold: f64,     // % decrease threshold to consider improvement
     last_valid_loss: f32,      // Last validation loss for comparison
     plateau_count: usize,      // Count of plateaus detected
+    has_reduced: bool,         // Whether we've reduced the learning rate before
+    stall_counter: usize,      // Counter for stalling progress after reduction
+    stall_threshold: usize,    // How many epochs of stall to trigger an increase
 }
 
 impl LearningRateScheduler {
@@ -111,6 +114,9 @@ impl LearningRateScheduler {
             reduce_threshold,
             last_valid_loss: f32::MAX,
             plateau_count: 0,
+            has_reduced: false,
+            stall_counter: 0,
+            stall_threshold: 2,  // Stall detection after 2 epochs of less than 1% improvement
         }
     }
     
@@ -170,6 +176,37 @@ impl LearningRateScheduler {
         // Update last loss for next comparison
         self.last_valid_loss = valid_loss;
         
+        // Check if we're in a stall situation (after previous reduction)
+        if self.has_reduced && improvement < 0.01 {  // Less than 1% improvement
+            // Increment stall counter
+            self.stall_counter += 1;
+            println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <1% improvement", self.stall_counter);
+            
+            // If we've stalled for stall_threshold epochs, increase the learning rate
+            if self.stall_counter >= self.stall_threshold {
+                // Increase learning rate by the reciprocal of the reduce factor (e.g., if reduce=0.1, increase by 10x)
+                let increased_lr = self.current_lr / self.reduce_factor;
+                
+                // Apply the increase to the base learning rate
+                self.base_lr = self.base_lr / self.reduce_factor;
+                
+                // Update current learning rate
+                self.current_lr = increased_lr;
+                
+                // Reset stall counter
+                self.stall_counter = 0;
+                
+                println!("🚀 Learning rate increased to {:.6e} to escape plateau", self.current_lr);
+                return true;
+            }
+        } else if improvement >= 0.01 {
+            // Good improvement, reset stall counter
+            if self.stall_counter > 0 {
+                println!("✅ Good improvement detected, resetting stall counter");
+            }
+            self.stall_counter = 0;
+        }
+        
         // If improvement is below threshold, reduce learning rate
         if improvement < self.reduce_threshold as f32 {
             self.plateau_count += 1;
@@ -185,6 +222,12 @@ impl LearningRateScheduler {
                 
                 // Update current learning rate
                 self.current_lr = reduced_lr;
+                
+                // Mark that we've reduced the learning rate
+                self.has_reduced = true;
+                
+                // Reset stall counter when we reduce
+                self.stall_counter = 0;
                 
                 println!("🔥 Learning rate reduced to {:.6e} due to plateau", self.current_lr);
                 return true;
@@ -1407,6 +1450,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         println!("- Reduce on plateau: enabled");
         println!("  - Improvement threshold: {:.2}%", config.lr_reduce_threshold * 100.0);
         println!("  - Reduction factor: {:.2}x", config.lr_reduce_factor);
+        println!("  - Stall detection: will increase LR after 2 epochs of <1% improvement following a reduction");
     } else {
         println!("- Reduce on plateau: disabled");
     }
