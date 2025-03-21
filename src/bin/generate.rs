@@ -7,6 +7,7 @@ use burn::{
 };
 use rand::Rng;
 use std::io::Write;
+use std::io::{self, stderr};
 use grufinity::{
     model::{MinGRULMConfig, MinGRULM},
     dataset::CharVocab,
@@ -15,31 +16,41 @@ use grufinity::{
     RawBackend,
 };
 
+// Global verbosity setting for controlling debug output
+static mut VERBOSE: bool = false;
+
+// Helper to print debug info to stderr
+fn debug(msg: &str) {
+    unsafe {
+        if VERBOSE {
+            eprintln!("{}", msg);
+        }
+    }
+}
+
 // Print help information
 fn print_help() {
-    println!("GRUfinity Text Generation");
-    println!("========================");
-    println!("Usage: cargo run --release --bin generate -- [OPTIONS]");
-    println!("\nOptions:");
-    println!("  --model PATH                   Path to trained model file");
-    println!("  --vocab PATH                   Path to vocabulary file");
-    println!("  --prompt TEXT                  Initial prompt to seed generation");
-    println!("  --length NUM                   Number of characters to generate (default: 100)");
-    println!("                                 Suffixes k/m/g supported (e.g., 2k = 2048)");
-    println!("  --chunk-size NUM               Characters per chunk for processing (default: 64)");
-    println!("                                 Suffixes k/m/g supported (e.g., 1k = 1000)");
-    println!("  --temperature VALUE            Sampling temperature (default: 0.8)");
-    println!("  --top-k VALUE                  Top-k sampling value (0 = disabled, default: 0)");
-    println!("                                 Suffixes k/m/g supported (e.g., 10k = 10000)");
-    println!("  --config PATH                  Path to model configuration (optional)");
-    println!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
-    println!("\nExample:");
-    println!("  cargo run --release --bin generate -- \\");
-    println!("    --model artifacts/model_final.bin \\");
-    println!("    --vocab artifacts/vocab.txt \\");
-    println!("    --prompt \"Once upon a time\" \\");
-    println!("    --length 500 \\");
-    println!("    --temperature 0.8");
+    eprintln!("GRUfinity Text Generation");
+    eprintln!("========================");
+    eprintln!("Usage: cargo run --release --bin generate -- [OPTIONS]");
+    eprintln!("\nOptions:");
+    eprintln!("  --model PATH                   Path to trained model file");
+    eprintln!("  --vocab PATH                   Path to vocabulary file");
+    eprintln!("  --prompt TEXT                  Initial prompt to seed generation");
+    eprintln!("  --length NUM                   Number of characters to generate (default: 100)");
+    eprintln!("                                 Suffixes k/m/g supported (e.g., 2k = 2048)");
+    eprintln!("  --chunk-size NUM               Characters per chunk for processing (default: 64)");
+    eprintln!("  --temperature VALUE            Sampling temperature (default: 0.8)");
+    eprintln!("  --top-k VALUE                  Top-k sampling value (default: 40)");
+    eprintln!("                                 Suffixes k/m/g supported (e.g., 10k = 10000)");
+    eprintln!("  --config PATH                  Path to model configuration (optional)");
+    eprintln!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
+    eprintln!("  --verbose, -v                  Enable verbose debug output");
+    eprintln!("\nExample:");
+    eprintln!("  cargo run --release --bin generate -- \\");
+    eprintln!("    --model artifacts/model_final.bin \\");
+    eprintln!("    --prompt \"Once upon a time\" \\");
+    eprintln!("    --length 500");
 }
 
 // Initialize appropriate device based on enabled features
@@ -54,20 +65,20 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[cfg(feature = "cuda")]
     {
         device_initialized = true;
-        println!("Using CUDA device {}", device_id);
+        debug(&format!("Using CUDA device {}", device_id));
     }
     
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
     {
         device_initialized = true;
-        println!("Using Candle CUDA device {}", device_id);
+        debug(&format!("Using Candle CUDA device {}", device_id));
     }
     
     #[cfg(all(feature = "candle-metal", not(feature = "cuda"), 
               not(all(feature = "candle", feature = "candle-cuda"))))]
     {
         device_initialized = true;
-        println!("Using Candle Metal device {}", device_id);
+        debug(&format!("Using Candle Metal device {}", device_id));
     }
     
     #[cfg(all(feature = "vulkan", not(feature = "cuda"),
@@ -78,10 +89,10 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
         // Note: Vulkan backend doesn't support direct device_id selection like CUDA
         // It uses the default adapter selection mechanism from wgpu
         if device_id != 0 {
-            println!("Warning: Vulkan backend doesn't support explicit device selection by ID");
-            println!("Using default Vulkan device (device_id parameter ignored)");
+            debug("Warning: Vulkan backend doesn't support explicit device selection by ID");
+            debug("Using default Vulkan device (device_id parameter ignored)");
         } else {
-            println!("Using Vulkan device");
+            debug("Using Vulkan device");
         }
     }
     
@@ -92,10 +103,10 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
         device_initialized = true;
         // Note: WGPU backend doesn't support direct device_id selection like CUDA
         if device_id != 0 {
-            println!("Warning: WGPU backend doesn't support explicit device selection by ID");
-            println!("Using default WGPU device (device_id parameter ignored)");
+            debug("Warning: WGPU backend doesn't support explicit device selection by ID");
+            debug("Using default WGPU device (device_id parameter ignored)");
         } else {
-            println!("Using WGPU device");
+            debug("Using WGPU device");
         }
     }
     
@@ -103,14 +114,14 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
               not(feature = "wgpu"), not(feature = "candle-metal")))]
     {
         device_initialized = true;
-        println!("Using Candle CPU device");
+        debug("Using Candle CPU device");
     }
     
     #[cfg(all(feature = "ndarray", not(feature = "cuda"), not(feature = "wgpu"), 
               not(feature = "candle"), not(feature = "candle-metal"), not(feature = "candle-cuda")))]
     {
         device_initialized = true;
-        println!("Using NdArray device");
+        debug("Using NdArray device");
     }
     
     #[cfg(all(feature = "tch", not(feature = "cuda"), not(feature = "wgpu"), 
@@ -118,7 +129,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
               not(feature = "candle-cuda")))]
     {
         device_initialized = true;
-        println!("Using LibTorch CPU device");
+        debug("Using LibTorch CPU device");
     }
     
     // Error if no backend feature is enabled
@@ -128,7 +139,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     compile_error!("No backend feature was enabled. Please enable at least one: cuda, vulkan, wgpu, candle, ndarray, etc.");
     
     if !device_initialized {
-        println!("WARNING: No device was properly initialized. Using fallback if available.");
+        debug("WARNING: No device was properly initialized. Using fallback if available.");
     }
     
     device
@@ -136,21 +147,21 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
 
 // Locate configuration file with fallbacks
 fn locate_config_file(config_path: &mut String, model_path: &str) {
-    println!("Looking for configuration file...");
+    debug("Looking for configuration file...");
     
     // Check if the explicitly provided config path exists
     let explicit_config_exists = std::path::Path::new(config_path).exists();
     if explicit_config_exists {
-        println!("Found explicitly specified config: {}", config_path);
+        debug(&format!("Found explicitly specified config: {}", config_path));
         return;
     }
     
-    println!("Explicit config not found at: {}. Searching for alternatives...", config_path);
+    debug(&format!("Explicit config not found at: {}. Searching for alternatives...", config_path));
     
     // Extract the directory from the model path
     if let Some(last_slash) = model_path.rfind('/') {
         let dir = &model_path[..last_slash];
-        println!("Looking in model directory: {}", dir);
+        debug(&format!("Looking in model directory: {}", dir));
         
         // Try possible config filenames in priority order
         let possible_configs = [
@@ -160,43 +171,43 @@ fn locate_config_file(config_path: &mut String, model_path: &str) {
         
         for (filename, desc) in possible_configs.iter() {
             let candidate_path = format!("{}/{}", dir, filename);
-            println!("Checking for {} at: {}", desc, candidate_path);
+            debug(&format!("Checking for {} at: {}", desc, candidate_path));
             
             if std::path::Path::new(&candidate_path).exists() {
-                println!("Found {} at: {}", desc, candidate_path);
+                debug(&format!("Found {} at: {}", desc, candidate_path));
                 *config_path = candidate_path;
                 return;
             }
         }
         
-        println!("No configuration files found in model directory.");
+        debug("No configuration files found in model directory.");
     } else {
-        println!("Could not determine model directory from path: {}", model_path);
+        debug(&format!("Could not determine model directory from path: {}", model_path));
     }
-    
-    println!("Will use config path: {} (may not exist)", config_path);
 }
 
 // Load model configuration with fallbacks
 fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) -> MinGRULMConfig {
     if !std::path::Path::new(config_path).exists() {
-        println!("Config file not found at: {}", config_path);
-        println!("Using default configuration instead");
+        debug(&format!("Config file not found at: {}", config_path));
         
-        return MinGRULMConfig::new(vocab_size, 1024)
+        let config = MinGRULMConfig::new(vocab_size, 1024)
             .with_depth(3)
             .with_ff_mult(3.0)
             .with_expansion_factor(1.5)
             .with_chunk_size(chunk_size);
+            
+        debug(&format!("Created default config with chunk size: {}", chunk_size));
+        return config;
     }
     
-    println!("Attempting to load config from: {}", config_path);
+    debug(&format!("Loading config from: {}", config_path));
     
     // Try to load and parse configuration manually first to check for missing fields
     if let Ok(content) = std::fs::read_to_string(config_path) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
             if json.get("num_tokens").is_none() {
-                println!("Config file is missing 'num_tokens' field. Adding it with value: {}", vocab_size);
+                debug(&format!("Adding num_tokens={} to config", vocab_size));
                 
                 // Create a modified config with the missing field
                 let mut modified_json = json.as_object().unwrap_or(&serde_json::Map::new()).clone();
@@ -205,17 +216,13 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
                 // Directly construct config from modified JSON
                 if let Ok(config_str) = serde_json::to_string(&modified_json) {
                     if let Ok(mut config) = serde_json::from_str::<MinGRULMConfig>(&config_str) {
-                        println!("Successfully loaded model configuration with added num_tokens field");
-                        println!("Model dimensions: {}, layers: {}", config.dim(), config.depth());
-                        println!("Model was trained with chunk size: {}", config.chunk_size());
-                
+                        debug(&format!("Model dims: {}, layers: {}", config.dim(), config.depth()));
+                        
                         // Only update chunk size if explicitly specified on CLI
                         if chunk_size != config.chunk_size() {
-                            println!("Using specified chunk size: {} (overriding model's chunk size: {})",
-                                     chunk_size, config.chunk_size());
+                            debug(&format!("Using chunk size: {} (overriding model's: {})",
+                                     chunk_size, config.chunk_size()));
                             config = config.with_chunk_size(chunk_size);
-                        } else {
-                            println!("Using model's original chunk size: {}", config.chunk_size());
                         }
                         return config;
                     }
@@ -227,45 +234,26 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
     // If manual parsing failed, try normal loading
     match MinGRULMConfig::load(config_path) {
         Ok(mut config) => {
-            println!("Successfully loaded model configuration");
-            println!("Model dimensions: {}, layers: {}", config.dim(), config.depth());
+            debug("Successfully loaded model configuration");
             
             // Update chunk size to match CLI argument
-            config = config.with_chunk_size(chunk_size);
+            if chunk_size != config.chunk_size() {
+                config = config.with_chunk_size(chunk_size);
+            }
             
             config
         },
-        Err(e) => {
-            eprintln!("Error loading config file: {}", e);
-            eprintln!("The file was found but could not be parsed");
-            println!("Using default configuration with vocab size: {}", vocab_size);
+        Err(_) => {
+            debug("Unable to parse config file");
             
-            // Try to read the file contents to help debug
-            match std::fs::read_to_string(config_path) {
-                Ok(content) => {
-                    if content.trim().is_empty() {
-                        println!("Note: Config file is empty");
-                    } else if content.len() < 100 {
-                        println!("File content: {}", content);
-                    } else {
-                        println!("File content too large to display ({}b)", content.len());
-                    }
-                        
-                    // Even with parse error, try to extract chunk_size from the JSON
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                        if let Some(chunk_size_value) = json.get("chunk_size") {
-                            if let Some(model_chunk_size) = chunk_size_value.as_u64() {
-                                println!("Found chunk_size in config: {}", model_chunk_size);
-                                if model_chunk_size as usize != chunk_size {
-                                    println!("Warning: Using specified chunk size ({}) instead of model's chunk size ({})",
-                                             chunk_size, model_chunk_size);
-                                }
-                            }
+            // Try to read the file contents to extract chunk_size
+            if let Ok(content) = std::fs::read_to_string(config_path) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(chunk_size_value) = json.get("chunk_size") {
+                        if let Some(model_chunk_size) = chunk_size_value.as_u64() {
+                            debug(&format!("Found chunk_size in config: {}", model_chunk_size));
                         }
                     }
-                },
-                Err(read_err) => {
-                    println!("Could not read file: {}", read_err);
                 }
             }
             
@@ -276,7 +264,7 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
                 .with_expansion_factor(1.5)
                 .with_chunk_size(chunk_size);
             
-            println!("Created default configuration with chunk size: {}", chunk_size);
+            debug(&format!("Created default config with chunk size: {}", chunk_size));
             default_config
         }
     }
@@ -296,11 +284,11 @@ fn initialize_model<B: Backend>(
     match recorder.load::<<MinGRULM<B> as Module<B>>::Record>(model_path.into(), device) {
         Ok(record) => {
             let model = model.load_record(record);
-            println!("Model loaded from: {}", model_path);
+            debug(&format!("Model loaded from: {}", model_path));
             
             // Print chunk size from the loaded model
             let loaded_config = model.config();
-            println!("Model was trained with chunk size: {}", loaded_config.chunk_size());
+            debug(&format!("Model chunk size: {}", loaded_config.chunk_size()));
             
             Some(model)
         },
@@ -683,6 +671,7 @@ fn main() {
     let mut top_k: usize = 40; // Default to top-40 sampling
     let mut config_path = "mingru_artifacts/config.json".to_string();
     let mut device_id: usize = 0;
+    let mut verbose = false;
     
     // Parse arguments
     for i in 1..args.len() {
@@ -760,11 +749,14 @@ fn main() {
                 if i + 1 < args.len() {
                     if let Ok(k) = parse_with_suffix::<usize>(&args[i + 1]) {
                         top_k = k;
-                        println!("Top-k sampling set to: {}", top_k);
+                        debug(&format!("Top-k sampling set to: {}", top_k));
                     } else {
                         eprintln!("Warning: Invalid top-k value: {}", args[i + 1]);
                     }
                 }
+            },
+            "--verbose" | "-v" => {
+                verbose = true;
             },
             // For backward compatibility
             "--seed" => {
@@ -783,6 +775,11 @@ fn main() {
         }
     }
     
+    // Set verbosity
+    unsafe {
+        VERBOSE = verbose;
+    }
+    
     // Set up the configured backend
     use_configured_backend!();
     
@@ -791,13 +788,12 @@ fn main() {
     
     // Load vocabulary or create default byte vocabulary
     let mut vocab = CharVocab::new();
-    if let Err(e) = vocab.load_from_file(&vocab_path) {
-        println!("Could not load vocabulary file: {}", e);
-        println!("Creating default byte vocabulary (0-255)");
+    if let Err(_) = vocab.load_from_file(&vocab_path) {
+        debug("Creating default byte vocabulary (0-255)");
         vocab.build_from_text(""); // Creates a full 256-byte vocabulary
-        println!("Created default byte vocabulary with {} tokens", vocab.size());
+        debug(&format!("Using default byte vocabulary with {} tokens", vocab.size()));
     } else {
-        println!("Loaded vocabulary with {} tokens", vocab.size());
+        debug(&format!("Loaded vocabulary with {} tokens", vocab.size()));
     }
     
     // Try to locate config file
@@ -809,33 +805,35 @@ fn main() {
     // Initialize and load model
     let model = initialize_model::<RawBackend>(&config, &model_path, &device);
     if model.is_none() {
+        eprintln!("Failed to load model. Exiting.");
         return;
     }
     let model = model.unwrap();
     
-    println!("Model loaded successfully. Ready to generate text.");
-    println!("Prompt: \"{}\"", prompt);
-    println!("Generating {} characters with temperature {}", length, temperature);
-    if top_k > 0 {
-        println!("Using top-k sampling with k = {}", top_k);
-    }
-    // Get the actual chunk size from the model, which could be different from command line
-    let model_chunk_size = model.config().chunk_size();
-    if chunk_size != model_chunk_size {
-        println!("Model was trained with chunk size: {}", model_chunk_size);
-        println!("Using specified chunk size: {} (different from model's chunk size)", chunk_size);
-    } else {
-        println!("Using chunk size of {} characters (from model config)", chunk_size);
+    // Log generation parameters to stderr
+    if verbose {
+        eprintln!("Generating {} characters with temperature {}", length, temperature);
+        if top_k > 0 {
+            eprintln!("Using top-k sampling with k = {}", top_k);
+        }
+        
+        // Get the actual chunk size from the model
+        let model_chunk_size = model.config().chunk_size();
+        if chunk_size != model_chunk_size {
+            eprintln!("Using chunk size {} (model's native size: {})", chunk_size, model_chunk_size);
+        } else {
+            eprintln!("Using chunk size: {}", chunk_size);
+        }
     }
     
-    // Display generation header
-    println!("\nGenerated text:");
-    print!("{}", prompt); // Print the prompt first
+    // Print the prompt and generated text directly to stdout without any headers
+    // This allows for clean output redirection (e.g., `generate > output.txt`)
+    print!("{}", prompt);
     std::io::stdout().flush().unwrap();
     
     // Generate text with streaming enabled
-    let output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, top_k, &device, true);
+    let _output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, top_k, &device, true);
     
-    // Add a final newline after generation
+    // Add a final newline
     println!();
 }
