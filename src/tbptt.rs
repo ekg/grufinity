@@ -85,6 +85,8 @@ pub struct LearningRateScheduler {
     stall_counter: usize,      // Counter for stalling progress after reduction
     stall_epochs: usize,       // How many epochs of stall to trigger an increase
     stall_threshold: f64,      // Improvement threshold below which an epoch is considered stalled
+    plateau_counter: usize,    // Counter for consecutive plateau epochs
+    plateau_epochs: usize,     // Number of plateau epochs to trigger reduction
 }
 
 impl LearningRateScheduler {
@@ -98,6 +100,7 @@ impl LearningRateScheduler {
         reduce_factor: f64,
         stall_epochs: usize,
         stall_threshold: f64,
+        plateau_epochs: usize,
     ) -> Self {
         let current_lr = if warmup_epochs > 0 {
             // Start with min_lr if warmup is enabled
@@ -121,6 +124,8 @@ impl LearningRateScheduler {
             stall_counter: 0,
             stall_epochs,
             stall_threshold,
+            plateau_counter: 0,
+            plateau_epochs,
         }
     }
     
@@ -213,33 +218,44 @@ impl LearningRateScheduler {
             self.stall_counter = 0;
         }
         
-        // If improvement is below threshold, reduce learning rate
+        // If improvement is below threshold, increment plateau counter
         if improvement < self.reduce_threshold as f32 {
             self.plateau_count += 1;
+            self.plateau_counter += 1;
             
-            // Calculate new learning rate with reduction
-            let reduced_lr = self.current_lr * self.reduce_factor;
+            println!("🔍 Potential plateau detected: {} consecutive epochs with <{}% improvement", 
+                     self.plateau_counter, self.reduce_threshold * 100.0);
             
-            // Only apply if it would actually reduce the LR
-            if reduced_lr < self.current_lr {
-                // Apply the reduction to our actual base learning rate as well
-                // This is key to ensuring future epoch calculations use the reduced base
-                self.base_lr = self.base_lr * self.reduce_factor;
+            // Only reduce learning rate if we've hit the plateau_epochs counter
+            if self.plateau_counter >= self.plateau_epochs {
+                // Calculate new learning rate with reduction
+                let reduced_lr = self.current_lr * self.reduce_factor;
                 
-                // Update current learning rate
-                self.current_lr = reduced_lr;
-                
-                // Mark that we've reduced the learning rate
-                self.has_reduced = true;
-                
-                // Reset stall counter when we reduce
-                self.stall_counter = 0;
-                
-                println!("🔥 Learning rate reduced to {:.6e} due to plateau", self.current_lr);
-                return true;
+                // Only apply if it would actually reduce the LR
+                if reduced_lr < self.current_lr {
+                    // Apply the reduction to our actual base learning rate as well
+                    // This is key to ensuring future epoch calculations use the reduced base
+                    self.base_lr = self.base_lr * self.reduce_factor;
+                    
+                    // Update current learning rate
+                    self.current_lr = reduced_lr;
+                    
+                    // Mark that we've reduced the learning rate
+                    self.has_reduced = true;
+                    
+                    // Reset stall counter when we reduce
+                    self.stall_counter = 0;
+                    
+                    // Reset plateau counter after taking action
+                    self.plateau_counter = 0;
+                    
+                    println!("🔥 Learning rate reduced to {:.6e} due to plateau", self.current_lr);
+                    return true;
+                }
             }
         } else {
-            // Reset plateau count on sufficient improvement
+            // Reset plateau counter on sufficient improvement
+            self.plateau_counter = 0;
             self.plateau_count = 0;
         }
         
@@ -354,6 +370,11 @@ pub struct TBPTTConfig {
     /// (default: 0 means disabled, set to a positive value to enable)
     #[config(default = 0)]
     pub stall_epochs: usize,
+    
+    /// Plateau epochs - number of consecutive epochs with minimal improvement before reducing LR
+    /// (default: 2 epochs)
+    #[config(default = 2)]
+    pub plateau_epochs: usize,
 
     /// Batch size
     #[config(default = 32)]
@@ -1438,6 +1459,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         config.lr_reduce_factor,
         config.stall_epochs,
         config.stall_threshold,
+        config.plateau_epochs,
     );
 
     println!("Training for up to {} epochs", max_training_epochs);
@@ -1468,6 +1490,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         println!("- Reduce on plateau: enabled");
         println!("  - Improvement threshold: {:.2}%", config.lr_reduce_threshold * 100.0);
         println!("  - Reduction factor: {:.2}x", config.lr_reduce_factor);
+        println!("  - Plateau detection: will reduce LR after {} consecutive epochs of <{}% improvement",
+                 config.plateau_epochs, config.lr_reduce_threshold * 100.0);
         println!("  - Stall detection: will increase LR after {} epochs of <{}% improvement following a reduction",
                  config.stall_epochs, config.stall_threshold * 100.0);
     } else {
