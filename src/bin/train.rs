@@ -1088,19 +1088,23 @@ fn main() {
     // Handle token-based parameters
     let chunk_size = modified_config.chunk_size;
     
-    // Default update_tokens to chunk_size if not specified
-    let update_tokens = update_tokens.or(Some(chunk_size));
+    // Default update_tokens to 25% of backprop_tokens if not specified, or chunk_size if neither is specified
+    let update_tokens = if let Some(bp_tokens) = backprop_tokens {
+        update_tokens.or(Some(bp_tokens / 4))
+    } else {
+        update_tokens.or(Some(chunk_size))
+    };
     
     if let Some(tokens) = update_tokens {
         let k1 = calculate_chunks_for_tokens(chunk_size, tokens);
         modified_config.tbptt_k1 = k1;
-        println!("Setting update frequency to every {} tokens (~{} chunks)", tokens, k1);
+        println!("Setting update frequency to every {} tokens ({} chunks)", tokens, k1);
     }
     
     if let Some(tokens) = backprop_tokens {
         let k2 = calculate_chunks_for_tokens(chunk_size, tokens);
         modified_config.tbptt_k2 = k2;
-        println!("Setting backpropagation window to {} tokens (~{} chunks)", tokens, k2);
+        println!("Setting backpropagation window to {} tokens ({} chunks)", tokens, k2);
     }
     
     // Save modified config for use
@@ -1138,8 +1142,9 @@ fn main() {
     config.save(format!("{}/tbptt_config.json", artifact_dir))
         .expect("Failed to save config");
     
-    println!("Training with TBPTT - chunk size: {}, k1: {}, k2: {}", 
-             config.chunk_size, config.tbptt_k1, config.tbptt_k2);
+    println!("Training with TBPTT - chunk size: {}, k1: {} (update every {} tokens), k2: {} (backprop through {} tokens)", 
+             config.chunk_size, config.tbptt_k1, config.tbptt_k1 * config.chunk_size,
+             config.tbptt_k2, config.tbptt_k2 * config.chunk_size);
     println!("Learning rate: {}", config.learning_rate);
     println!("Vocabulary size: {}", vocab.size());
     
@@ -1152,7 +1157,11 @@ fn main() {
     println!("- Batch size: {} parallel sequences", config.batch_size);
     println!("- Model dimension: {}", config.model.dim());
     println!("- Learning rate: {}", config.learning_rate);
-    println!("- TBPTT parameters: k1={}, k2={}", config.tbptt_k1, config.tbptt_k2);
+    println!("- TBPTT parameters:");
+    println!("  - Update frequency: k1={} (every {} tokens)", 
+             config.tbptt_k1, config.tbptt_k1 * config.chunk_size);
+    println!("  - Backprop window: k2={} (through {} tokens)", 
+             config.tbptt_k2, config.tbptt_k2 * config.chunk_size);
     
     // Train the model using TBPTT with Learner API
     println!("\nTraining with TBPTT using Learner API");
