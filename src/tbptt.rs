@@ -192,8 +192,8 @@ impl LearningRateScheduler {
             println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <{}% improvement", 
                      self.stall_counter, self.stall_threshold * 100.0);
             
-            // If we've stalled for stall_epochs epochs, increase the learning rate
-            if self.stall_counter >= self.stall_epochs {
+            // If stall_epochs is enabled (>0) and we've stalled for that many epochs, increase the learning rate
+            if self.stall_epochs > 0 && self.stall_counter >= self.stall_epochs {
                 // Increase learning rate by the reciprocal of the reduce factor (e.g., if reduce=0.1, increase by 10x)
                 let increased_lr = self.current_lr / self.reduce_factor;
                 
