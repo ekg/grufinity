@@ -10,25 +10,19 @@ use burn::{
 };
 
 #[cfg(feature = "optimizer-sgd")]
-use burn::{
-    optim::SgdConfig,
-    optim::momentum::MomentumConfig,
-};
+use burn::{optim::momentum::MomentumConfig, optim::SgdConfig};
 
 #[cfg(feature = "optimizer-adam")]
-use burn::{
-    optim::AdamConfig,
-    optim::decay::WeightDecayConfig,
-};
+use burn::{optim::decay::WeightDecayConfig, optim::AdamConfig};
 
 #[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
 compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled");
-use std::str::FromStr;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::path::Path;
+use std::str::FromStr;
 use std::time::Instant;
 
 use crate::dataset::{
@@ -58,7 +52,7 @@ impl Default for LRSchedulerType {
 /// Convert string to LRSchedulerType
 impl FromStr for LRSchedulerType {
     type Err = String;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "constant" => Ok(LRSchedulerType::Constant),
@@ -77,16 +71,16 @@ pub struct LearningRateScheduler {
     scheduler_type: LRSchedulerType,
     warmup_epochs: usize,
     total_epochs: usize,
-    reduce_factor: f64,        // Factor to reduce LR when plateau is detected
-    reduce_threshold: f64,     // % decrease threshold to consider improvement
-    last_valid_loss: f32,      // Last validation loss for comparison
-    plateau_count: usize,      // Count of plateaus detected
-    has_reduced: bool,         // Whether we've reduced the learning rate before
-    stall_counter: usize,      // Counter for stalling progress after reduction
-    stall_epochs: usize,       // How many epochs of stall to trigger an increase
-    stall_threshold: f64,      // Improvement threshold below which an epoch is considered stalled
-    plateau_counter: usize,    // Counter for consecutive plateau epochs
-    plateau_epochs: usize,     // Number of plateau epochs to trigger reduction
+    reduce_factor: f64,     // Factor to reduce LR when plateau is detected
+    reduce_threshold: f64,  // % decrease threshold to consider improvement
+    last_valid_loss: f32,   // Last validation loss for comparison
+    plateau_count: usize,   // Count of plateaus detected
+    has_reduced: bool,      // Whether we've reduced the learning rate before
+    stall_counter: usize,   // Counter for stalling progress after reduction
+    stall_epochs: usize,    // How many epochs of stall to trigger an increase
+    stall_threshold: f64,   // Improvement threshold below which an epoch is considered stalled
+    plateau_counter: usize, // Counter for consecutive plateau epochs
+    plateau_epochs: usize,  // Number of plateau epochs to trigger reduction
 }
 
 impl LearningRateScheduler {
@@ -108,7 +102,7 @@ impl LearningRateScheduler {
         } else {
             base_lr
         };
-        
+
         Self {
             base_lr,
             current_lr,
@@ -128,10 +122,10 @@ impl LearningRateScheduler {
             plateau_epochs,
         }
     }
-    
+
     pub fn get_lr_for_epoch(&mut self, epoch: usize) -> f64 {
         let min_lr = self.base_lr * self.min_lr_factor;
-        
+
         // Calculate the scheduled learning rate without plateau modifications
         let scheduled_lr = if epoch <= self.warmup_epochs {
             // Linear warmup from min_lr to base_lr
@@ -151,105 +145,122 @@ impl LearningRateScheduler {
             // Constant learning rate
             self.base_lr
         };
-        
+
         // Set the current learning rate to scheduled_lr
         self.current_lr = scheduled_lr;
-        
+
         self.current_lr
     }
-    
+
     pub fn get_current_lr(&self) -> f64 {
         self.current_lr
     }
-    
+
     /// Check if we should reduce learning rate based on validation loss
     pub fn check_reduce_on_plateau(&mut self, valid_loss: f32) -> bool {
         // If threshold is 0, the feature is disabled
         if self.reduce_threshold <= 0.0 {
             return false;
         }
-        
+
         // If this is the first check, just store the loss
         if self.last_valid_loss == f32::MAX {
             self.last_valid_loss = valid_loss;
             return false;
         }
-        
+
         // Calculate percentage improvement
         let improvement = (self.last_valid_loss - valid_loss) / self.last_valid_loss;
-        
+
         // Always print the improvement percentage
-        println!("Loss improvement: {:.2}% (previous: {:.6}, current: {:.6})", 
-                 improvement * 100.0, self.last_valid_loss, valid_loss);
-        
+        println!(
+            "Loss improvement: {:.2}% (previous: {:.6}, current: {:.6})",
+            improvement * 100.0,
+            self.last_valid_loss,
+            valid_loss
+        );
+
         // Update last loss for next comparison
         self.last_valid_loss = valid_loss;
-        
+
         // Check if we're in a stall situation (after previous reduction)
-        if self.has_reduced && improvement < self.stall_threshold as f32 {
+        if self.stall_epochs > 0 && self.has_reduced && improvement < self.stall_threshold as f32 {
+            // Only track and report stalls if stall_epochs > 0 (explicitly enabled)
             // Increment stall counter
             self.stall_counter += 1;
             println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <{}% improvement", 
                      self.stall_counter, self.stall_threshold * 100.0);
-            
+
             // If stall_epochs is enabled (>0) and we've stalled for that many epochs, increase the learning rate
             if self.stall_epochs > 0 && self.stall_counter >= self.stall_epochs {
                 // Increase learning rate by the reciprocal of the reduce factor (e.g., if reduce=0.1, increase by 10x)
                 let increased_lr = self.current_lr / self.reduce_factor;
-                
+
                 // Apply the increase to the base learning rate
                 self.base_lr = self.base_lr / self.reduce_factor;
-                
+
                 // Update current learning rate
                 self.current_lr = increased_lr;
-                
+
                 // Reset stall counter
                 self.stall_counter = 0;
-                
-                println!("🚀 Learning rate increased to {:.6e} to escape plateau", self.current_lr);
+
+                println!(
+                    "🚀 Learning rate increased to {:.6e} to escape plateau",
+                    self.current_lr
+                );
                 return true;
             }
-        } else if improvement >= self.stall_threshold as f32 {
+        } else if self.stall_epochs > 0 && improvement >= self.stall_threshold as f32 {
+            // Only reset stall counter if feature is enabled
             // Good improvement, reset stall counter
             if self.stall_counter > 0 {
-                println!("✅ Good improvement detected ({}%), resetting stall counter", 
-                         improvement * 100.0);
+                println!(
+                    "✅ Good improvement detected ({}%), resetting stall counter",
+                    improvement * 100.0
+                );
             }
             self.stall_counter = 0;
         }
-        
+
         // If improvement is below threshold, increment plateau counter
         if improvement < self.reduce_threshold as f32 {
             self.plateau_count += 1;
             self.plateau_counter += 1;
-            
-            println!("🔍 Potential plateau detected: {} consecutive epochs with <{}% improvement", 
-                     self.plateau_counter, self.reduce_threshold * 100.0);
-            
+
+            println!(
+                "🔍 Potential plateau detected: {} consecutive epochs with <{}% improvement",
+                self.plateau_counter,
+                self.reduce_threshold * 100.0
+            );
+
             // Only reduce learning rate if we've hit the plateau_epochs counter
             if self.plateau_counter >= self.plateau_epochs {
                 // Calculate new learning rate with reduction
                 let reduced_lr = self.current_lr * self.reduce_factor;
-                
+
                 // Only apply if it would actually reduce the LR
                 if reduced_lr < self.current_lr {
                     // Apply the reduction to our actual base learning rate as well
                     // This is key to ensuring future epoch calculations use the reduced base
                     self.base_lr = self.base_lr * self.reduce_factor;
-                    
+
                     // Update current learning rate
                     self.current_lr = reduced_lr;
-                    
+
                     // Mark that we've reduced the learning rate
                     self.has_reduced = true;
-                    
+
                     // Reset stall counter when we reduce
                     self.stall_counter = 0;
-                    
+
                     // Reset plateau counter after taking action
                     self.plateau_counter = 0;
-                    
-                    println!("🔥 Learning rate reduced to {:.6e} due to plateau", self.current_lr);
+
+                    println!(
+                        "🔥 Learning rate reduced to {:.6e} due to plateau",
+                        self.current_lr
+                    );
                     return true;
                 }
             }
@@ -258,7 +269,7 @@ impl LearningRateScheduler {
             self.plateau_counter = 0;
             self.plateau_count = 0;
         }
-        
+
         false
     }
 }
@@ -277,20 +288,20 @@ pub struct TBPTTConfig {
     /// Adam Optimizer configuration
     #[config(default = "AdamConfig::new()")]
     pub optimizer: AdamConfig,
-    
+
     // Store our own copies of Adam parameters (since they're private in AdamConfig)
     #[cfg(feature = "optimizer-adam")]
     #[config(default = 0.9)]
     pub adam_beta1: f32,
-    
+
     #[cfg(feature = "optimizer-adam")]
     #[config(default = 0.999)]
     pub adam_beta2: f32,
-    
+
     #[cfg(feature = "optimizer-adam")]
     #[config(default = 1e-8)]
     pub adam_epsilon: f32,
-    
+
     /// Learning rate - used for both SGD and Adam
     /// For Adam, this is passed during optimizer.step() calls
     #[config(default = 1e-3)]
@@ -350,27 +361,27 @@ pub struct TBPTTConfig {
     /// Number of warmup epochs
     #[config(default = 0)]
     pub warmup_epochs: usize,
-    
+
     /// Plateau threshold - improvement % required to avoid reducing learning rate
     /// Set to 0.0 to disable (default: 0.001 = 0.1%)
     #[config(default = 0.001)]
     pub plateau_threshold: f64,
-    
+
     /// Plateau factor - amount to reduce learning rate by when plateau is detected
     /// (default: 0.1 = reduce to 10% of current rate)
     #[config(default = 0.1)]
     pub plateau_factor: f64,
-    
+
     /// Stall threshold - improvement percentage below which an epoch is considered stalled
     /// (default: 0.01 = 1% improvement)
     #[config(default = 0.01)]
     pub stall_threshold: f64,
-    
+
     /// Stall epochs - number of epochs with low improvement to trigger LR increase
     /// (default: 0 means disabled, set to a positive value to enable)
     #[config(default = 0)]
     pub stall_epochs: usize,
-    
+
     /// Plateau epochs - number of consecutive epochs with minimal improvement before reducing LR
     /// (default: 2 epochs)
     #[config(default = 2)]
@@ -391,7 +402,7 @@ pub struct TBPTTConfig {
     /// Gradient clipping value (0.0 to disable)
     #[config(default = 0.0)]
     pub grad_clip: f32,
-    
+
     /// Weight decay penalty factor (0.0 to disable)
     #[config(default = "None")]
     pub weight_decay: Option<f32>,
@@ -414,25 +425,25 @@ pub struct TBPTTMetrics {
 
     /// Metrics storage
     metrics: HashMap<String, Vec<MetricEntry>>,
-    
+
     /// Tokens processed
     tokens_processed: usize,
-    
+
     /// Tokens processed in current epoch
     epoch_tokens: usize,
-    
+
     /// Total tokens processed across all epochs
     total_tokens: usize,
-    
+
     /// Tokens processed since last timing update (for recent throughput)
     recent_tokens: usize,
-    
+
     /// Training start time
     start_time: Option<Instant>,
-    
+
     /// Epoch start time
     epoch_start_time: Option<Instant>,
-    
+
     /// Last update time for throughput calculation
     last_update_time: Option<Instant>,
 }
@@ -459,19 +470,19 @@ impl TBPTTMetrics {
         self.chunk_losses.push(loss);
         self.record_metric("chunk_loss", loss);
     }
-    
+
     pub fn start_epoch(&mut self) {
         self.epoch_start_time = Some(Instant::now());
         self.epoch_tokens = 0;
     }
-    
+
     pub fn add_tokens(&mut self, token_count: usize) {
         self.tokens_processed += token_count;
         self.epoch_tokens += token_count;
         self.total_tokens += token_count;
         self.recent_tokens += token_count;
     }
-    
+
     pub fn tokens_per_second(&self) -> f64 {
         if let Some(start_time) = self.start_time {
             let elapsed = start_time.elapsed().as_secs_f64();
@@ -484,7 +495,7 @@ impl TBPTTMetrics {
             0.0
         }
     }
-    
+
     pub fn epoch_tokens_per_second(&self) -> f64 {
         if let Some(start_time) = self.epoch_start_time {
             let elapsed = start_time.elapsed().as_secs_f64();
@@ -497,7 +508,7 @@ impl TBPTTMetrics {
             0.0
         }
     }
-    
+
     pub fn recent_tokens_per_second(&self) -> f64 {
         if let Some(last_time) = self.last_update_time {
             let elapsed = last_time.elapsed().as_secs_f64();
@@ -507,7 +518,8 @@ impl TBPTTMetrics {
             } else {
                 // Fall back to overall rate if no recent data
                 if self.tokens_processed > 0 {
-                    let total_elapsed = self.start_time
+                    let total_elapsed = self
+                        .start_time
                         .map(|t| t.elapsed().as_secs_f64())
                         .unwrap_or(1.0);
                     self.tokens_processed as f64 / total_elapsed.max(0.001)
@@ -519,17 +531,17 @@ impl TBPTTMetrics {
             0.0
         }
     }
-    
+
     pub fn update_timing(&mut self) {
         // Record the tokens processed since last update, then reset counter
         self.last_update_time = Some(Instant::now());
         self.recent_tokens = 0;
     }
-    
+
     pub fn epoch_tokens(&self) -> usize {
         self.epoch_tokens
     }
-    
+
     pub fn total_tokens(&self) -> usize {
         self.total_tokens
     }
@@ -549,7 +561,7 @@ impl TBPTTMetrics {
     pub fn update_lr(&mut self, lr: f64) {
         self.current_lr = lr;
         self.record_metric("learning_rate", lr as f32);
-        
+
         // Also record directly as a learning rate metric entry for easier tracking
         self.record_metric("lr", lr as f32);
     }
@@ -799,14 +811,12 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
             // Apply tanh nonlinearity to hidden states before storing them (if feature enabled)
             #[cfg(feature = "tanh")]
-            let doc_next_hidden_processed: Vec<Tensor<B, 2>> = doc_next_hidden
-                .iter()
-                .map(|h| h.clone().tanh())
-                .collect();
-                
+            let doc_next_hidden_processed: Vec<Tensor<B, 2>> =
+                doc_next_hidden.iter().map(|h| h.clone().tanh()).collect();
+
             #[cfg(not(feature = "tanh"))]
             let doc_next_hidden_processed = doc_next_hidden;
-            
+
             // Store unless this is the last chunk of a document
             if !is_last_chunk && self.preserve_hidden_states {
                 self.hidden_states.insert(doc_id, doc_next_hidden_processed);
@@ -872,11 +882,11 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         // Record metrics
         self.metrics.update_chunk_loss(loss_value);
-        
+
         // Count tokens processed - batch_size * seq_len tokens per chunk
         let tokens_in_chunk = batch_size * seq_len;
         self.metrics.add_tokens(tokens_in_chunk);
-        
+
         // Don't reset the counter until we're about to display the rate
 
         // Backward pass and accumulate gradients
@@ -899,12 +909,12 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Apply gradients if needed
         if do_update && *accumulation_current >= self.tbptt_k1 {
             let grads = accumulator.grads();
-                
+
             // All optimizers need learning rate parameter
             let model = optimizer.step(self.learning_rate, self.model.clone(), grads);
             self.model = model;
             *accumulation_current = 0;
-                
+
             // Update metrics with current learning rate (for both Adam and SGD)
             self.metrics.update_lr(self.learning_rate);
         }
@@ -921,7 +931,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         epoch: usize,
     ) -> f32 {
         println!("Training epoch {}", epoch);
-        
+
         // Reset epoch metrics
         self.metrics.start_epoch();
 
@@ -973,7 +983,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 step += 1;
                 continue;
             }
-            
+
             let batch = batch_opt.unwrap();
 
             // Double-check tensor dimensions to ensure they're valid
@@ -996,14 +1006,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
                 progress_bar.inc(1);
                 progress_bar.set_message("Skipped batch - invalid dimensions");
-                
+
                 // We need to still move to next chunk and count even if we skip
                 if !dataloader.next_chunk() {
                     // If we can't advance, reset and resample to get fresh chunks
                     dataloader.reset();
                     dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
                 }
-                
+
                 step += 1;
                 continue;
             }
@@ -1023,11 +1033,11 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
             // Update progress
             progress_bar.inc(1);
-            
+
             // Calculate tokens/s for display and reset counter for next time
             let tokens_per_sec = self.metrics.recent_tokens_per_second();
             self.metrics.update_timing();
-            
+
             progress_bar.set_message(format!(
                 "Chunk {}/{}, Loss: {:.6}, Speed: {:.1} tok/s",
                 step + 1,
@@ -1059,7 +1069,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Finalize metrics
         let epoch_loss = total_loss / batch_count as f32;
         self.metrics.update_batch_loss(epoch_loss);
-        
+
         // Calculate perplexity from loss
         let perplexity = (epoch_loss as f64).exp();
         self.metrics.record_metric("perplexity", perplexity as f32);
@@ -1120,7 +1130,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             if batch_opt.is_none() {
                 progress_bar.inc(1);
                 progress_bar.set_message("Skipped batch - empty");
-                
+
                 // We need to still move to next chunk and count even if we skip
                 if !dataloader.next_chunk() {
                     // If we can't advance, reset and resample to get fresh chunks
@@ -1130,14 +1140,14 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 step += 1;
                 continue;
             }
-            
+
             let batch = batch_opt.unwrap();
-            
+
             // Skip chunks that don't have valid dimensions
             if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
                 progress_bar.inc(1);
                 progress_bar.set_message("Skipped batch - invalid dimensions");
-                
+
                 // We need to still move to next chunk and count even if we skip
                 if !dataloader.next_chunk() {
                     // If we can't advance, reset and resample to get fresh chunks
@@ -1204,14 +1214,13 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
                     // Apply tanh nonlinearity to hidden states before storing (if feature enabled)
                     #[cfg(feature = "tanh")]
-                    let doc_next_hidden_processed: Vec<Tensor<B::InnerBackend, 2>> = doc_next_hidden
-                        .iter()
-                        .map(|h| h.clone().tanh())
-                        .collect();
-                        
+                    let doc_next_hidden_processed: Vec<
+                        Tensor<B::InnerBackend, 2>,
+                    > = doc_next_hidden.iter().map(|h| h.clone().tanh()).collect();
+
                     #[cfg(not(feature = "tanh"))]
                     let doc_next_hidden_processed = doc_next_hidden;
-                    
+
                     // Store for next chunk
                     hidden_states_map.insert(doc_id, doc_next_hidden_processed);
                 } else {
@@ -1298,10 +1307,10 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         }
 
         let avg_loss = total_loss / batch_count as f32;
-        
+
         // Calculate perplexity from validation loss
         let perplexity = (avg_loss as f64).exp();
-        
+
         // Finish progress bar first, then print the summary on a new line
         progress_bar.finish();
         println!(
@@ -1326,7 +1335,9 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         <B as burn::tensor::backend::Backend>::seed(config.seed);
     }) {
         Ok(_) => println!("Random seed set to {}", config.seed),
-        Err(_) => println!("Warning: This backend doesn't support manual seed setting. Random results may vary.")
+        Err(_) => println!(
+            "Warning: This backend doesn't support manual seed setting. Random results may vary."
+        ),
     }
 
     // Initialize model
@@ -1345,23 +1356,27 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
             .with_beta_1(config.adam_beta1)
             .with_beta_2(config.adam_beta2)
             .with_epsilon(config.adam_epsilon);
-            
+
         // Apply weight decay if configured (using our stored copy from CLI args)
         if let Some(penalty) = config.weight_decay {
             adam_config = adam_config.with_weight_decay(Some(WeightDecayConfig::new(penalty)));
         }
-        
+
         println!("Initializing Adam optimizer:");
         println!("  - beta_1: {}", config.adam_beta1);
         println!("  - beta_2: {}", config.adam_beta2);
         println!("  - epsilon: {}", config.adam_epsilon);
-        println!("  - weight_decay: {}", config.weight_decay.map_or("None".to_string(), 
-                                                                 |wd| format!("{}", wd)));
-        
+        println!(
+            "  - weight_decay: {}",
+            config
+                .weight_decay
+                .map_or("None".to_string(), |wd| format!("{}", wd))
+        );
+
         // Initialize optimizer - learning rate will be applied during step() calls
         adam_config.init()
     };
-    
+
     #[cfg(feature = "optimizer-sgd")]
     let mut optimizer = config.optimizer.init();
 
@@ -1479,31 +1494,43 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     // Print learning rate schedule info
     println!("Learning rate configuration:");
     println!("- Base learning rate: {}", config.learning_rate);
-    println!("- Minimum learning rate: {}", config.learning_rate * config.min_lr_factor);
+    println!(
+        "- Minimum learning rate: {}",
+        config.learning_rate * config.min_lr_factor
+    );
     println!("- Scheduler type: {:?}", config.lr_scheduler);
-    
+
     if config.warmup_epochs > 0 {
-        println!("- Using {} warmup epochs with linear ramp", config.warmup_epochs);
+        println!(
+            "- Using {} warmup epochs with linear ramp",
+            config.warmup_epochs
+        );
     }
-    
+
     if config.plateau_threshold > 0.0 {
         println!("- Reduce on plateau: enabled");
-        println!("  - Improvement threshold: {:.2}%", config.plateau_threshold * 100.0);
+        println!(
+            "  - Improvement threshold: {:.2}%",
+            config.plateau_threshold * 100.0
+        );
         println!("  - Reduction factor: {:.2}x", config.plateau_factor);
-        println!("  - Plateau detection: will reduce LR after {} consecutive epochs of <{}% improvement",
-                 config.plateau_epochs, config.plateau_threshold * 100.0);
+        println!(
+            "  - Plateau detection: will reduce LR after {} consecutive epochs of <{}% improvement",
+            config.plateau_epochs,
+            config.plateau_threshold * 100.0
+        );
         println!("  - Stall detection: will increase LR after {} epochs of <{}% improvement following a reduction",
                  config.stall_epochs, config.stall_threshold * 100.0);
     } else {
         println!("- Reduce on plateau: disabled");
     }
-    
+
     #[cfg(feature = "optimizer-adam")]
     {
         println!("- Using Adam optimizer with adaptive parameter-specific learning rates");
         println!("- Adam applies base learning rate to all parameters and adapts based on gradient history");
     }
-    
+
     #[cfg(feature = "optimizer-sgd")]
     {
         println!("- Using SGD optimizer with SGD configuration");
@@ -1512,17 +1539,17 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     for epoch in 1..=max_training_epochs {
         // Get learning rate for this epoch from the scheduler
         let current_lr = lr_scheduler.get_lr_for_epoch(epoch);
-        
+
         // Update trainer's learning rate
         trainer.learning_rate = current_lr;
-        
+
         // Print learning rate information
         #[cfg(feature = "optimizer-sgd")]
         println!(
             "Epoch {}/{} - Learning rate: {:.6e}",
             epoch, max_training_epochs, current_lr
         );
-        
+
         #[cfg(feature = "optimizer-adam")]
         println!(
             "Epoch {}/{} - Adam base learning rate: {:.6e}",
@@ -1550,12 +1577,12 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         // Calculate perplexity values
         let train_ppl = (train_loss as f64).exp();
         let valid_ppl = (valid_loss as f64).exp();
-        
+
         println!(
             "Epoch {}/{} - Train Loss: {:.6} (PPL: {:.2}), Valid Loss: {:.6} (PPL: {:.2})",
             epoch, max_training_epochs, train_loss, train_ppl, valid_loss, valid_ppl
         );
-        
+
         // Check if we should reduce learning rate based on validation loss
         // This is separate from the normal learning rate schedule
         if lr_scheduler.check_reduce_on_plateau(valid_loss) {
@@ -1622,13 +1649,23 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 
     // Calculate total training statistics
     let total_tokens = trainer.metrics().total_tokens();
-    let total_time = trainer.metrics().start_time.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
-    let avg_throughput = if total_time > 0.0 { total_tokens as f64 / total_time } else { 0.0 };
-    
+    let total_time = trainer
+        .metrics()
+        .start_time
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
+    let avg_throughput = if total_time > 0.0 {
+        total_tokens as f64 / total_time
+    } else {
+        0.0
+    };
+
     println!("Final model saved to {}", model_path);
     println!("Best validation loss: {:.6}", best_loss);
-    println!("Training processed {} tokens in {:.1} seconds ({:.1} tok/s average, including validation)", 
-             total_tokens, total_time, avg_throughput);
+    println!(
+        "Training processed {} tokens in {:.1} seconds ({:.1} tok/s average, including validation)",
+        total_tokens, total_time, avg_throughput
+    );
 
     best_model
 }
