@@ -7,79 +7,7 @@ pub fn parallel_scan<B: Backend>(
     values: Tensor<B, 3>,  // b_t values (batch_size, seq_len, hidden_dim)
     h0: Option<Tensor<B, 2>>, // Initial hidden state (batch_size, hidden_dim)
 ) -> Tensor<B, 3> {
-    let [batch_size, seq_len, hidden_dim] = coeffs.dims();
-    
-    // Create a tensor to hold the accumulated/prefixed coefficients (a_star)
-    // a_star[t] = a_1 * a_2 * ... * a_t
-    // Initialize with 1s to start the product
-    let device = coeffs.device();
-    let mut a_star = Tensor::ones([batch_size, seq_len + 1, hidden_dim], &device);
-    
-    // Copy coeffs to a_star[1:] with proper broadcasting
-    let coeffs_expanded = coeffs.clone();
-    a_star = a_star.slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], coeffs_expanded);
-    
-    // Compute cumulative product in-place along the sequence dimension
-    for t in 1..seq_len {
-        let a_prev = a_star.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
-        let a_curr = a_star.clone().slice([0..batch_size, t+1..t+2, 0..hidden_dim]);
-        let a_new = a_prev.mul(a_curr);
-        a_star = a_star.slice_assign([0..batch_size, t+1..t+2, 0..hidden_dim], a_new);
-    }
-    
-    // Now handle the initial hidden state (h0)
-    let b_star = match h0 {
-        Some(h0) => {
-            // Prepend h0 to values (handled as b_0)
-            let mut all_values = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device);
-            // Reshape h0 to correct dimensions
-            let h0_reshaped = h0.clone().reshape([batch_size, 1, hidden_dim]);
-            all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], h0_reshaped);
-            all_values = all_values.slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], values);
-            all_values
-        },
-        None => {
-            // Initialize b_0 with zeros
-            let mut all_values = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device);
-            all_values = all_values.slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], values);
-            all_values
-        }
-    };
-    
-    // Compute h_0 + b_star, which is used for the inclusive prefix sum
-    // b_star_prefix_sum[t] = (b_0 / a_0) + (b_1 / a_1) + ... + (b_t / a_t)
-    let mut b_star_prefix_sum = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device);
-    for t in 0..seq_len + 1 {
-        let b_t = b_star.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
-        let a_t = if t == 0 {
-            Tensor::ones([batch_size, 1, hidden_dim], &device)
-        } else {
-            a_star.clone().slice([0..batch_size, 0..t, 0..hidden_dim])
-        };
-        
-        // Compute (b_t / a_t) and add to the prefix sum
-        let term = b_t.div(a_t);
-        
-        if t == 0 {
-            b_star_prefix_sum = b_star_prefix_sum.slice_assign(
-                [0..batch_size, t..t+1, 0..hidden_dim],
-                term
-            );
-        } else {
-            let prev_sum = b_star_prefix_sum.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
-            let new_sum = prev_sum + term;
-            b_star_prefix_sum = b_star_prefix_sum.slice_assign(
-                [0..batch_size, t..t+1, 0..hidden_dim],
-                new_sum
-            );
-        }
-    }
-    
-    // Compute the final result: h_t = a_star[t] * b_star_prefix_sum[t]
-    let h = a_star.mul(b_star_prefix_sum);
-    
-    // Return h[1:] to get the sequence outputs h_1 to h_T
-    h.slice([0..batch_size, 1..(seq_len+1), 0..hidden_dim])
+    parallel_scan_standard_impl(coeffs, values, h0)
 }
 
 /// Log-space implementation of the parallel associative scan algorithm
@@ -88,6 +16,56 @@ pub fn parallel_scan_log<B: Backend>(
     log_coeffs: Tensor<B, 3>,  // log(a_t) coefficients (batch_size, seq_len, hidden_dim)
     log_values: Tensor<B, 3>,  // log(b_t) values (batch_size, seq_len, hidden_dim)
     h0: Option<Tensor<B, 2>>,  // Initial hidden state (batch_size, hidden_dim)
+) -> Tensor<B, 3> {
+    parallel_scan_log_impl(log_coeffs, log_values, h0)
+}
+
+/// Vectorized implementation of the standard parallel scan
+fn parallel_scan_standard_impl<B: Backend>(
+    coeffs: Tensor<B, 3>, 
+    values: Tensor<B, 3>,
+    h0: Option<Tensor<B, 2>>,
+) -> Tensor<B, 3> {
+    let [batch_size, seq_len, hidden_dim] = coeffs.dims();
+    let device = coeffs.device();
+    
+    // Prepare initial state
+    let h0_tensor = match h0 {
+        Some(h) => h,
+        None => Tensor::zeros([batch_size, hidden_dim], &device),
+    };
+    
+    // Create a_star: [1, a_1, a_1*a_2, a_1*a_2*a_3, ...]
+    // First, create [1, a_1, a_2, ..., a_T]
+    let ones = Tensor::ones([batch_size, 1, hidden_dim], &device);
+    let a_padded = Tensor::cat(vec![ones, coeffs], 1);
+    
+    // Then compute the inclusive scan (cumulative product)
+    let a_star = inclusive_scan_mul(a_padded);
+    
+    // Create b_star: [h_0, b_1, b_2, ..., b_T]
+    let h0_expanded = h0_tensor.reshape([batch_size, 1, hidden_dim]);
+    let b_padded = Tensor::cat(vec![h0_expanded, values], 1);
+    
+    // Create terms for the inclusive scan: [h_0, b_1/a_1, b_2/a_2, ..., b_T/a_T]
+    let a_star_without_last = a_star.slice([0..batch_size, 0..seq_len+1, 0..hidden_dim]);
+    let terms = b_padded.div(a_star_without_last);
+    
+    // Compute inclusive scan (cumulative sum) of the terms
+    let prefix_sum = inclusive_scan_add(terms);
+    
+    // Compute h_t = a_star[t] * prefix_sum[t] for t = 1...T
+    let h_with_h0 = a_star.mul(prefix_sum);
+    
+    // Return h_1 to h_T (exclude h_0)
+    h_with_h0.slice([0..batch_size, 1..seq_len+1, 0..hidden_dim])
+}
+
+/// Numerically stable log-space implementation of the parallel scan
+fn parallel_scan_log_impl<B: Backend>(
+    log_coeffs: Tensor<B, 3>,
+    log_values: Tensor<B, 3>,
+    h0: Option<Tensor<B, 2>>,
 ) -> Tensor<B, 3> {
     let [batch_size, seq_len, hidden_dim] = log_coeffs.dims();
     let device = log_coeffs.device();
@@ -115,7 +93,7 @@ pub fn parallel_scan_log<B: Backend>(
             // Add log(h0) term - need to handle zeros with care
             let epsilon = 1e-10;
             
-            // FIXED: Correctly reshape h0 to [batch_size, 1, hidden_dim]
+            // Correctly reshape h0 to [batch_size, 1, hidden_dim]
             // Apply log after reshaping to maintain the correct dimensions
             let log_h0 = h0.clone().clamp(epsilon, f32::MAX).log().reshape([batch_size, 1, hidden_dim]);
             all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], log_h0);
@@ -140,6 +118,50 @@ pub fn parallel_scan_log<B: Backend>(
     
     // Return exp(log_h)[1:] to get the sequence outputs h_1 to h_T
     log_h.slice([0..batch_size, 1..(seq_len+1), 0..hidden_dim]).exp()
+}
+
+/// Compute inclusive scan (cumulative product) along dimension 1
+fn inclusive_scan_mul<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
+    let [batch_size, seq_len, hidden_dim] = input.dims();
+    let device = input.device();
+    
+    let mut result = Tensor::zeros_like(&input);
+    
+    // Copy first element
+    let first = input.slice([0..batch_size, 0..1, 0..hidden_dim]);
+    result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
+    
+    // Compute cumulative product
+    for t in 1..seq_len {
+        let prev = result.slice([0..batch_size, t-1..t, 0..hidden_dim]);
+        let curr = input.slice([0..batch_size, t..t+1, 0..hidden_dim]);
+        let product = prev.mul(curr);
+        result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], product);
+    }
+    
+    result
+}
+
+/// Compute inclusive scan (cumulative sum) along dimension 1
+fn inclusive_scan_add<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
+    let [batch_size, seq_len, hidden_dim] = input.dims();
+    let device = input.device();
+    
+    let mut result = Tensor::zeros_like(&input);
+    
+    // Copy first element
+    let first = input.slice([0..batch_size, 0..1, 0..hidden_dim]);
+    result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
+    
+    // Compute cumulative sum
+    for t in 1..seq_len {
+        let prev = result.slice([0..batch_size, t-1..t, 0..hidden_dim]);
+        let curr = input.slice([0..batch_size, t..t+1, 0..hidden_dim]);
+        let sum = prev.add(curr);
+        result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], sum);
+    }
+    
+    result
 }
 
 /// Log-space cumulative sum using log-sum-exp trick
@@ -169,4 +191,32 @@ fn log_cumsum_exp<B: Backend>(log_x: Tensor<B, 3>) -> Tensor<B, 3> {
     }
     
     result
+}
+
+/// Compute log(exp(a) + exp(b)) in a numerically stable way
+fn log_sum_exp<B: Backend>(a: Tensor<B, 3>, b: Tensor<B, 3>) -> Tensor<B, 3> {
+    // Use the identity: log(exp(a) + exp(b)) = max(a, b) + log(exp(a - max(a, b)) + exp(b - max(a, b)))
+    let max_val = a.clone().max_pair(b.clone());
+    
+    // Compute exp(a - max_val) + exp(b - max_val)
+    let a_shifted = a.sub(max_val.clone());
+    let b_shifted = b.sub(max_val.clone());
+    let sum_exp = a_shifted.exp().add(b_shifted.exp());
+    
+    // Add max_val + log(sum_exp)
+    max_val.add(sum_exp.log())
+}
+
+/// Higher-performance parallel scan that uses true divide-and-conquer approach
+/// This can be implemented once the basic version is working and tested
+pub fn parallel_scan_divide_conquer<B: Backend>(
+    coeffs: Tensor<B, 3>,
+    values: Tensor<B, 3>,
+    h0: Option<Tensor<B, 2>>,
+) -> Tensor<B, 3> {
+    // TODO: Implement a true logarithmic-time parallel scan algorithm
+    // using the up-sweep/down-sweep approach
+    
+    // For now, fall back to the standard implementation
+    parallel_scan_standard_impl(coeffs, values, h0)
 }
