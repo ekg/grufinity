@@ -67,15 +67,10 @@ fn parallel_scan_log_impl<B: Backend>(
     log_values: Tensor<B, 3>,
     h0: Option<Tensor<B, 2>>,
 ) -> Tensor<B, 3> {
-    let [batch_size, seq_len, hidden_dim] = log_coeffs.dims();
-    let device = log_coeffs.device();
+    // Always use the sequential algorithm regardless of sequence length
+    return sequential_log_scan(log_coeffs, log_values, h0);
     
-    // For short sequences, use the sequential algorithm
-    if seq_len <= 32 {
-        return sequential_log_scan(log_coeffs, log_values, h0);
-    }
-    
-    // For longer sequences, use the parallel Blelloch algorithm
+    // Parallel Blelloch algorithm code is kept but not used
     
     // First, compute a_star using parallel prefix sum
     // Create padded coefficients with zeros at position 0
@@ -348,15 +343,10 @@ fn sequential_log_scan<B: Backend>(
 
 /// Parallel logsumexp using the Blelloch algorithm
 fn parallel_logsumexp_scan<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
-    let [batch_size, seq_len, hidden_dim] = input.dims();
-    let device = input.device();
+    // Always use the sequential algorithm
+    return log_cumsum_exp(input);
     
-    // For short sequences, fall back to sequential algorithm
-    if seq_len <= 32 {
-        return log_cumsum_exp(input);
-    }
-    
-    // Initialize result tensor
+    // Initialize result tensor (code kept but not used)
     let mut result = Tensor::zeros_like(&input);
     
     // Copy first element as is
@@ -386,16 +376,10 @@ pub fn parallel_scan_divide_conquer<B: Backend>(
     values: Tensor<B, 3>,
     h0: Option<Tensor<B, 2>>,
 ) -> Tensor<B, 3> {
-    // For log-space computation (which is more numerically stable)
-    let device = coeffs.device();
-    let [batch_size, seq_len, hidden_dim] = coeffs.dims();
+    // Always use the standard implementation regardless of sequence length
+    return parallel_scan_standard_impl(coeffs, values, h0);
     
-    // Skip the parallel version for very short sequences
-    if seq_len <= 32 {
-        return parallel_scan_standard_impl(coeffs, values, h0);
-    }
-    
-    // Convert to log space
+    // Log space code kept but not used
     let epsilon = 1e-10;
     let log_coeffs = (coeffs.clamp(epsilon, f32::MAX)).log();
     
