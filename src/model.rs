@@ -97,6 +97,18 @@ pub struct MinGRULMConfig {
 
 
 impl MinGRULMConfig {
+    /// Set the dimension and return a new config
+    pub fn with_dim(&self, dim: usize) -> Self {
+        Self {
+            num_tokens: self.num_tokens,
+            dim,
+            depth: self.depth,
+            ff_mult: self.ff_mult,
+            expansion_factor: self.expansion_factor,
+            chunk_size: self.chunk_size,
+        }
+    }
+
     /// Calculate the total parameter count for this model configuration
     pub fn calculate_parameters(&self) -> usize {
         let vocab_size = self.num_tokens;
@@ -110,7 +122,7 @@ impl MinGRULMConfig {
         
         // 2. MinGRU layers
         let mut mingru_params = 0;
-        for i in 0..depth {
+        for _i in 0..depth {
             // Input size is 'dim' for all layers
             let input_size = dim;
             let dim_inner = (dim as f64 * expansion_factor) as usize;
