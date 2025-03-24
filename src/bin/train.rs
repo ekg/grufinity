@@ -78,6 +78,9 @@ fn print_help() {
     println!("  --model-depth NUM              Number of MinGRU layers (default: 3)");
     println!("  --model-ff-mult FACTOR         Feed-forward multiplier (default: 3.0)");
     println!("  --model-exp-factor FACTOR      Expansion factor (default: 1.5)");
+    println!("  --model-params NUM             Target number of model parameters");
+    println!("                                 (will compute appropriate dimension to achieve this)");
+    println!("                                 Suffixes k/m/g supported (e.g., 4m = 4 million params)");
     println!("\nExample:");
     println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --context-length 100000 --update-tokens 512 --backprop-tokens 1024");
     println!("\nThis will train with:");
