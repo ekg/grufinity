@@ -194,6 +194,7 @@ fn log_cumsum_exp<B: Backend>(log_x: Tensor<B, 3>) -> Tensor<B, 3> {
 }
 
 /// Compute log(exp(a) + exp(b)) in a numerically stable way
+#[allow(dead_code)]
 fn log_sum_exp<B: Backend>(a: Tensor<B, 3>, b: Tensor<B, 3>) -> Tensor<B, 3> {
     // Use the identity: log(exp(a) + exp(b)) = max(a, b) + log(exp(a - max(a, b)) + exp(b - max(a, b)))
     let max_val = a.clone().max_pair(b.clone());
