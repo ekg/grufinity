@@ -182,10 +182,8 @@ fn log_cumsum_exp<B: Backend>(log_x: Tensor<B, 3>) -> Tensor<B, 3> {
         let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
         let curr = log_x.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
         
-        // log_sum_exp(a, b) = max(a, b) + log(exp(a - max(a, b)) + exp(b - max(a, b)))
-        let max_val = prev.clone().max_pair(curr.clone());
-        let sum_exp = (prev - max_val.clone()).exp() + (curr - max_val.clone()).exp();
-        let log_sum = max_val + sum_exp.log();
+        // Use the log_sum_exp helper function
+        let log_sum = log_sum_exp(prev, curr);
         
         result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], log_sum);
     }
