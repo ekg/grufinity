@@ -186,30 +186,32 @@ impl LearningRateScheduler {
         self.last_valid_loss = valid_loss;
         
         // Check if we're in a stall situation (after previous reduction)
-        if self.has_reduced && improvement < self.stall_threshold as f32 {
+        if self.stall_epochs > 0 && self.has_reduced && improvement < self.stall_threshold as f32 {
+            // Only track and report stalls if stall_epochs > 0 (explicitly enabled)
             // Increment stall counter
             self.stall_counter += 1;
             println!("🔍 Potential learning rate stall detected: {} consecutive epochs with <{}% improvement", 
                      self.stall_counter, self.stall_threshold * 100.0);
-            
+        
             // If we've stalled for stall_epochs epochs, increase the learning rate
             if self.stall_counter >= self.stall_epochs {
                 // Increase learning rate by the reciprocal of the reduce factor (e.g., if reduce=0.1, increase by 10x)
                 let increased_lr = self.current_lr / self.reduce_factor;
-                
+            
                 // Apply the increase to the base learning rate
                 self.base_lr = self.base_lr / self.reduce_factor;
-                
+            
                 // Update current learning rate
                 self.current_lr = increased_lr;
-                
+            
                 // Reset stall counter
                 self.stall_counter = 0;
-                
+            
                 println!("🚀 Learning rate increased to {:.6e} to escape plateau", self.current_lr);
                 return true;
             }
-        } else if improvement >= self.stall_threshold as f32 {
+        } else if self.stall_epochs > 0 && improvement >= self.stall_threshold as f32 {
+            // Only reset stall counter if feature is enabled
             // Good improvement, reset stall counter
             if self.stall_counter > 0 {
                 println!("✅ Good improvement detected ({}%), resetting stall counter", 
