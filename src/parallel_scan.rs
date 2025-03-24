@@ -69,54 +69,6 @@ fn parallel_scan_log_impl<B: Backend>(
 ) -> Tensor<B, 3> {
     // Always use the sequential algorithm regardless of sequence length
     return sequential_log_scan(log_coeffs, log_values, h0);
-    
-    // Parallel Blelloch algorithm code is kept but not used
-    
-    // First, compute a_star using parallel prefix sum
-    // Create padded coefficients with zeros at position 0
-    let zeros = Tensor::zeros([batch_size, 1, hidden_dim], &device);
-    let log_coeffs_padded = Tensor::cat(vec![zeros, log_coeffs], 1);
-    
-    // Execute parallel prefix sum (cumulative sum in log space)
-    let a_star = parallel_prefix_sum(log_coeffs_padded);
-    
-    // Now handle the initial hidden state (h0) and values
-    let log_all_values = match h0 {
-        Some(h0) => {
-            // Prepend log(h0) to log_values
-            let mut all_values = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device)
-                .slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], log_values);
-            
-            // Add log(h0) term - need to handle zeros with care
-            let epsilon = 1e-10;
-            
-            // Reshape h0 to [batch_size, 1, hidden_dim]
-            let log_h0 = h0.clone().clamp(epsilon, f32::MAX).log().reshape([batch_size, 1, hidden_dim]);
-            all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], log_h0);
-            all_values
-        },
-        None => {
-            // If no h0, set the first position to a very negative number (log of near-zero)
-            let mut all_values = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device)
-                .slice_assign([0..batch_size, 1..(seq_len+1), 0..hidden_dim], log_values);
-            
-            let neg_inf = Tensor::full([batch_size, 1, hidden_dim], -1e5, &device);
-            all_values = all_values.slice_assign([0..batch_size, 0..1, 0..hidden_dim], neg_inf);
-            all_values
-        }
-    };
-    
-    // Create terms for the log-space scan
-    let adjusted_values = log_all_values - a_star.clone();
-    
-    // Compute log_h0_plus_b_star using parallel logsumexp scan
-    let log_h0_plus_b_star = parallel_logsumexp_scan(adjusted_values);
-    
-    // Compute log_h = a_star + log_h0_plus_b_star
-    let log_h = a_star + log_h0_plus_b_star;
-    
-    // Return exp(log_h)[1:] to get the sequence outputs h_1 to h_T
-    log_h.slice([0..batch_size, 1..(seq_len+1), 0..hidden_dim]).exp()
 }
 
 /// Compute inclusive scan (cumulative product) along dimension 1
@@ -345,28 +297,6 @@ fn sequential_log_scan<B: Backend>(
 fn parallel_logsumexp_scan<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
     // Always use the sequential algorithm
     return log_cumsum_exp(input);
-    
-    // Initialize result tensor (code kept but not used)
-    let mut result = Tensor::zeros_like(&input);
-    
-    // Copy first element as is
-    let first = input.clone().slice([0..batch_size, 0..1, 0..hidden_dim]);
-    result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
-    
-    // Compute parallel logsumexp - a more complex operation
-    // This is a simplified implementation - a full parallel logsumexp would be more complex
-    // and involve specialized GPU kernels
-    for t in 1..seq_len {
-        let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
-        let curr = input.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
-        
-        // Use our log_sum_exp helper
-        let log_sum = log_sum_exp(prev, curr);
-        
-        result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], log_sum);
-    }
-    
-    result
 }
 
 /// Implementation of a true parallel scan algorithm using Blelloch scan
@@ -378,22 +308,4 @@ pub fn parallel_scan_divide_conquer<B: Backend>(
 ) -> Tensor<B, 3> {
     // Always use the standard implementation regardless of sequence length
     return parallel_scan_standard_impl(coeffs, values, h0);
-    
-    // Log space code kept but not used
-    let epsilon = 1e-10;
-    let log_coeffs = (coeffs.clamp(epsilon, f32::MAX)).log();
-    
-    // Convert values to log space (with offset)
-    let log_values = (values.clamp(epsilon, f32::MAX)).log();
-    
-    // Handle initial hidden state
-    let log_h0 = match h0 {
-        Some(h) => h.clamp(epsilon, f32::MAX).log(),
-        None => Tensor::full([batch_size, hidden_dim], -1e5, &device),
-    };
-    
-    // Now use the log-space implementation
-    let result = parallel_scan_log_impl(log_coeffs, log_values, Some(log_h0));
-    
-    result
 }
