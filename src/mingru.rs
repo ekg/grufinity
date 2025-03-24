@@ -132,8 +132,15 @@ impl<B: Backend> MinGRU<B> {
         let log_tilde_h = self.log_g_function(hidden);
         let log_values = log_z + log_tilde_h;
         
-        // Use parallel scan in log space
-        parallel_scan_log(log_coeffs, log_values, prev_hidden)
+        // For sequences longer than 32 tokens, use the optimized parallel scan
+        let seq_len = log_coeffs.dims()[1];
+        if seq_len > 32 {
+            // Use optimized parallel scan for longer sequences
+            parallel_scan_log(log_coeffs, log_values, prev_hidden)
+        } else {
+            // Use standard scan for shorter sequences
+            parallel_scan_log(log_coeffs, log_values, prev_hidden)
+        }
     }
     
     /// g(x) function: x + 0.5 for x >= 0, sigmoid(x) for x < 0
