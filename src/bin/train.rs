@@ -1296,7 +1296,17 @@ fn create_default_config() -> TBPTTConfig {
     
     // Calculate and display the parameter count
     let param_count = model_config.calculate_parameters();
-    println!("Total model parameters: {:,}", param_count);
+    
+    // Format the parameter count with appropriate suffixes
+    let formatted_count = if param_count >= 1_000_000 {
+        format!("{:.2}M", param_count as f64 / 1_000_000.0)
+    } else if param_count >= 1_000 {
+        format!("{:.2}K", param_count as f64 / 1_000.0)
+    } else {
+        format!("{}", param_count)
+    };
+    
+    println!("Total model parameters: {}", formatted_count);
     
     #[cfg(feature = "optimizer-sgd")]
     let config = TBPTTConfig::new(model_config, SgdConfig::new());
