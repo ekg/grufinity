@@ -48,7 +48,7 @@ fn parallel_scan_standard_impl<B: Backend>(
     let b_padded = Tensor::cat(vec![h0_expanded, values], 1);
     
     // Create terms for the inclusive scan: [h_0, b_1/a_1, b_2/a_2, ..., b_T/a_T]
-    let a_star_without_last = a_star.slice([0..batch_size, 0..seq_len+1, 0..hidden_dim]);
+    let a_star_without_last = a_star.clone().slice([0..batch_size, 0..seq_len+1, 0..hidden_dim]);
     let terms = b_padded.div(a_star_without_last);
     
     // Compute inclusive scan (cumulative sum) of the terms
@@ -123,18 +123,18 @@ fn parallel_scan_log_impl<B: Backend>(
 /// Compute inclusive scan (cumulative product) along dimension 1
 fn inclusive_scan_mul<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
     let [batch_size, seq_len, hidden_dim] = input.dims();
-    let device = input.device();
+    let _device = input.device();
     
     let mut result = Tensor::zeros_like(&input);
     
     // Copy first element
-    let first = input.slice([0..batch_size, 0..1, 0..hidden_dim]);
+    let first = input.clone().slice([0..batch_size, 0..1, 0..hidden_dim]);
     result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
     
     // Compute cumulative product
     for t in 1..seq_len {
-        let prev = result.slice([0..batch_size, t-1..t, 0..hidden_dim]);
-        let curr = input.slice([0..batch_size, t..t+1, 0..hidden_dim]);
+        let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
+        let curr = input.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
         let product = prev.mul(curr);
         result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], product);
     }
@@ -145,18 +145,18 @@ fn inclusive_scan_mul<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
 /// Compute inclusive scan (cumulative sum) along dimension 1
 fn inclusive_scan_add<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
     let [batch_size, seq_len, hidden_dim] = input.dims();
-    let device = input.device();
+    let _device = input.device();
     
     let mut result = Tensor::zeros_like(&input);
     
     // Copy first element
-    let first = input.slice([0..batch_size, 0..1, 0..hidden_dim]);
+    let first = input.clone().slice([0..batch_size, 0..1, 0..hidden_dim]);
     result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
     
     // Compute cumulative sum
     for t in 1..seq_len {
-        let prev = result.slice([0..batch_size, t-1..t, 0..hidden_dim]);
-        let curr = input.slice([0..batch_size, t..t+1, 0..hidden_dim]);
+        let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
+        let curr = input.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
         let sum = prev.add(curr);
         result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], sum);
     }
