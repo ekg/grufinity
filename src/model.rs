@@ -168,11 +168,26 @@ impl MinGRULMConfig {
         token_emb_params + mingru_params + ff_params + norm_params + output_proj_params
     }
     
+    /// Round a dimension to the nearest multiple of 32
+    fn round_to_multiple_of_32(dim: usize) -> usize {
+        let remainder = dim % 32;
+        if remainder == 0 {
+            return dim; // Already a multiple of 32
+        }
+        
+        // Round to nearest multiple of 32
+        if remainder < 16 {
+            dim - remainder // Round down
+        } else {
+            dim + (32 - remainder) // Round up
+        }
+    }
+    
     /// Compute the dimension needed to achieve a target parameter count
     pub fn compute_dim_for_param_count(&self, target_params: usize) -> usize {
         // We'll use a binary search to find the optimal dimension
-        let mut min_dim = 32; // Minimum reasonable dimension
-        let mut max_dim = 8192; // Maximum reasonable dimension
+        let mut min_dim = 32; // Minimum reasonable dimension (already a multiple of 32)
+        let mut max_dim = 8192; // Maximum reasonable dimension (already a multiple of 32)
         
         while min_dim <= max_dim {
             let mid_dim = (min_dim + max_dim) / 2;
@@ -184,7 +199,8 @@ impl MinGRULMConfig {
             } else if params > target_params {
                 max_dim = mid_dim - 1;
             } else {
-                return mid_dim; // Exact match
+                // Exact match - round to nearest multiple of 32
+                return Self::round_to_multiple_of_32(mid_dim);
             }
         }
         
@@ -195,13 +211,16 @@ impl MinGRULMConfig {
         let under_params = under_config.calculate_parameters();
         let over_params = over_config.calculate_parameters();
         
-        // Return the one closer to the target
-        if (target_params as i64 - under_params as i64).abs() < 
-           (target_params as i64 - over_params as i64).abs() {
+        // Find which is closer to the target before rounding
+        let dim = if (target_params as i64 - under_params as i64).abs() < 
+                    (target_params as i64 - over_params as i64).abs() {
             max_dim
         } else {
             min_dim
-        }
+        };
+        
+        // Round to nearest multiple of 32
+        Self::round_to_multiple_of_32(dim)
     }
 
     /// Get number of tokens (vocabulary size)
@@ -235,8 +254,11 @@ impl MinGRULMConfig {
     }
     
     pub fn init<B: Backend>(&self, device: &B::Device) -> MinGRULM<B> {
+        // Ensure dimension is a multiple of 32 for optimal CUDA memory alignment
+        let dim = Self::round_to_multiple_of_32(self.dim);
+        
         // Token embedding
-        let token_emb = EmbeddingConfig::new(self.num_tokens, self.dim).init(device);
+        let token_emb = EmbeddingConfig::new(self.num_tokens, dim).init(device);
         
         // Create layers
         let mut mingru_layers = Vec::with_capacity(self.depth);
