@@ -95,7 +95,103 @@ pub struct MinGRULMConfig {
     chunk_size: usize,
 }
 
+
 impl MinGRULMConfig {
+    /// Calculate the total parameter count for this model configuration
+    pub fn calculate_parameters(&self) -> usize {
+        let vocab_size = self.num_tokens;
+        let dim = self.dim;
+        let depth = self.depth;
+        let expansion_factor = self.expansion_factor;
+        let ff_mult = self.ff_mult;
+        
+        // 1. Token embedding
+        let token_emb_params = vocab_size * dim;
+        
+        // 2. MinGRU layers
+        let mut mingru_params = 0;
+        for i in 0..depth {
+            // Input size is 'dim' for all layers
+            let input_size = dim;
+            let dim_inner = (dim as f64 * expansion_factor) as usize;
+            
+            // to_hidden_and_gate: input_size × (dim_inner * 2)
+            let to_hidden_and_gate_params = input_size * (dim_inner * 2);
+            
+            // to_out (if expansion_factor != 1.0): dim_inner × dim
+            let to_out_params = if expansion_factor != 1.0 {
+                dim_inner * dim
+            } else {
+                0
+            };
+            
+            mingru_params += to_hidden_and_gate_params + to_out_params;
+        }
+        
+        // 3. Feed-forward layers
+        let mut ff_params = 0;
+        for _ in 0..depth {
+            let dim_inner = (dim as f64 * ff_mult) as usize;
+            
+            #[cfg(feature = "swiglu")]
+            {
+                // SwiGLU variant: dim × dim_inner (gate) + dim_inner × dim (proj)
+                ff_params += dim * dim_inner + dim_inner * dim;
+            }
+            
+            #[cfg(not(feature = "swiglu"))]
+            {
+                // SiLU variant: dim × dim_inner (w1) + dim × dim_inner (w2) + dim_inner × dim (proj)
+                ff_params += dim * dim_inner + dim * dim_inner + dim_inner * dim;
+            }
+        }
+        
+        // 4. Normalization layers (approximate as dim per layer)
+        let norm_params = depth * 2 * dim + dim; // 2 norms per layer + final norm
+        
+        // 5. Output projection
+        let output_proj_params = dim * vocab_size;
+        
+        // Total parameters
+        token_emb_params + mingru_params + ff_params + norm_params + output_proj_params
+    }
+    
+    /// Compute the dimension needed to achieve a target parameter count
+    pub fn compute_dim_for_param_count(&self, target_params: usize) -> usize {
+        // We'll use a binary search to find the optimal dimension
+        let mut min_dim = 32; // Minimum reasonable dimension
+        let mut max_dim = 8192; // Maximum reasonable dimension
+        
+        while min_dim <= max_dim {
+            let mid_dim = (min_dim + max_dim) / 2;
+            let config = self.clone().with_dim(mid_dim);
+            let params = config.calculate_parameters();
+            
+            if params < target_params {
+                min_dim = mid_dim + 1;
+            } else if params > target_params {
+                max_dim = mid_dim - 1;
+            } else {
+                return mid_dim; // Exact match
+            }
+        }
+        
+        // Return the dimension that gives us just enough parameters
+        let under_config = self.clone().with_dim(max_dim);
+        let over_config = self.clone().with_dim(min_dim);
+        
+        let under_params = under_config.calculate_parameters();
+        let over_params = over_config.calculate_parameters();
+        
+        // Return the one closer to the target
+        if (target_params as i64 - under_params as i64).abs() < 
+           (target_params as i64 - over_params as i64).abs() {
+            max_dim
+        } else {
+            min_dim
+        }
+    }
+
     /// Get number of tokens (vocabulary size)
     pub fn num_tokens(&self) -> usize {
         self.num_tokens

@@ -218,6 +218,54 @@ fn main() {
                     }
                 }
             },
+            "--model-params" => {
+                if i + 1 < args.len() {
+                    if let Ok(param_count) = parse_with_suffix::<usize>(&args[i + 1]) {
+                        let mut modified_config = create_default_config();
+                        if !config_path.is_empty() {
+                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
+                                modified_config = cfg;
+                            }
+                        }
+                        
+                        // Compute the dimension needed to meet the parameter target
+                        let optimal_dim = modified_config.model.compute_dim_for_param_count(param_count);
+                        
+                        // Update model dimension in the config
+                        modified_config.model = MinGRULMConfig::new(
+                            modified_config.model.num_tokens(),
+                            optimal_dim
+                        )
+                        .with_depth(modified_config.model.depth())
+                        .with_ff_mult(modified_config.model.ff_mult())
+                        .with_expansion_factor(modified_config.model.expansion_factor())
+                        .with_chunk_size(modified_config.model.chunk_size());
+                        
+                        // Calculate actual parameter count for display
+                        let actual_params = modified_config.model.calculate_parameters();
+                        
+                        // Format parameter counts with appropriate suffixes
+                        let format_params = |p: usize| -> String {
+                            if p >= 1_000_000_000 {
+                                format!("{:.2}G", p as f64 / 1_000_000_000.0)
+                            } else if p >= 1_000_000 {
+                                format!("{:.2}M", p as f64 / 1_000_000.0)
+                            } else if p >= 1_000 {
+                                format!("{:.2}K", p as f64 / 1_000.0)
+                            } else {
+                                format!("{}", p)
+                            }
+                        };
+                        
+                        println!("Target parameter count: {}", format_params(param_count));
+                        println!("Setting model dimension to: {} (gives {} parameters)", 
+                                 optimal_dim, format_params(actual_params));
+                        
+                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
+                        config_path = "temp_config.json".to_string();
+                    }
+                }
+            },
             "--model-depth" => {
                 if i + 1 < args.len() {
                     if let Ok(depth) = args[i + 1].parse::<usize>() {
@@ -1242,6 +1290,10 @@ fn create_default_config() -> TBPTTConfig {
     let desired_context = 64000; // Desired context length in characters
     let chunks_needed = calculate_chunks_for_context(chunk_size, desired_context);
     println!("Default config using {} chunks for ~{} character context", chunks_needed, desired_context);
+    
+    // Calculate and display the parameter count
+    let param_count = model_config.calculate_parameters();
+    println!("Total model parameters: {:,}", param_count);
     
     #[cfg(feature = "optimizer-sgd")]
     let config = TBPTTConfig::new(model_config, SgdConfig::new());
