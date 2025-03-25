@@ -1112,7 +1112,7 @@ fn main() {
         use burn::backend::ndarray::NdArrayDevice;
         device_initialized = true;
         println!("Using NdArray device");
-        NdArrayDevice
+        NdArrayDevice::default()
     };
     
     #[cfg(all(feature = "tch", not(feature = "cuda"), not(feature = "wgpu"), not(feature = "candle"), not(feature = "ndarray"), not(feature = "candle-metal")))]
