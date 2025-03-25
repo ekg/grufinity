@@ -61,14 +61,79 @@ fn parallel_scan_standard_impl<B: Backend>(
     h_with_h0.slice([0..batch_size, 1..seq_len+1, 0..hidden_dim])
 }
 
-/// Numerically stable log-space implementation of the parallel scan
+/// Numerically stable log-space implementation of the parallel scan following the paper
 fn parallel_scan_log_impl<B: Backend>(
     log_coeffs: Tensor<B, 3>,
     log_values: Tensor<B, 3>,
     h0: Option<Tensor<B, 2>>,
 ) -> Tensor<B, 3> {
-    // Always use the sequential algorithm regardless of sequence length
-    return sequential_log_scan(log_coeffs, log_values, h0);
+    let [batch_size, seq_len, hidden_dim] = log_coeffs.dims();
+    let device = log_coeffs.device();
+    
+    // 1. Compute a_star = F.pad(torch.cumsum(log_coeffs, dim=1), (0, 0, 1, 0))
+    // First prepare log_coeffs with initial zeros padding
+    let zeros_pad = Tensor::zeros([batch_size, 1, hidden_dim], &device);
+    let padded_log_coeffs = Tensor::cat(vec![zeros_pad, log_coeffs], 1);
+    
+    // Then compute cumulative sum along dim 1
+    let mut a_star = Tensor::zeros([batch_size, seq_len + 1, hidden_dim], &device);
+    for t in 1..seq_len + 1 {
+        let prev = a_star.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
+        let curr = padded_log_coeffs.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
+        let cumsum = prev + curr;
+        a_star = a_star.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], cumsum);
+    }
+    
+    // 2. Prepare log_values with initial h0
+    let log_values_with_h0 = if let Some(h0) = h0 {
+        // Take log of h0, being careful with zeros
+        let epsilon = 1e-10;
+        let log_h0 = h0.clamp(epsilon, f32::MAX).log().reshape([batch_size, 1, hidden_dim]);
+        Tensor::cat(vec![log_h0, log_values], 1)
+    } else {
+        // Use small value for log(0) approximation
+        let log_h0 = Tensor::full([batch_size, 1, hidden_dim], -1e5, &device);
+        Tensor::cat(vec![log_h0, log_values], 1)
+    };
+    
+    // 3. Compute log_h0_plus_b_star = torch.logcumsumexp(log_values_with_h0 - a_star, dim=1)
+    let log_diff = log_values_with_h0 - a_star.clone();
+    let log_h0_plus_b_star = logcumsumexp(log_diff);
+    
+    // 4. Compute log_h = a_star + log_h0_plus_b_star
+    let log_h = a_star + log_h0_plus_b_star;
+    
+    // 5. Return exp(log_h)[:, 1:] to get the sequence outputs h_1 to h_T
+    log_h.slice([0..batch_size, 1..seq_len+1, 0..hidden_dim]).exp()
+}
+
+/// Compute the log(cumsum(exp(x))) in a numerically stable way
+fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
+    let [batch_size, seq_len, hidden_dim] = x.dims();
+    let device = x.device();
+    
+    let mut result = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
+    
+    // Copy first element
+    let first = x.clone().slice([0..batch_size, 0..1, 0..hidden_dim]);
+    result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
+    
+    // Compute log(exp(result[t-1]) + exp(x[t])) for remaining elements
+    for t in 1..seq_len {
+        let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
+        let curr = x.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
+        
+        // Use log-sum-exp trick for numerical stability:
+        // log(exp(a) + exp(b)) = max(a,b) + log(1 + exp(min(a,b) - max(a,b)))
+        let max_vals = prev.clone().max_pair(curr.clone());
+        let min_vals = prev.clone().min_pair(curr.clone());
+        let diff = min_vals - max_vals.clone();
+        let logsumexp = max_vals + (Tensor::ones_like(&diff) + diff.exp()).log();
+        
+        result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], logsumexp);
+    }
+    
+    result
 }
 
 /// Compute inclusive scan (cumulative product) along dimension 1

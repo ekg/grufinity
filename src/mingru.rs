@@ -124,39 +124,51 @@ impl<B: Backend> MinGRU<B> {
     
     /// Forward pass in parallel mode using associative scan
     fn forward_parallel(&self, hidden: Tensor<B, 3>, gate: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> Tensor<B, 3> {
-        // Log-space coefficients: log(1 - z_t)
+        // Log-space coefficients: log(1 - z_t) = -softplus(k_t)
+        // where k_t is the pre-activation value for the gate
         let log_coeffs = -activation::softplus(gate.clone(), 1.0);
-        
+    
         // Log-space values: log(z_t) + log(g(h_tilde))
+        // log(z_t) = -softplus(-k_t)
         let log_z = -activation::softplus(-gate, 1.0);
+    
+        // Apply log-g function to compute log(g(h_tilde))
         let log_tilde_h = self.log_g_function(hidden);
+    
+        // Combined log values: log(z_t * g(h_tilde)) = log(z_t) + log(g(h_tilde))
         let log_values = log_z + log_tilde_h;
-        
-        // Always use sequential scan regardless of sequence length
+    
+        // Use the efficient parallel scan in log space
         parallel_scan_log(log_coeffs, log_values, prev_hidden)
     }
     
-    /// g(x) function: x + 0.5 for x >= 0, sigmoid(x) for x < 0
+    /// g(x) function as defined in the paper: 
+    /// g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0
     fn g_function(&self, x: Tensor<B, 2>) -> Tensor<B, 2> {
         let zeros = Tensor::zeros_like(&x);
         let x_positive = x.clone().greater_equal(zeros.clone()).float();
         let x_negative = x.clone().lower(zeros).float();
-        
+    
         (x_positive * (x.clone() + 0.5)) + (x_negative * activation::sigmoid(x))
     }
-    
-    /// log(g(x)) function: log(x + 0.5) for x >= 0, log(sigmoid(x)) for x < 0
+
+    /// log(g(x)) function as defined in the paper:
+    /// log(g(x)) = log(x + 0.5) for x >= 0, -softplus(-x) for x < 0
     fn log_g_function(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
         let [batch_size, seq_len, hidden_dim] = x.dims();
         let device = x.device();
         let zeros = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
-        
+    
         let x_positive = x.clone().greater_equal(zeros.clone()).float();
         let x_negative = x.clone().lower(zeros).float();
-        
+    
+        // For x >= 0: log(x + 0.5)
+        // Using ReLU to ensure we don't take log of negative numbers
         let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
+    
+        // For x < 0: log(sigmoid(x)) = -softplus(-x)
         let log_g_neg = -activation::softplus(-x, 1.0);
-        
+    
         (x_positive * log_g_pos) + (x_negative * log_g_neg)
     }
 }
