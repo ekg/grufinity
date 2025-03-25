@@ -340,10 +340,10 @@ impl<B: Backend> MinGRULM<B> {
         // Initialize hidden states
         let mut next_hidden_states = Vec::with_capacity(self.mingru_layers.len());
     
-        // Check if we need to chunk the sequence
-        if seq_len > self.chunk_size && hidden_states.is_none() {
+        // Check if we need to chunk the sequence - only based on sequence length
+        if seq_len > self.chunk_size {
             // Process in chunks and carry hidden states between them
-            return self.forward_chunked(x);
+            return self.forward_chunked(x, hidden_states);
         }
     
         // Process through layers
@@ -377,13 +377,13 @@ impl<B: Backend> MinGRULM<B> {
     }
     
     /// Process a sequence in chunks, carrying hidden states between chunks
-    fn forward_chunked(&self, x: Tensor<B, 3>) -> (Tensor<B, 3>, Vec<Tensor<B, 2>>) {
+    fn forward_chunked(&self, x: Tensor<B, 3>, initial_hidden_states: Option<Vec<Tensor<B, 2>>>) -> (Tensor<B, 3>, Vec<Tensor<B, 2>>) {
         let [batch_size, seq_len, _] = x.dims();
         let _device = x.device();
         
         // Calculate number of chunks
         let num_chunks = (seq_len + self.chunk_size - 1) / self.chunk_size;
-        let mut hidden_states = None;
+        let mut hidden_states = initial_hidden_states; // Start with provided hidden states
         let mut outputs = Vec::with_capacity(num_chunks);
         
         // Process each chunk
