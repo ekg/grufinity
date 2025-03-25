@@ -114,6 +114,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     {
         device_initialized = true;
         debug("Using Candle CPU device");
+        CandleDevice::Cpu
     }
     
     #[cfg(all(feature = "ndarray", not(feature = "cuda"), not(feature = "wgpu"), 
