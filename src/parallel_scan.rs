@@ -181,6 +181,7 @@ fn inclusive_scan_add<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
 }
 
 /// Log-space cumulative sum using log-sum-exp trick
+#[allow(dead_code)]
 fn log_cumsum_exp<B: Backend>(log_x: Tensor<B, 3>) -> Tensor<B, 3> {
     let [batch_size, seq_len, hidden_dim] = log_x.dims();
     let device = log_x.device();
@@ -224,6 +225,7 @@ fn log_sum_exp<B: Backend>(a: Tensor<B, 3>, b: Tensor<B, 3>) -> Tensor<B, 3> {
 
 /// Parallel prefix sum using Blelloch scan algorithm
 /// Efficient O(log n) algorithm for prefix sum operations
+#[allow(dead_code)]
 fn parallel_prefix_sum<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
     let [batch_size, seq_len, hidden_dim] = input.dims();
     let device = input.device();
@@ -300,6 +302,7 @@ fn parallel_prefix_sum<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
 }
 
 /// Execute a sequential log-space scan for short sequences
+#[allow(dead_code)]
 fn sequential_log_scan<B: Backend>(
     log_coeffs: Tensor<B, 3>,
     log_values: Tensor<B, 3>,
@@ -359,6 +362,7 @@ fn sequential_log_scan<B: Backend>(
 }
 
 /// Parallel logsumexp using the Blelloch algorithm
+#[allow(dead_code)]
 fn parallel_logsumexp_scan<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
     // Always use the sequential algorithm
     return log_cumsum_exp(input);
