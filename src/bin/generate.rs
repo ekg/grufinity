@@ -406,7 +406,7 @@ fn sample_with_top_k<B: Backend>(
         
         // Generate random value
         let mut rng = rand::thread_rng();
-        let random: f32 = rng.gen();
+        let random: f32 = rng.r#gen();
         
         // Sample based on cumulative distribution
         let mut cumsum = 0.0;
@@ -469,7 +469,7 @@ fn sample_with_top_k<B: Backend>(
     
     // Sample based on the probabilities
     let mut rng = rand::thread_rng();
-    let random: f32 = rng.gen();
+    let random: f32 = rng.r#gen();
     
     let mut cumsum = 0.0;
     let mut selected_idx = 0;
