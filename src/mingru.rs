@@ -74,9 +74,13 @@ mod tests {
     #[cfg(feature = "vulkan")]
     type TestBackend = Vulkan<f32, i32>;
     
-    // Import NdArrayDevice for tests regardless of active features
-    #[cfg(test)]
+    // Import NdArrayDevice for tests only when ndarray is enabled
+    #[cfg(all(test, feature = "ndarray"))]
     use burn::backend::ndarray::NdArrayDevice;
+    
+    // Ensure we have a fallback import for tests without ndarray feature
+    #[cfg(all(test, not(feature = "ndarray")))]
+    use burn::tensor::backend::Backend;
     
     #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
