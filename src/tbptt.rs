@@ -33,8 +33,11 @@ use burn::{optim::momentum::MomentumConfig, optim::SgdConfig};
 #[cfg(feature = "optimizer-adam")]
 use burn::{optim::decay::WeightDecayConfig, optim::AdamConfig};
 
-#[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
-compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled");
+#[cfg(all(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")), not(test)))]
+compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled for non-test builds");
+
+#[cfg(all(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")), test))]
+use burn::optim::AdamConfig;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -1693,6 +1696,13 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     {
         println!("- Using SGD optimizer with SGD configuration");
     }
+
+    // Declare and initialize the optimizer variable here so it's accessible in the loop
+    #[cfg(feature = "optimizer-adam")]
+    let mut optimizer = config.optimizer.init();
+
+    #[cfg(feature = "optimizer-sgd")]
+    let mut optimizer = config.optimizer.init();
 
     for epoch in 1..=max_training_epochs {
         // Get learning rate for this epoch from the scheduler

@@ -51,6 +51,16 @@ candle-cuda-full = ["candle", "candle-cuda", "fusion", "autodiff"]
 candle-metal = ["candle", "burn/metal"]
 candle-metal-full = ["candle", "burn/metal", "fusion", "autodiff"]
 
+# Test configuration
+[dev-dependencies]
+
+[lib]
+doctest = false
+
+# Enable optimizer-adam by default for tests
+[features]
+default-test = ["optimizer-adam"]
+
 [[bin]]
 name = "generate"
 path = "src/bin/generate.rs"
