@@ -40,7 +40,7 @@ mod tests {
         let model = config.init::<TestBackend>(&device);
         
         // Check model structure
-        assert_eq!(model.token_emb.weight.dims(), [32, 10]); // shape is [dim, vocab_size]
+        assert_eq!(model.token_emb.weight.dims(), [10, 32]); // shape is [vocab_size, dim]
         assert_eq!(model.mingru_layers.len(), 2); // depth
         assert_eq!(model.norm1_layers.len(), 2);
         assert_eq!(model.norm2_layers.len(), 2);
