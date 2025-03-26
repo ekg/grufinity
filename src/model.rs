@@ -23,8 +23,11 @@ pub struct FeedForwardConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
     
+    #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
     #[test]

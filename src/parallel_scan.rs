@@ -189,9 +189,13 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
     
+    #[cfg(feature = "ndarray")]
     use burn::tensor::Float;
+    #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
     #[test]
