@@ -356,8 +356,13 @@ fn main() {
     let device = {
         use burn::backend::libtorch::LibTorchDevice;
         device_initialized = true;
-        println!("Using LibTorch CPU device");
-        LibTorchDevice::Cpu
+        if grufinity::libtorch_cuda_available() {
+            println!("Using LibTorch CUDA device {}", device_id);
+            LibTorchDevice::Cuda(device_id)
+        } else {
+            println!("Using LibTorch CPU device (CUDA not available)");
+            LibTorchDevice::Cpu
+        }
     };
     
     // If no device was initialized yet, provide a fallback

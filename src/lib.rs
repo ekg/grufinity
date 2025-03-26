@@ -40,6 +40,24 @@ pub use burn::backend::candle::{Candle, CandleDevice};
 #[cfg(feature = "tch")]
 pub use burn::backend::libtorch::{LibTorch, LibTorchDevice};
 
+// For checking CUDA availability with LibTorch
+#[cfg(feature = "tch")]
+pub fn libtorch_cuda_available() -> bool {
+    burn::backend::libtorch::LibTorchDevice::cuda_is_available()
+}
+
+// Convenience function to create a LibTorch device with the right type
+#[cfg(feature = "tch")]
+pub fn create_libtorch_device(device_id: usize) -> LibTorchDevice {
+    if libtorch_cuda_available() {
+        println!("LibTorch: CUDA is available, using GPU device {}", device_id);
+        LibTorchDevice::Cuda(device_id)
+    } else {
+        println!("LibTorch: CUDA is not available, falling back to CPU");
+        LibTorchDevice::Cpu
+    }
+}
+
 #[cfg(feature = "ndarray")]
 pub use burn::backend::ndarray::{NdArray, NdArrayDevice};
 
@@ -400,7 +418,11 @@ macro_rules! use_configured_backend {
         {
             // For reporting
             const BACKEND_NAME: &str = "libtorch";
-            println!("Using LibTorch backend");
+            if libtorch_cuda_available() {
+                println!("Using LibTorch backend with CUDA support");
+            } else {
+                println!("Using LibTorch backend (CPU only)");
+            }
         }
         
         #[cfg(all(feature = "ndarray", feature = "autodiff", not(any(feature = "cuda", feature = "wgpu", feature = "candle", feature = "tch"))))]
