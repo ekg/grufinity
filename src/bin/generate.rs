@@ -214,7 +214,32 @@ fn locate_config_file(config_path: &mut String, model_path: &str) {
         
         debug("No configuration files found in model directory.");
     } else {
-        debug(&format!("Could not determine model directory from path: {}", model_path));
+        // Also check for Windows-style paths
+        if let Some(last_slash) = model_path.rfind('\\') {
+            let dir = &model_path[..last_slash];
+            debug(&format!("Looking in model directory (Windows path): {}", dir));
+            
+            // Try possible config filenames in priority order
+            let possible_configs = [
+                ("tbptt_config.json", "TBPTT config"),
+                ("config.json", "standard config"),
+            ];
+            
+            for (filename, desc) in possible_configs.iter() {
+                let candidate_path = format!("{}\\{}", dir, filename);
+                debug(&format!("Checking for {} at: {}", desc, candidate_path));
+                
+                if std::path::Path::new(&candidate_path).exists() {
+                    debug(&format!("Found {} at: {}", desc, candidate_path));
+                    *config_path = candidate_path;
+                    return;
+                }
+            }
+            
+            debug("No configuration files found in model directory.");
+        } else {
+            debug(&format!("Could not determine model directory from path: {}", model_path));
+        }
     }
 }
 
