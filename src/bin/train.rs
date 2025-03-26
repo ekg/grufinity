@@ -259,8 +259,11 @@ fn main() {
     // Parse command-line arguments
     let args = TrainingArgs::parse();
     
-    // Default values
-    let data_path = args.data.unwrap_or_else(|| "data/sample.txt".to_string());
+    // Get required data path
+    let data_path = args.data.unwrap_or_else(|| {
+        eprintln!("Error: No training data file specified. Use --data to specify an input file.");
+        std::process::exit(1);
+    });
     let artifact_dir = args.output;
     let config_path = args.config.unwrap_or_default();
     #[allow(unused_variables)]
@@ -372,9 +375,9 @@ fn main() {
     fs::create_dir_all(&artifact_dir).expect("Failed to create artifact directory");
     
     // Load training data
-    let text = fs::read_to_string(&data_path).unwrap_or_else(|_| {
-        println!("Could not read file {}, using sample text", data_path);
-        "Hello world! This is a sample text for the MinGRU model.".to_string()
+    let text = fs::read_to_string(&data_path).unwrap_or_else(|e| {
+        eprintln!("Error: Failed to read training file '{}': {}", data_path, e);
+        std::process::exit(1);
     });
     
     // Process token-based TBPTT parameters
