@@ -1,6 +1,9 @@
 use burn::tensor::{backend::Backend, Tensor}; 
 // Float imported in tests module where needed
 
+#[cfg(feature = "tch")]
+use burn::backend::libtorch::{LibTorch, LibTorchDevice, TchTensor, TchBackend};
+
 /// Implementation of the parallel associative scan algorithm for efficient computation 
 /// of recurrent neural networks.
 ///
@@ -159,6 +162,17 @@ fn parallel_scan_log_impl<B: Backend>(
 
 /// Compute the log(cumsum(exp(x))) in a numerically stable way
 fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
+    // Special implementation for LibTorch that uses native logcumsumexp
+    #[cfg(feature = "tch")]
+    {
+        use burn::backend::libtorch::LibTorch;
+        if let Some(_) = (&x as &dyn std::any::Any).downcast_ref::<Tensor<LibTorch<f32>, 3>>() {
+            // Extract the raw torch tensor and use the native logcumsumexp
+            return libtorch_logcumsumexp(x);
+        }
+    }
+    
+    // Generic implementation for other backends
     let [batch_size, seq_len, hidden_dim] = x.dims();
     let device = x.device();
     
@@ -184,6 +198,52 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
     }
     
     result
+}
+
+/// LibTorch-specific implementation of logcumsumexp using the native torch function
+#[cfg(feature = "tch")]
+fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
+    use burn::backend::libtorch::{LibTorch, LibTorchDevice, TchTensor, TchBackend};
+    
+    if let Some(libtorch_tensor) = (&x as &dyn std::any::Any).downcast_ref::<Tensor<LibTorch<f32>, 3>>() {
+        // Extract the raw tch::Tensor
+        let raw_tensor = libtorch_tensor.into_data().value();
+        
+        // Call the native logcumsumexp function along dim=1 (sequence dimension)
+        let result = raw_tensor.logcumsumexp(1, None);
+        
+        // Wrap it back in a Burn tensor
+        let result_burn = TchBackend::from_tch_tensor(result);
+        
+        // Convert to the correct tensor type
+        Tensor::<B, 3>::from_data(result_burn, &x.device())
+    } else {
+        // Fallback to generic implementation if we couldn't downcast
+        let [batch_size, seq_len, hidden_dim] = x.dims();
+        let device = x.device();
+        
+        let mut result = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
+        
+        // Copy first element
+        let first = x.clone().slice([0..batch_size, 0..1, 0..hidden_dim]);
+        result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
+        
+        // Compute log(exp(result[t-1]) + exp(x[t])) for remaining elements
+        for t in 1..seq_len {
+            let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
+            let curr = x.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
+            
+            // Use log-sum-exp trick for numerical stability
+            let max_vals = prev.clone().max_pair(curr.clone());
+            let min_vals = prev.clone().min_pair(curr.clone());
+            let diff = min_vals - max_vals.clone();
+            let logsumexp = max_vals + (Tensor::ones_like(&diff) + diff.exp()).log();
+            
+            result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], logsumexp);
+        }
+        
+        result
+    }
 }
 
 #[cfg(test)]
