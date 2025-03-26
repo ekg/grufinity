@@ -3,6 +3,7 @@ pub mod mingru;
 pub mod model;
 pub mod dataset;
 pub mod tbptt;
+pub mod errors;
 
 pub use parallel_scan::*;
 pub use mingru::*;
@@ -10,6 +11,7 @@ pub use model::*;
 pub use dataset::*;
 // Only export specific items from tbptt module that are needed
 pub use tbptt::{TBPTTConfig, train_with_tbptt, LRSchedulerType};
+pub use errors::{GRUfinityError, Result, ResultExt};
 
 // Re-export essential types for convenience
 pub use burn::{

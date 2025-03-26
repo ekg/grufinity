@@ -14,6 +14,8 @@ use grufinity::{
     Config,
     use_configured_backend,
     RawBackend,
+    GRUfinityError,
+    Result as GRUfinityResult,
 };
 
 // Global verbosity setting for controlling debug output
@@ -217,7 +219,7 @@ fn locate_config_file(config_path: &mut String, model_path: &str) {
 }
 
 // Load model configuration with fallbacks
-fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) -> MinGRULMConfig {
+fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) -> Result<MinGRULMConfig, GRUfinityError> {
     if !std::path::Path::new(config_path).exists() {
         debug(&format!("Config file not found at: {}", config_path));
         
@@ -228,36 +230,59 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
             .with_chunk_size(chunk_size);
             
         debug(&format!("Created default config with chunk size: {}", chunk_size));
-        return config;
+        return Ok(config);
     }
     
     debug(&format!("Loading config from: {}", config_path));
     
     // Try to load and parse configuration manually first to check for missing fields
-    if let Ok(content) = std::fs::read_to_string(config_path) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if json.get("num_tokens").is_none() {
-                debug(&format!("Adding num_tokens={} to config", vocab_size));
-                
-                // Create a modified config with the missing field
-                let mut modified_json = json.as_object().unwrap_or(&serde_json::Map::new()).clone();
-                modified_json.insert("num_tokens".to_string(), serde_json::Value::Number(vocab_size.into()));
-                
-                // Directly construct config from modified JSON
-                if let Ok(config_str) = serde_json::to_string(&modified_json) {
-                    if let Ok(mut config) = serde_json::from_str::<MinGRULMConfig>(&config_str) {
-                        debug(&format!("Model dims: {}, layers: {}", config.dim(), config.depth()));
-                        
-                        // Only update chunk size if explicitly specified on CLI
-                        if chunk_size != config.chunk_size() {
-                            debug(&format!("Using chunk size: {} (overriding model's: {})",
-                                     chunk_size, config.chunk_size()));
-                            config = config.with_chunk_size(chunk_size);
-                        }
-                        return config;
-                    }
+    let content = std::fs::read_to_string(config_path)
+        .map_err(|e| GRUfinityError::ConfigLoad {
+            path: std::path::PathBuf::from(config_path),
+            reason: format!("Failed to read file: {}", e)
+        })?;
+        
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+        if json.get("num_tokens").is_none() {
+            debug(&format!("Adding num_tokens={} to config", vocab_size));
+            
+            // Create a modified config with the missing field
+            let modified_json = match json.as_object() {
+                Some(obj) => {
+                    let mut obj_clone = obj.clone();
+                    obj_clone.insert("num_tokens".to_string(), serde_json::Value::Number(vocab_size.into()));
+                    obj_clone
+                },
+                None => {
+                    return Err(GRUfinityError::ConfigLoad {
+                        path: std::path::PathBuf::from(config_path),
+                        reason: "Config file is not a valid JSON object".to_string()
+                    });
                 }
+            };
+            
+            // Directly construct config from modified JSON
+            let config_str = serde_json::to_string(&modified_json)
+                .map_err(|e| GRUfinityError::ConfigLoad {
+                    path: std::path::PathBuf::from(config_path),
+                    reason: format!("Failed to serialize modified config: {}", e)
+                })?;
+                
+            let mut config = serde_json::from_str::<MinGRULMConfig>(&config_str)
+                .map_err(|e| GRUfinityError::ConfigLoad {
+                    path: std::path::PathBuf::from(config_path),
+                    reason: format!("Failed to parse modified config: {}", e)
+                })?;
+                
+            debug(&format!("Model dims: {}, layers: {}", config.dim(), config.depth()));
+            
+            // Only update chunk size if explicitly specified on CLI
+            if chunk_size != config.chunk_size() {
+                debug(&format!("Using chunk size: {} (overriding model's: {})",
+                         chunk_size, config.chunk_size()));
+                config = config.with_chunk_size(chunk_size);
             }
+            return Ok(config);
         }
     }
     
@@ -271,10 +296,10 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
                 config = config.with_chunk_size(chunk_size);
             }
             
-            config
+            Ok(config)
         },
-        Err(_) => {
-            debug("Unable to parse config file");
+        Err(e) => {
+            debug(&format!("Unable to parse config file: {}", e));
             
             // Try to read the file contents to extract chunk_size
             if let Ok(content) = std::fs::read_to_string(config_path) {
@@ -295,7 +320,7 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
                 .with_chunk_size(chunk_size);
             
             debug(&format!("Created default config with chunk size: {}", chunk_size));
-            default_config
+            Ok(default_config)
         }
     }
 }
@@ -305,12 +330,15 @@ fn initialize_model<B: Backend>(
     config: &MinGRULMConfig, 
     model_path: &str,
     device: &B::Device
-) -> Option<MinGRULM<B>> {
+) -> Result<MinGRULM<B>, GRUfinityError> {
     // Initialize model
     let model = config.init::<B>(device);
     
     // Load model weights
     let recorder = BinFileRecorder::<FullPrecisionSettings>::new();
+    
+    let path = std::path::PathBuf::from(model_path);
+    
     match recorder.load::<<MinGRULM<B> as Module<B>>::Record>(model_path.into(), device) {
         Ok(record) => {
             let model = model.load_record(record);
@@ -320,11 +348,13 @@ fn initialize_model<B: Backend>(
             let loaded_config = model.config();
             debug(&format!("Model chunk size: {}", loaded_config.chunk_size()));
             
-            Some(model)
+            Ok(model)
         },
         Err(e) => {
-            eprintln!("Failed to load model file: {}", e);
-            None
+            Err(GRUfinityError::ModelLoad {
+                path,
+                reason: format!("Failed to load model: {}", e)
+            })
         }
     }
 }
@@ -738,15 +768,28 @@ fn main() {
     locate_config_file(&mut config_path_mut, &model_path);
     
     // Load model configuration
-    let config = load_model_config(&config_path_mut, args.chunk_size, vocab.size());
+    let config = match load_model_config(&config_path_mut, args.chunk_size, vocab.size()) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Warning: Failed to load config: {}", e);
+            eprintln!("Using default configuration instead");
+            MinGRULMConfig::new(vocab.size(), 1024)
+                .with_depth(3)
+                .with_ff_mult(3.0)
+                .with_expansion_factor(1.5)
+                .with_chunk_size(args.chunk_size)
+        }
+    };
     
     // Initialize and load model
-    let model = initialize_model::<RawBackend>(&config, &model_path, &device);
-    if model.is_none() {
-        eprintln!("Failed to load model. Exiting.");
-        return;
-    }
-    let model = model.unwrap();
+    let model = match initialize_model::<RawBackend>(&config, &model_path, &device) {
+        Ok(model) => model,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            eprintln!("Failed to load model. Exiting.");
+            return;
+        }
+    };
     
     // Log generation parameters to stderr
     if args.verbose {

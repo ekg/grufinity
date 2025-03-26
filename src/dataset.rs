@@ -81,32 +81,62 @@ impl CharVocab {
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
-        let mut file = File::create(path)?;
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
+        let mut file = File::create(&path)
+            .map_err(|e| crate::GRUfinityError::Io(e))?;
+            
         for (&b, &idx) in &self.byte_to_idx {
-            writeln!(file, "{} {}", b, idx)?;
+            writeln!(file, "{} {}", b, idx)
+                .map_err(|e| crate::GRUfinityError::Io(e))?;
         }
         Ok(())
     }
 
-    pub fn load_from_file<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
-        let file = File::open(path)?;
+    pub fn load_from_file<P: AsRef<Path>>(&mut self, path: P) -> crate::Result<()> {
+        let path_ref = path.as_ref();
+        let file = File::open(path_ref)
+            .map_err(|e| crate::GRUfinityError::VocabLoad {
+                path: path_ref.to_path_buf(),
+                reason: format!("Could not open file: {}", e)
+            })?;
+            
         let reader = BufReader::new(file);
         
         self.byte_to_idx.clear();
         self.idx_to_byte.clear();
         
-        for line in reader.lines() {
-            let line = line?;
+        for (line_num, line_result) in reader.lines().enumerate() {
+            let line = line_result.map_err(|e| crate::GRUfinityError::VocabLoad {
+                path: path_ref.to_path_buf(),
+                reason: format!("Error reading line {}: {}", line_num + 1, e)
+            })?;
+            
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() == 2 {
-                if let (Ok(byte), Ok(idx)) = (parts[0].parse::<u8>(), parts[1].parse::<usize>()) {
-                    self.byte_to_idx.insert(byte, idx);
-                    self.idx_to_byte.insert(idx, byte);
-                }
+                let byte = parts[0].parse::<u8>().map_err(|_| crate::GRUfinityError::VocabLoad {
+                    path: path_ref.to_path_buf(),
+                    reason: format!("Invalid byte value on line {}: '{}'", line_num + 1, parts[0])
+                })?;
+                
+                let idx = parts[1].parse::<usize>().map_err(|_| crate::GRUfinityError::VocabLoad {
+                    path: path_ref.to_path_buf(),
+                    reason: format!("Invalid index value on line {}: '{}'", line_num + 1, parts[1])
+                })?;
+                
+                self.byte_to_idx.insert(byte, idx);
+                self.idx_to_byte.insert(idx, byte);
             }
         }
+        
         self.size = self.byte_to_idx.len();
+        
+        if self.size == 0 {
+            return Err(crate::GRUfinityError::VocabLoad {
+                path: path_ref.to_path_buf(),
+                reason: "Vocabulary is empty after loading".to_string()
+            });
+        }
+        
         Ok(())
     }
 }
