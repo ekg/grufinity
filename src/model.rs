@@ -67,7 +67,7 @@ mod tests {
             5, 6, 7, 8,  // Sample 2
         ];
         
-        let input = Tensor::<TestBackend, 1, Int>::from_data(&input_data, &device)
+        let input = Tensor::<TestBackend, 1, Int>::from_data(input_data, &device)
             .reshape([2, 4]);
         
         // Run forward pass

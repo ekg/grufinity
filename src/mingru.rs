@@ -97,7 +97,7 @@ mod tests {
             0.5, 0.6, 0.7, 0.8, // input dim 1 -> hidden and gate
         ];
         
-        let to_hidden_and_gate_weight = Tensor::<TestBackend, 1, f32>::from_data(
+        let to_hidden_and_gate_weight = Tensor::<TestBackend, 1, Float>::from_data(
             &to_hidden_and_gate_weight_data, &device
         ).reshape([2, 4]);
         
@@ -106,12 +106,12 @@ mod tests {
         
         // Create input tensor - single time step
         let x_data = vec![1.0, 2.0]; // batch=1, seq_len=1, input_size=2
-        let x = Tensor::<TestBackend, 1, f32>::from_data(&x_data, &device)
+        let x = Tensor::<TestBackend, 1, Float>::from_data(&x_data, &device)
             .reshape([1, 1, 2]);
         
         // Create initial hidden state
         let h0_data = vec![0.0, 0.0]; // batch=1, hidden_size=2
-        let h0 = Tensor::<TestBackend, 1, f32>::from_data(&h0_data, &device)
+        let h0 = Tensor::<TestBackend, 1, Float>::from_data(&h0_data, &device)
             .reshape([1, 2]);
         
         // Run forward pass
@@ -129,8 +129,8 @@ mod tests {
         // output = gate * hidden + (1 - gate) * prev_hidden
         
         // Extract results
-        let output_data = output.into_data().into_vec().unwrap();
-        let next_hidden_data = next_hidden.into_data().into_vec().unwrap();
+        let output_data: Vec<f32> = output.into_data().into_vec().unwrap();
+        let next_hidden_data: Vec<f32> = next_hidden.into_data().into_vec().unwrap();
         
         // Basic checks (not the exact values due to activation functions)
         assert!(output_data.len() == 2);

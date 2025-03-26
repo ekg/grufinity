@@ -198,7 +198,7 @@ mod tests {
         // Test encoding/decoding with special characters
         let text = "Special chars: 你好, こんにちは, नमस्ते";
         let encoded = vocab.encode_text(text);
-        let decoded = vocab.decode_text(&encoded);
+        let _decoded = vocab.decode_text(&encoded);
         
         // With byte-level vocab, we can only perfectly roundtrip ASCII
         // For multi-byte chars, we should at least get the right byte count
