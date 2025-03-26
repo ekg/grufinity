@@ -4,6 +4,7 @@ use burn::{
     nn::{Linear, LinearConfig},
     config::Config,
 };
+// Float imported in tests module where needed
 use crate::parallel_scan::{parallel_scan_log};
 
 /// Configuration for MinGRU (Minimal Gated Recurrent Unit) module.
