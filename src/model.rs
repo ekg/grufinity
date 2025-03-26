@@ -44,7 +44,6 @@ mod tests {
     
     // Ensure we have a fallback import for tests without ndarray feature
     #[cfg(all(test, not(feature = "ndarray")))]
-    use burn::tensor::backend::Backend;
     
     #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
@@ -77,10 +76,41 @@ mod tests {
         assert_eq!(model.chunk_size, 16);
     }
     
-    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_model_forward() {
-        let device = NdArrayDevice::default();
+        let device = burn::backend::ndarray::NdArrayDevice::default();
+        
+        // Create a small model config for testing
+        let config = MinGRULMConfig::new(10, 32)
+            .with_depth(1)  // Single layer for simpler testing
+            .with_chunk_size(16);
+            
+        // Initialize the model
+        let model = config.init::<TestBackend>(&device);
+        
+        // Create input tensor - batch of 2, sequence length of 4
+        let input_data: Vec<i32> = vec![
+            1, 2, 3, 4,  // Sample 1
+            5, 6, 7, 8,  // Sample 2
+        ];
+        
+        let input = Tensor::<TestBackend, 1, Int>::from_data(&input_data[..], &device)
+            .reshape([2, 4]);
+        
+        // Run forward pass
+        let (logits, hidden_states) = model.forward(input, None);
+        
+        // Check output shapes
+        assert_eq!(logits.dims(), [2, 4, 10]); // [batch_size, seq_len, vocab_size]
+        assert_eq!(hidden_states.len(), 1); // One per layer
+        assert_eq!(hidden_states[0].dims(), [2, 38]); // [batch_size, hidden_dim] is 38 due to expansion factor
+    }
+    
+    #[cfg(feature = "vulkan")]
+    #[test]
+    fn test_model_forward() {
+        let device = burn::backend::wgpu::WgpuDevice::default();
         
         // Create a small model config for testing
         let config = MinGRULMConfig::new(10, 32)

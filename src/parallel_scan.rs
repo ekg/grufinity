@@ -208,7 +208,6 @@ mod tests {
     
     // Ensure we have a fallback import for tests without ndarray feature
     #[cfg(all(test, not(feature = "ndarray")))]
-    use burn::tensor::backend::Backend;
     
     // Generic test implementation that works with any backend
     #[cfg(any(feature = "ndarray", feature = "vulkan"))]
@@ -300,10 +299,10 @@ mod tests {
         assert!(abs_diff4 < 1e-5f32);
     }
     
-    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_parallel_scan_with_initial_state() {
-        let device = NdArrayDevice::default();
+        let device = burn::backend::ndarray::NdArrayDevice::default();
         
         // Create simple test tensors - just 1 sample, 2 time steps, 1 dimension
         let coeffs_data = vec![0.5, 0.4];

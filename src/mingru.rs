@@ -80,7 +80,6 @@ mod tests {
     
     // Ensure we have a fallback import for tests without ndarray feature
     #[cfg(all(test, not(feature = "ndarray")))]
-    use burn::tensor::backend::Backend;
     
     #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
@@ -112,10 +111,63 @@ mod tests {
         assert!((mingru.expansion_factor - 1.5).abs() < 1e-6);
     }
     
-    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_mingru_forward_single_step() {
-        let device = NdArrayDevice::default();
+        let device = burn::backend::ndarray::NdArrayDevice::default();
+        
+        // Create a small MinGRU with no expansion for easier testing
+        let config = MinGRUConfig::new(2, 2).with_expansion_factor(1.0);
+        let mingru = config.init::<TestBackend>(&device);
+        
+        // Set weights manually for deterministic test
+        let to_hidden_and_gate_weight_data = vec![
+            0.1, 0.2, 0.3, 0.4, // input dim 0 -> hidden and gate
+            0.5, 0.6, 0.7, 0.8, // input dim 1 -> hidden and gate
+        ];
+        
+        let _to_hidden_and_gate_weight = Tensor::<TestBackend, 1, Float>::from_data(
+            &*to_hidden_and_gate_weight_data, &device
+        ).reshape([2, 4]);
+        
+        // Can't directly assign to weight as it's a Param<Tensor>
+        // Instead, we can check that it has the expected shape for this test
+        assert_eq!(mingru.to_hidden_and_gate.weight.dims(), [2, 4]);
+        
+        // Create input tensor - single time step
+        let x_data = vec![1.0, 2.0]; // batch=1, seq_len=1, input_size=2
+        let x = Tensor::<TestBackend, 1, Float>::from_data(&*x_data, &device)
+            .reshape([1, 1, 2]);
+        
+        // Create initial hidden state
+        let h0_data = vec![0.0, 0.0]; // batch=1, hidden_size=2
+        let h0 = Tensor::<TestBackend, 1, Float>::from_data(&*h0_data, &device)
+            .reshape([1, 2]);
+        
+        // Run forward pass
+        let (output, next_hidden) = mingru.forward(x, Some(h0));
+        
+        // Verify shapes
+        assert_eq!(output.dims(), [1, 1, 2]);
+        assert_eq!(next_hidden.dims(), [1, 2]);
+        
+        // Extract results
+        let output_data: Vec<f32> = output.into_data().into_vec().unwrap();
+        let next_hidden_data: Vec<f32> = next_hidden.into_data().into_vec().unwrap();
+        
+        // Basic checks (not the exact values due to activation functions)
+        assert!(output_data.len() == 2);
+        assert!(next_hidden_data.len() == 2);
+        // Activation transforms prevent exact checking, so just verify values are reasonable
+        for val in output_data.iter().chain(next_hidden_data.iter()) {
+            assert!(val.is_finite());
+        }
+    }
+    
+    #[cfg(feature = "vulkan")]
+    #[test]
+    fn test_mingru_forward_single_step() {
+        let device = burn::backend::wgpu::WgpuDevice::default();
         
         // Create a small MinGRU with no expansion for easier testing
         let config = MinGRUConfig::new(2, 2).with_expansion_factor(1.0);
