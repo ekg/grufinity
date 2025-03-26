@@ -1,6 +1,6 @@
 use burn::{
     module::Module,
-    tensor::{backend::Backend, Tensor, activation, Float},
+    tensor::{backend::Backend, Tensor, activation},
     nn::{Linear, LinearConfig},
     config::Config,
 };
@@ -60,6 +60,7 @@ mod tests {
     use super::*;
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
     
+    use burn::tensor::Float;
     type TestBackend = NdArray<f32>;
     
     #[test]
