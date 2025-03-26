@@ -84,6 +84,7 @@ struct GenerateArgs {
 }
 
 // Initialize appropriate device based on enabled features
+#[allow(unused_variables)]
 fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
     let mut device_initialized = false;
