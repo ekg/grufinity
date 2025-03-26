@@ -37,7 +37,11 @@ use burn::{optim::decay::WeightDecayConfig, optim::AdamConfig};
 compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled for non-test builds");
 
 #[cfg(all(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")), test))]
-use burn::optim::AdamConfig;
+use burn::{
+    optim::AdamConfig,
+    module::Module,
+    tensor::backend::{AutodiffBackend, Backend}
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -1535,7 +1539,7 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         );
 
         // Initialize optimizer - learning rate will be applied during step() calls
-        adam_config.init()
+        adam_config.init::<B, MinGRULM<B>>()
     };
 
     #[cfg(feature = "optimizer-sgd")]
