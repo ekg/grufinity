@@ -22,7 +22,9 @@ pub struct FeedForwardConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // Import specific items needed from parent module
+    use super::MinGRULM;
+    use super::MinGRULMConfig;
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};

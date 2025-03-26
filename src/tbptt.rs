@@ -1468,7 +1468,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         };
 
         // Additional check for empty tensors
-        if loss_reshaped.numel() == 0 || targets_reshaped.numel() == 0 {
+        if loss_reshaped.dims().iter().any(|&d| d == 0) || targets_reshaped.dims().iter().any(|&d| d == 0) {
             println!("Warning: Empty tensor detected during loss calculation");
             return 0.0;
         }
