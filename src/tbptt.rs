@@ -1758,19 +1758,20 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         let mut sgd_optimizer = config.optimizer.init();
         
         // Training phase - handle different optimizer types directly
-        let train_loss = 
-        #[cfg(feature = "optimizer-adam")]
-        {
-            trainer.train_epoch(&mut train_dataset, &train_batcher, &mut adam_optimizer, epoch)
-        }
-        #[cfg(feature = "optimizer-sgd")]
-        {
-            trainer.train_epoch(&mut train_dataset, &train_batcher, &mut sgd_optimizer, epoch)
-        }
-        #[cfg(not(any(feature = "optimizer-adam", feature = "optimizer-sgd")))]
-        {
-            let mut default_optimizer = AdamConfig::new().init::<B, MinGRULM<B>>();
-            trainer.train_epoch(&mut train_dataset, &train_batcher, &mut default_optimizer, epoch)
+        let train_loss = {
+            #[cfg(feature = "optimizer-adam")]
+            {
+                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut adam_optimizer, epoch)
+            }
+            #[cfg(feature = "optimizer-sgd")]
+            {
+                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut sgd_optimizer, epoch)
+            }
+            #[cfg(not(any(feature = "optimizer-adam", feature = "optimizer-sgd")))]
+            {
+                let mut default_optimizer = AdamConfig::new().init::<B, MinGRULM<B>>();
+                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut default_optimizer, epoch)
+            }
         };
 
         // Validation phase (only if we have validation data)
