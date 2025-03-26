@@ -161,13 +161,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
               not(feature = "candle-cuda")))]
     {
         device_initialized = true;
-        if crate::libtorch_cuda_available() {
-            debug(&format!("Using LibTorch CUDA device {}", device_id));
-            device = crate::create_libtorch_device(device_id);
-        } else {
-            debug("Using LibTorch CPU device (CUDA not available)");
-            device = burn::backend::libtorch::LibTorchDevice::Cpu;
-        }
+        device = crate::create_libtorch_device(device_id);
     }
     
     // Error if no backend feature is enabled

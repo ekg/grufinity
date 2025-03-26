@@ -354,15 +354,8 @@ fn main() {
     
     #[cfg(all(feature = "tch", not(feature = "cuda"), not(feature = "wgpu"), not(feature = "candle"), not(feature = "ndarray"), not(feature = "candle-metal")))]
     let device = {
-        use burn::backend::libtorch::LibTorchDevice;
         device_initialized = true;
-        if grufinity::libtorch_cuda_available() {
-            println!("Using LibTorch CUDA device {}", device_id);
-            LibTorchDevice::Cuda(device_id)
-        } else {
-            println!("Using LibTorch CPU device (CUDA not available)");
-            LibTorchDevice::Cpu
-        }
+        grufinity::create_libtorch_device(device_id)
     };
     
     // If no device was initialized yet, provide a fallback

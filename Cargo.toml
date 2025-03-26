@@ -32,6 +32,10 @@ tanh = [] # Apply tanh nonlinearity between chunks (default: disabled)
 candle-cuda = ["candle", "burn/candle-cuda"]
 cuda = ["burn/cuda"]
 
+# LibTorch backend options
+tch-cpu = ["tch"]  # Explicit CPU (same as tch)
+tch-gpu = ["tch"]  # Enable GPU if available
+
 # Optimizer selection for TBPTT (exactly one should be enabled)
 optimizer-adam = []  # Use Adam optimizer for TBPTT
 optimizer-sgd = []   # Use SGD optimizer for TBPTT
