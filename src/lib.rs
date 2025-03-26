@@ -180,6 +180,58 @@ pub type RawBackend = NdArray<f32>;
          not(feature = "tch")))]
 pub type BackendDevice = NdArrayDevice;
 
+/// Returns a string identifying which backend is currently being used
+pub fn get_backend_name() -> &'static str {
+    #[cfg(feature = "cuda")]
+    {
+        return "CUDA";
+    }
+    #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
+    {
+        return "Candle CUDA";
+    }
+    #[cfg(all(feature = "vulkan", 
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle")))]
+    {
+        return "Vulkan";
+    }
+    #[cfg(all(feature = "wgpu", 
+          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
+          not(feature = "candle"), not(feature = "vulkan")))]
+    {
+        return "WebGPU";
+    }
+    #[cfg(all(feature = "candle-metal", 
+          not(feature = "cuda"), not(feature = "candle-cuda"), 
+          not(feature = "wgpu"), not(feature = "vulkan")))]
+    {
+        return "Candle Metal";
+    }
+    #[cfg(all(feature = "candle", 
+         not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
+         not(feature = "wgpu"), not(feature = "vulkan")))]
+    {
+        return "Candle CPU";
+    }
+    #[cfg(all(feature = "tch", 
+         not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
+         not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")))]
+    {
+        return "LibTorch";
+    }
+    #[cfg(all(feature = "ndarray", 
+         not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
+         not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), 
+         not(feature = "tch")))]
+    {
+        return "NdArray";
+    }
+    
+    // Fallback for unknown combinations
+    "Unknown Backend"
+}
+
 // Test-only backend implementations
 // These are only available when running tests and should be used preferentially over
 // feature-specific backends when testing

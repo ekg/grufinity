@@ -23,11 +23,12 @@ pub struct FeedForwardConfig {
 #[cfg(test)]
 mod tests {
     use super::MinGRULMConfig;
-    use crate::RawBackend;
+    use crate::{RawBackend, get_backend_name};
     use burn::tensor::{backend::Backend, Int, Tensor};
     
     #[test]
     fn test_model_init() {
+        println!("Running test with backend: {}", get_backend_name());
         let device = <RawBackend as Backend>::Device::default();
         
         // Create a small model config for testing
@@ -50,6 +51,7 @@ mod tests {
     
     #[test]
     fn test_model_forward() {
+        println!("Running test with backend: {}", get_backend_name());
         let device = <RawBackend as Backend>::Device::default();
         
         // Create a small model config for testing
@@ -80,6 +82,7 @@ mod tests {
     
     #[test]
     fn test_parameter_count() {
+        println!("Running test with backend: {}", get_backend_name());
         // Test that parameter count calculation is consistent
         let config = MinGRULMConfig::new(256, 512)
             .with_depth(3)

@@ -59,11 +59,12 @@ pub struct MinGRUConfig {
 #[cfg(test)]
 mod tests {
     use super::MinGRUConfig;
-    use crate::RawBackend;
+    use crate::{RawBackend, get_backend_name};
     use burn::tensor::{backend::Backend, Float, Tensor};
     
     #[test]
     fn test_mingru_init() {
+        println!("Running test with backend: {}", get_backend_name());
         let device = <RawBackend as Backend>::Device::default();
         
         // Create a simple MinGRU configuration
@@ -85,6 +86,7 @@ mod tests {
     
     #[test]
     fn test_mingru_forward_single_step() {
+        println!("Running test with backend: {}", get_backend_name());
         let device = <RawBackend as Backend>::Device::default();
         
         // Create a small MinGRU with no expansion for easier testing

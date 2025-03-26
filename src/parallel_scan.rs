@@ -191,11 +191,12 @@ mod tests {
     // Import necessary items directly from parent module
     use super::parallel_scan;
     // Use the generic RawBackend from lib.rs
-    use crate::RawBackend;
+    use crate::{RawBackend, get_backend_name};
     use burn::tensor::{backend::Backend, Float, Tensor};
     
     #[test]
     fn test_parallel_scan_simple() {
+        println!("Running test with backend: {}", get_backend_name());
         // Use the default device for whichever backend is configured
         let device = <RawBackend as Backend>::Device::default();
         
@@ -277,6 +278,7 @@ mod tests {
     
     #[test]
     fn test_parallel_scan_with_initial_state() {
+        println!("Running test with backend: {}", get_backend_name());
         let device = <RawBackend as Backend>::Device::default();
         
         // Create simple test tensors - just 1 sample, 2 time steps, 1 dimension
