@@ -1,5 +1,4 @@
-use burn::tensor::{backend::Backend, Tensor};
-use burn::prelude::Float;
+use burn::tensor::{backend::Backend, Tensor, Float};
 
 /// Implementation of the parallel associative scan algorithm for efficient computation 
 /// of recurrent neural networks.
@@ -262,10 +261,15 @@ mod tests {
         let h4 = result_data[6];
         
         // Allow for small floating point differences
-        assert!((h1 - 0.1f32).abs() < 1e-5f32);
-        assert!((h2 - 0.34f32).abs() < 1e-5f32);
-        assert!((h3 - 0.738f32).abs() < 1e-5f32);
-        assert!((h4 - 0.7738f32).abs() < 1e-5f32);
+        let abs_diff1 = (h1 - 0.1f32).abs();
+        let abs_diff2 = (h2 - 0.34f32).abs();
+        let abs_diff3 = (h3 - 0.738f32).abs();
+        let abs_diff4 = (h4 - 0.7738f32).abs();
+        
+        assert!(abs_diff1 < 1e-5f32);
+        assert!(abs_diff2 < 1e-5f32);
+        assert!(abs_diff3 < 1e-5f32);
+        assert!(abs_diff4 < 1e-5f32);
     }
     
     #[test]
@@ -304,8 +308,11 @@ mod tests {
         let h2 = result_data[1];
         
         // Allow for small floating point differences
-        assert!((h1 - 0.35f32).abs() < 1e-5f32);
-        assert!((h2 - 0.44f32).abs() < 1e-5f32);
+        let abs_diff1 = (h1 - 0.35f32).abs();
+        let abs_diff2 = (h2 - 0.44f32).abs();
+        
+        assert!(abs_diff1 < 1e-5f32);
+        assert!(abs_diff2 < 1e-5f32);
     }
 }
 

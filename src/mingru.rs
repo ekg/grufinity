@@ -1,9 +1,8 @@
 use burn::{
     module::Module,
-    tensor::{backend::Backend, Tensor, activation},
+    tensor::{backend::Backend, Tensor, activation, Float},
     nn::{Linear, LinearConfig},
     config::Config,
-    prelude::Float,
 };
 use crate::parallel_scan::{parallel_scan_log};
 
