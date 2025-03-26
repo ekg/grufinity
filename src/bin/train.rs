@@ -3,6 +3,7 @@
 use burn::{
     config::Config,
 };
+use clap::Parser;
 
 #[cfg(feature = "optimizer-sgd")]
 use burn::{
@@ -26,69 +27,178 @@ use grufinity::{
 
 use std::fs;
 
-fn print_help() {
-    println!("GRUfinity TBPTT Training");
-    println!("========================");
-    println!("Usage: cargo run --release --bin tbptt_train -- [OPTIONS]");
-    println!("\nOptions:");
-    println!("  --data PATH                    Path to training data file");
-    println!("  --output DIR                   Directory for output artifacts");
-    println!("  --config PATH                  Path to configuration file");
-    println!("  --learning-rate RATE           Set learning rate (default: 0.001)");
-    println!("  --batch-size SIZE              Number of random start positions (default: 32)");
-    println!("                                 Suffixes k/m/g supported (e.g., 64 or 64k)");
-    println!("  --chunk-size SIZE              Characters per chunk (default: 64)");
-    println!("                                 Suffixes k/m/g supported (e.g., 128 or 1k)");
-    println!("  --max-chunks-per-epoch NUM     Chunks to process per epoch (default: 1000)");
-    println!("                                 Suffixes k/m/g supported (e.g., 2k or 10k)");
-    println!("  --context-length LENGTH        Set context length in characters");
-    println!("                                 Suffixes k/m/g supported (e.g., 16k or 1m)");
-    println!("  --num-epochs NUM               Number of training epochs (default: 10)");
-    println!("  --max-epochs NUM               Maximum number of epochs if using target loss (default: 1000)");
-    println!("  --target-valid-loss VALUE      Target validation loss to stop at (0.0 to ignore)");
-    println!("  --target-test-loss VALUE       Target test loss to stop at (0.0 to ignore)");
-    println!("  --update-chunks NUM            Update parameters every NUM chunks (k1 parameter) (default: 4)");
-    println!("  --backprop-chunks NUM          Backprop through NUM chunks (k2 parameter) (default: 8)");
-    println!("  --update-tokens NUM            Update parameters every ~NUM tokens (converted to chunks)");
-    println!("                                 Suffixes k/m/g supported (e.g., 8k or 16k)");
-    println!("  --backprop-tokens NUM          Backprop through ~NUM tokens (converted to chunks)");
-    println!("                                 Suffixes k/m/g supported (e.g., 16k or 32k)");
-    println!("  --preserve-hidden-states BOOL  Preserve hidden states between batches (default: true)");
-    println!("  --grad-clip VALUE              Gradient clipping value (0.0 to disable)");
-    println!("  --log-interval NUM             Log interval in batches (default: 10)");
-    println!("  --checkpoint-interval NUM      Checkpoint interval in epochs (default: 1)");
-    println!("  --momentum VALUE               Momentum factor for SGD (default: 0.0)");
-    println!("  --weight-decay VALUE           Weight decay (L2 penalty) (default: 0.0)");
-    println!("  --dampening VALUE              Dampening for momentum (default: 0.0)");
-    println!("  --nesterov BOOL                Enable Nesterov momentum (default: false)");
-    println!("  --beta1 VALUE                  Beta1 parameter for Adam (default: 0.9)");
-    println!("  --beta2 VALUE                  Beta2 parameter for Adam (default: 0.999)");
-    println!("  --epsilon VALUE                Epsilon parameter for Adam (default: 1e-5)");
-    println!("  --lr-scheduler TYPE            Learning rate scheduler (constant, cosine, linear) (default: constant)");
-    println!("  --min-lr-factor FACTOR         Minimum learning rate as a factor of initial lr (default: 0.1)");
-    println!("  --warmup-epochs NUM            Number of warmup epochs (default: 0)");
-    println!("  --plateau-threshold VALUE      Threshold for reducing LR on plateau (default: 0.001 = 0.1%, 0 to disable)");
-    println!("  --plateau-factor VALUE         Factor to reduce LR by on plateau (default: 0.1)");
-    println!("  --plateau-epochs NUM           Consecutive epochs below threshold before reducing LR (default: 2)");
-    println!("  --stall-epochs NUM             Epochs with low improvement before increasing LR (default: 0, disabled)");
-    println!("  --stall-threshold VALUE        Improvement % below which an epoch is considered stalled (default: 0.01)");
-    println!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
-    println!("\nModel Structure Options:");
-    println!("  --model-dim SIZE               Model hidden dimension (default: 1024)");
-    println!("  --model-depth NUM              Number of MinGRU layers (default: 3)");
-    println!("  --model-ff-mult FACTOR         Feed-forward multiplier (default: 3.0)");
-    println!("  --model-exp-factor FACTOR      Expansion factor (default: 1.5)");
-    println!("  --model-params NUM             Target number of model parameters");
-    println!("                                 (will compute appropriate dimension to achieve this)");
-    println!("                                 Suffixes k/m/g supported (e.g., 4m = 4 million params)");
-    println!("\nExample:");
-    println!("  cargo run --release --bin tbptt_train -- --data input.txt --batch-size 64 --chunk-size 128 --context-length 100000 --update-tokens 512 --backprop-tokens 1024");
-    println!("\nThis will train with:");
-    println!("  - 64 parallel sequences");
-    println!("  - 128 characters per chunk");
-    println!("  - Context length of 100,000 characters");
-    println!("  - Update parameters every ~512 tokens");
-    println!("  - Backpropagate through ~1024 tokens");
+/// GRUfinity TBPTT training command line interface
+#[derive(Parser, Debug)]
+#[command(
+    name = "GRUfinity TBPTT Training",
+    version, 
+    about = "Train a GRUfinity language model using Truncated Backpropagation Through Time",
+    long_about = None
+)]
+struct TrainingArgs {
+    /// Path to training data file
+    #[arg(long)]
+    data: Option<String>,
+
+    /// Directory for output artifacts
+    #[arg(long, default_value = "tbptt_artifacts")]
+    output: String,
+
+    /// Path to configuration file
+    #[arg(long)]
+    config: Option<String>,
+
+    /// Set learning rate
+    #[arg(long)]
+    learning_rate: Option<f64>,
+
+    /// Number of random start positions
+    #[arg(long)]
+    batch_size: Option<usize>,
+
+    /// Characters per chunk
+    #[arg(long)]
+    chunk_size: Option<usize>,
+
+    /// Chunks to process per epoch
+    #[arg(long)]
+    max_chunks_per_epoch: Option<usize>,
+
+    /// Set context length in characters
+    #[arg(long)]
+    context_length: Option<usize>,
+
+    /// Number of training epochs
+    #[arg(long)]
+    num_epochs: Option<usize>,
+
+    /// Maximum number of epochs if using target loss
+    #[arg(long)]
+    max_epochs: Option<usize>,
+
+    /// Target validation loss to stop at (0.0 to ignore)
+    #[arg(long)]
+    target_valid_loss: Option<f32>,
+
+    /// Target test loss to stop at (0.0 to ignore)
+    #[arg(long)]
+    target_test_loss: Option<f32>,
+
+    /// Update parameters every NUM chunks (k1 parameter)
+    #[arg(long)]
+    update_chunks: Option<usize>,
+
+    /// Backprop through NUM chunks (k2 parameter)
+    #[arg(long)]
+    backprop_chunks: Option<usize>,
+
+    /// Update parameters every ~NUM tokens (converted to chunks)
+    #[arg(long)]
+    update_tokens: Option<usize>,
+
+    /// Backprop through ~NUM tokens (converted to chunks)
+    #[arg(long)]
+    backprop_tokens: Option<usize>,
+
+    /// Preserve hidden states between batches
+    #[arg(long)]
+    preserve_hidden_states: Option<bool>,
+
+    /// Gradient clipping value (0.0 to disable)
+    #[arg(long)]
+    grad_clip: Option<f32>,
+
+    /// Log interval in batches
+    #[arg(long)]
+    log_interval: Option<usize>,
+
+    /// Checkpoint interval in epochs
+    #[arg(long)]
+    checkpoint_interval: Option<usize>,
+
+    /// Momentum factor for SGD
+    #[arg(long)]
+    momentum: Option<f64>,
+
+    /// Weight decay (L2 penalty)
+    #[arg(long)]
+    weight_decay: Option<f32>,
+
+    /// Dampening for momentum
+    #[arg(long)]
+    dampening: Option<f64>,
+
+    /// Enable Nesterov momentum
+    #[arg(long)]
+    nesterov: Option<bool>,
+
+    /// Beta1 parameter for Adam
+    #[arg(long)]
+    beta1: Option<f32>,
+
+    /// Beta2 parameter for Adam
+    #[arg(long)]
+    beta2: Option<f32>,
+
+    /// Epsilon parameter for Adam
+    #[arg(long)]
+    epsilon: Option<f32>,
+
+    /// Learning rate scheduler
+    #[arg(long, value_parser = ["constant", "cosine", "linear"])]
+    lr_scheduler: Option<String>,
+
+    /// Minimum learning rate as a factor of initial lr
+    #[arg(long)]
+    min_lr_factor: Option<f64>,
+
+    /// Number of warmup epochs
+    #[arg(long)]
+    warmup_epochs: Option<usize>,
+
+    /// Threshold for reducing LR on plateau
+    #[arg(long)]
+    plateau_threshold: Option<f64>,
+
+    /// Factor to reduce LR by on plateau
+    #[arg(long)]
+    plateau_factor: Option<f64>,
+
+    /// Consecutive epochs below threshold before reducing LR
+    #[arg(long)]
+    plateau_epochs: Option<usize>,
+
+    /// Epochs with low improvement before increasing LR
+    #[arg(long)]
+    stall_epochs: Option<usize>,
+
+    /// Improvement % below which an epoch is considered stalled
+    #[arg(long)]
+    stall_threshold: Option<f64>,
+
+    /// CUDA/GPU device ID to use
+    #[arg(long, default_value_t = 0)]
+    device_id: usize,
+
+    /// Model hidden dimension
+    #[arg(long)]
+    model_dim: Option<usize>,
+
+    /// Number of MinGRU layers
+    #[arg(long)]
+    model_depth: Option<usize>,
+
+    /// Feed-forward multiplier
+    #[arg(long)]
+    model_ff_mult: Option<f64>,
+
+    /// Expansion factor
+    #[arg(long)]
+    model_exp_factor: Option<f64>,
+
+    /// Target number of model parameters
+    #[arg(long)]
+    model_params: Option<usize>,
 }
 
 /// Parse a string with optional metric suffix (k, m, g) into a number
@@ -146,895 +256,17 @@ where
 
 fn main() {
     // Parse command-line arguments
-    let args: Vec<String> = std::env::args().collect();
-    
-    // Check for help
-    if args.len() > 1 && (args[1] == "--help" || args[1] == "-h") {
-        print_help();
-        return;
-    }
+    let args = TrainingArgs::parse();
     
     // Default values
-    let mut data_path = "data/sample.txt".to_string();
-    let mut artifact_dir = "tbptt_artifacts".to_string();
-    let mut config_path = "".to_string();
-    let mut device_id: usize = 0; // Default to first GPU device
+    let data_path = args.data.unwrap_or_else(|| "data/sample.txt".to_string());
+    let artifact_dir = args.output;
+    let config_path = args.config.unwrap_or_default();
+    let device_id = args.device_id;
     
     // Token-based parameters (will be converted to chunks)
-    let mut update_tokens: Option<usize> = None;
-    let mut backprop_tokens: Option<usize> = None;
-    
-    // Parse arguments
-    for i in 1..args.len() {
-        match args[i].as_str() {
-            "--data" => {
-                if i + 1 < args.len() {
-                    data_path = args[i + 1].clone();
-                }
-            },
-            "--output" => {
-                if i + 1 < args.len() {
-                    artifact_dir = args[i + 1].clone();
-                }
-            },
-            "--config" => {
-                if i + 1 < args.len() {
-                    config_path = args[i + 1].clone();
-                }
-            },
-            "--update-tokens" => {
-                if i + 1 < args.len() {
-                    if let Ok(tokens) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        update_tokens = Some(tokens);
-                    }
-                }
-            },
-            "--backprop-tokens" => {
-                if i + 1 < args.len() {
-                    if let Ok(tokens) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        backprop_tokens = Some(tokens);
-                    }
-                }
-            },
-            "--model-dim" => {
-                if i + 1 < args.len() {
-                    if let Ok(dim) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        // Update model dimension in the config
-                        modified_config.model = MinGRULMConfig::new(
-                            modified_config.model.num_tokens(),
-                            dim
-                        )
-                        .with_depth(modified_config.model.depth())
-                        .with_ff_mult(modified_config.model.ff_mult())
-                        .with_expansion_factor(modified_config.model.expansion_factor())
-                        .with_chunk_size(modified_config.model.chunk_size());
-                        
-                        println!("Setting model dimension to: {}", dim);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--model-params" => {
-                if i + 1 < args.len() {
-                    if let Ok(param_count) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        
-                        // Compute the dimension needed to meet the parameter target
-                        let optimal_dim = modified_config.model.compute_dim_for_param_count(param_count);
-                        
-                        // Update model dimension in the config
-                        modified_config.model = MinGRULMConfig::new(
-                            modified_config.model.num_tokens(),
-                            optimal_dim
-                        )
-                        .with_depth(modified_config.model.depth())
-                        .with_ff_mult(modified_config.model.ff_mult())
-                        .with_expansion_factor(modified_config.model.expansion_factor())
-                        .with_chunk_size(modified_config.model.chunk_size());
-                        
-                        // Calculate actual parameter count for display
-                        let actual_params = modified_config.model.calculate_parameters();
-                        
-                        // Format parameter counts with appropriate suffixes
-                        let format_params = |p: usize| -> String {
-                            if p >= 1_000_000_000 {
-                                format!("{:.2}G", p as f64 / 1_000_000_000.0)
-                            } else if p >= 1_000_000 {
-                                format!("{:.2}M", p as f64 / 1_000_000.0)
-                            } else if p >= 1_000 {
-                                format!("{:.2}K", p as f64 / 1_000.0)
-                            } else {
-                                format!("{}", p)
-                            }
-                        };
-                        
-                        println!("Target parameter count: {}", format_params(param_count));
-                        println!("Setting model dimension to: {} (gives {} parameters)", 
-                                 optimal_dim, format_params(actual_params));
-                        
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--model-depth" => {
-                if i + 1 < args.len() {
-                    if let Ok(depth) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        // Update model depth in the config
-                        modified_config.model = MinGRULMConfig::new(
-                            modified_config.model.num_tokens(),
-                            modified_config.model.dim()
-                        )
-                        .with_depth(depth)
-                        .with_ff_mult(modified_config.model.ff_mult())
-                        .with_expansion_factor(modified_config.model.expansion_factor())
-                        .with_chunk_size(modified_config.model.chunk_size());
-                        
-                        println!("Setting model depth to: {} layers", depth);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--model-ff-mult" => {
-                if i + 1 < args.len() {
-                    if let Ok(mult) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        // Update feed-forward multiplier in the config
-                        modified_config.model = MinGRULMConfig::new(
-                            modified_config.model.num_tokens(),
-                            modified_config.model.dim()
-                        )
-                        .with_depth(modified_config.model.depth())
-                        .with_ff_mult(mult)
-                        .with_expansion_factor(modified_config.model.expansion_factor())
-                        .with_chunk_size(modified_config.model.chunk_size());
-                        
-                        println!("Setting feed-forward multiplier to: {}", mult);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--model-exp-factor" => {
-                if i + 1 < args.len() {
-                    if let Ok(factor) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        // Update expansion factor in the config
-                        modified_config.model = MinGRULMConfig::new(
-                            modified_config.model.num_tokens(),
-                            modified_config.model.dim()
-                        )
-                        .with_depth(modified_config.model.depth())
-                        .with_ff_mult(modified_config.model.ff_mult())
-                        .with_expansion_factor(factor)
-                        .with_chunk_size(modified_config.model.chunk_size());
-                        
-                        println!("Setting expansion factor to: {}", factor);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--target-valid-loss" => {
-                if i + 1 < args.len() {
-                    if let Ok(loss) = args[i + 1].parse::<f32>() {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.target_valid_loss = loss;
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--update-chunks" => {
-                if i + 1 < args.len() {
-                    if let Ok(chunks) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.tbptt_k1 = chunks;
-                        println!("Setting update frequency to every {} chunks", chunks);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--backprop-chunks" => {
-                if i + 1 < args.len() {
-                    if let Ok(chunks) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.tbptt_k2 = chunks;
-                        println!("Setting backpropagation window to {} chunks", chunks);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--preserve-hidden-states" => {
-                if i + 1 < args.len() {
-                    if let Ok(preserve) = args[i + 1].parse::<bool>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.preserve_hidden_states = preserve;
-                        println!("Setting preserve hidden states to: {}", preserve);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--grad-clip" => {
-                if i + 1 < args.len() {
-                    if let Ok(clip) = args[i + 1].parse::<f32>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.grad_clip = clip;
-                        println!("Setting gradient clipping to: {}", clip);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--log-interval" => {
-                if i + 1 < args.len() {
-                    if let Ok(interval) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.log_interval = interval;
-                        println!("Setting log interval to: {} batches", interval);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--checkpoint-interval" => {
-                if i + 1 < args.len() {
-                    if let Ok(interval) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.checkpoint_interval = interval;
-                        println!("Setting checkpoint interval to: {} epochs", interval);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--momentum" => {
-                if i + 1 < args.len() {
-                    if let Ok(momentum) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        #[cfg(feature = "optimizer-sgd")]
-                        {
-                            // Create a fresh SgdConfig with our custom momentum
-                            let momentum_config = MomentumConfig {
-                                momentum,
-                                dampening: 0.0,
-                                nesterov: false,
-                            };
-                            modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
-                        }
-                        
-                        #[cfg(feature = "optimizer-adam")]
-                        {
-                            println!("Note: Momentum parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
-                            // Keep the default Adam config
-                            modified_config.optimizer = AdamConfig::new();
-                        }
-                        println!("Setting momentum to: {}", momentum);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--weight-decay" => {
-                if i + 1 < args.len() {
-                    if let Ok(decay) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        #[cfg(feature = "optimizer-sgd")]
-                        {
-                            // Create a fresh SgdConfig with our custom weight decay
-                            let weight_decay_config = WeightDecayConfig { penalty: decay as f32 };
-                            modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
-                        }
-                
-                        #[cfg(feature = "optimizer-adam")]
-                        {
-                            // For Adam, store the weight decay in our own copy
-                            modified_config.weight_decay = Some(decay as f32);
-                            
-                            // Update the optimizer config with weight decay and preserve existing Adam parameters
-                            modified_config.optimizer = AdamConfig::new()
-                                .with_beta_1(modified_config.adam_beta1)
-                                .with_beta_2(modified_config.adam_beta2)
-                                .with_epsilon(modified_config.adam_epsilon)
-                                .with_weight_decay(Some(WeightDecayConfig::new(decay as f32)));
-                        }
-                        println!("Setting weight decay to: {}", decay);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--dampening" => {
-                if i + 1 < args.len() {
-                    if let Ok(dampening) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        #[cfg(feature = "optimizer-sgd")]
-                        {
-                            // Create a fresh momentum config with dampening
-                            let momentum_config = MomentumConfig {
-                                momentum: 0.9, // Default momentum
-                                dampening,
-                                nesterov: false,
-                            };
-                            modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
-                        }
-                        
-                        #[cfg(feature = "optimizer-adam")]
-                        {
-                            println!("Note: Dampening parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
-                            // Keep the default Adam config
-                            modified_config.optimizer = AdamConfig::new();
-                        }
-                        println!("Setting dampening to: {}", dampening);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--nesterov" => {
-                if i + 1 < args.len() {
-                    if let Ok(nesterov) = args[i + 1].parse::<bool>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        #[cfg(feature = "optimizer-sgd")]
-                        {
-                            // Create a fresh momentum config with nesterov
-                            let momentum_config = MomentumConfig {
-                                momentum: 0.9, // Default momentum
-                                dampening: 0.0,
-                                nesterov,
-                            };
-                            modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
-                        }
-                        
-                        #[cfg(feature = "optimizer-adam")]
-                        {
-                            println!("Note: Nesterov parameter is only applicable when using SGD optimizer (--features=\"optimizer-sgd\")");
-                            // Keep the default Adam config
-                            modified_config.optimizer = AdamConfig::new();
-                        }
-                        println!("Setting nesterov to: {}", nesterov);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--beta1" => {
-                if i + 1 < args.len() {
-                    if let Ok(beta1) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        #[cfg(feature = "optimizer-adam")]
-                        {
-                            // Update beta1 parameter for Adam
-                            // Store our own copy of beta1
-                            modified_config.adam_beta1 = beta1 as f32;
-                            
-                            // Use default values for other parameters if not set
-                            if !config_path.is_empty() && modified_config.adam_beta2 == 0.0 {
-                                modified_config.adam_beta2 = 0.999; // Default beta2
-                            }
-                            if !config_path.is_empty() && modified_config.adam_epsilon == 0.0 {
-                                modified_config.adam_epsilon = 1e-8; // Default epsilon
-                            }
-
-                            // Update the optimizer config
-                            modified_config.optimizer = AdamConfig::new()
-                                .with_beta_1(modified_config.adam_beta1)
-                                .with_beta_2(modified_config.adam_beta2)
-                                .with_epsilon(modified_config.adam_epsilon);
-                            
-                            // Keep existing weight decay if any
-                            if let Some(penalty) = modified_config.weight_decay {
-                                modified_config.optimizer = modified_config.optimizer
-                                    .with_weight_decay(Some(WeightDecayConfig::new(penalty)));
-                            }
-                        }
-                        
-                        #[cfg(feature = "optimizer-sgd")]
-                        {
-                            println!("Note: Beta1 parameter is only applicable when using Adam optimizer (--features=\"optimizer-adam\")");
-                        }
-                        
-                        println!("Setting Adam beta1 to: {}", beta1);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--beta2" => {
-                if i + 1 < args.len() {
-                    if let Ok(beta2) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        #[cfg(feature = "optimizer-adam")]
-                        {
-                            // Store our own copy of beta2
-                            modified_config.adam_beta2 = beta2 as f32;
-                            
-                            // Use default values or preserve existing settings
-                            if !config_path.is_empty() && modified_config.adam_beta1 == 0.0 {
-                                modified_config.adam_beta1 = 0.9; // Default beta1
-                            }
-                            if !config_path.is_empty() && modified_config.adam_epsilon == 0.0 {
-                                modified_config.adam_epsilon = 1e-8; // Default epsilon
-                            }
-                            
-                            // Update the optimizer config
-                            modified_config.optimizer = AdamConfig::new()
-                                .with_beta_1(modified_config.adam_beta1)
-                                .with_beta_2(modified_config.adam_beta2)
-                                .with_epsilon(modified_config.adam_epsilon);
-                            
-                            // Keep existing weight decay if any
-                            if let Some(penalty) = modified_config.weight_decay {
-                                modified_config.optimizer = modified_config.optimizer
-                                    .with_weight_decay(Some(WeightDecayConfig::new(penalty)));
-                            }
-                        }
-                        
-                        #[cfg(feature = "optimizer-sgd")]
-                        {
-                            println!("Note: Beta2 parameter is only applicable when using Adam optimizer (--features=\"optimizer-adam\")");
-                        }
-                        
-                        println!("Setting Adam beta2 to: {}", beta2);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--epsilon" => {
-                if i + 1 < args.len() {
-                    if let Ok(epsilon) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        #[cfg(feature = "optimizer-adam")]
-                        {
-                            // Store our own copy of epsilon
-                            modified_config.adam_epsilon = epsilon as f32;
-                            
-                            // Use default values or preserve existing settings
-                            if !config_path.is_empty() && modified_config.adam_beta1 == 0.0 {
-                                modified_config.adam_beta1 = 0.9; // Default beta1
-                            }
-                            if !config_path.is_empty() && modified_config.adam_beta2 == 0.0 {
-                                modified_config.adam_beta2 = 0.999; // Default beta2
-                            }
-                            
-                            // Update the optimizer config
-                            modified_config.optimizer = AdamConfig::new()
-                                .with_beta_1(modified_config.adam_beta1)
-                                .with_beta_2(modified_config.adam_beta2)
-                                .with_epsilon(modified_config.adam_epsilon);
-                            
-                            // Keep existing weight decay if any
-                            if let Some(penalty) = modified_config.weight_decay {
-                                modified_config.optimizer = modified_config.optimizer
-                                    .with_weight_decay(Some(WeightDecayConfig::new(penalty)));
-                            }
-                        }
-                        
-                        #[cfg(feature = "optimizer-sgd")]
-                        {
-                            println!("Note: Epsilon parameter is only applicable when using Adam optimizer (--features=\"optimizer-adam\")");
-                        }
-                        
-                        println!("Setting Adam epsilon to: {}", epsilon);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--lr-scheduler" => {
-                if i + 1 < args.len() {
-                    let scheduler_type = args[i + 1].clone();
-                    let mut modified_config = create_default_config();
-                    if !config_path.is_empty() {
-                        if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                            modified_config = cfg;
-                        }
-                    }
-                    
-                    // Parse the scheduler type string to the enum
-                    let scheduler = match scheduler_type.to_lowercase().as_str() {
-                        "cosine" => LRSchedulerType::Cosine,
-                        "linear" => LRSchedulerType::Linear,
-                        _ => LRSchedulerType::Constant, // Default to constant for any other value
-                    };
-                    
-                    modified_config.lr_scheduler = scheduler;
-                    println!("Setting learning rate scheduler to: {:?}", scheduler);
-                    modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                    config_path = "temp_config.json".to_string();
-                }
-            },
-            "--min-lr-factor" => {
-                if i + 1 < args.len() {
-                    if let Ok(factor) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.min_lr_factor = factor;
-                        println!("Setting minimum learning rate factor to: {}", factor);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--warmup-epochs" => {
-                if i + 1 < args.len() {
-                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.warmup_epochs = epochs;
-                        println!("Setting warmup epochs to: {}", epochs);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--plateau-threshold" => {
-                if i + 1 < args.len() {
-                    if let Ok(threshold) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.plateau_threshold = threshold;
-                        if threshold <= 0.0 {
-                            println!("Disabling learning rate reduction on plateau");
-                        } else {
-                            println!("Setting plateau threshold to: {:.4}%", threshold * 100.0);
-                        }
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--plateau-epochs" => {
-                if i + 1 < args.len() {
-                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.plateau_epochs = epochs;
-                        println!("Setting plateau epochs to: {} consecutive epochs", epochs);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--plateau-factor" => {
-                if i + 1 < args.len() {
-                    if let Ok(factor) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.plateau_factor = factor;
-                        println!("Setting plateau factor to: {}", factor);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--stall-epochs" => {
-                if i + 1 < args.len() {
-                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.stall_epochs = epochs;
-                        println!("Setting stall epochs to: {} epochs", epochs);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--stall-threshold" => {
-                if i + 1 < args.len() {
-                    if let Ok(threshold) = args[i + 1].parse::<f64>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.stall_threshold = threshold;
-                        println!("Setting stall threshold to: {}% improvement", threshold * 100.0);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--target-test-loss" => {
-                if i + 1 < args.len() {
-                    if let Ok(loss) = args[i + 1].parse::<f32>() {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.target_test_loss = loss;
-                        println!("Setting target test loss to: {}", loss);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--num-epochs" => {
-                if i + 1 < args.len() {
-                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.num_epochs = epochs;
-                        println!("Setting number of epochs to: {}", epochs);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--max-epochs" => {
-                if i + 1 < args.len() {
-                    if let Ok(epochs) = args[i + 1].parse::<usize>() {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.max_epochs = epochs;
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--max-chunks-per-epoch" => {
-                if i + 1 < args.len() {
-                    if let Ok(chunks) = args[i + 1].parse::<usize>() {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.max_chunks_per_epoch = chunks;
-                        println!("Setting max chunks per epoch to {}", chunks);
-                        println!("Effective context length: {} characters", chunks * modified_config.chunk_size);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--batch-size" => {
-                if i + 1 < args.len() {
-                    if let Ok(batch_size) = args[i + 1].parse::<usize>() {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.batch_size = batch_size;
-                        println!("Setting batch size to {} random start positions", batch_size);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--chunk-size" => {
-                if i + 1 < args.len() {
-                    if let Ok(chunk_size) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.chunk_size = chunk_size;
-                        // Also update the model's chunk size
-                        modified_config.model = modified_config.model.with_chunk_size(chunk_size);
-                        println!("Setting chunk size to {} characters", chunk_size);
-                        println!("Effective context length: {} characters", 
-                                modified_config.max_chunks_per_epoch * chunk_size);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--context-length" => {
-                if i + 1 < args.len() {
-                    if let Ok(context_length) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        
-                        // Get potentially updated chunk size from args if it was specified earlier
-                        let mut chunk_size = modified_config.chunk_size;
-                        
-                        // Look for a chunk-size parameter earlier in the args
-                        for j in 1..i {
-                            if j + 1 < args.len() && args[j] == "--chunk-size" {
-                                if let Ok(size) = parse_with_suffix::<usize>(&args[j + 1]) {
-                                    chunk_size = size;
-                                    println!("Using previously specified chunk size: {}", chunk_size);
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        // Make sure model chunk size is also updated
-                        modified_config.chunk_size = chunk_size;
-                        modified_config.model = modified_config.model.with_chunk_size(chunk_size);
-                        
-                        let chunks_needed = calculate_chunks_for_context(chunk_size, context_length);
-                        modified_config.max_chunks_per_epoch = chunks_needed;
-                        println!("Setting context length to {} characters", context_length);
-                        println!("Using {} chunks with chunk size {}", chunks_needed, chunk_size);
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                    }
-                }
-            },
-            "--learning-rate" => {
-                if i + 1 < args.len() {
-                    if let Ok(lr) = parse_with_suffix::<f64>(&args[i + 1]) {
-                        // We'll create a modified config with this value
-                        let mut modified_config = create_default_config();
-                        if !config_path.is_empty() {
-                            if let Ok(cfg) = TBPTTConfig::load(&config_path) {
-                                modified_config = cfg;
-                            }
-                        }
-                        modified_config.learning_rate = lr;
-                        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-                        config_path = "temp_config.json".to_string();
-                        println!("Set learning rate to {}", lr);
-                    }
-                }
-            },
-            "--device-id" => {
-                if i + 1 < args.len() {
-                    if let Ok(id) = args[i + 1].parse::<usize>() {
-                        device_id = id;
-                        println!("Using CUDA/GPU device ID: {}", device_id);
-                    }
-                }
-            },
-            _ => {}
-        }
-    }
+    let update_tokens = args.update_tokens;
+    let backprop_tokens = args.backprop_tokens;
     
     // Set up the configured backend
     use_configured_backend!();
@@ -1153,14 +385,78 @@ fn main() {
         create_default_config()
     };
     
+    // Apply command line arguments to the config
+    if let Some(learning_rate) = args.learning_rate {
+        modified_config.learning_rate = learning_rate;
+        println!("Set learning rate to {}", learning_rate);
+    }
+    
+    if let Some(batch_size) = args.batch_size {
+        modified_config.batch_size = batch_size;
+        println!("Setting batch size to {} random start positions", batch_size);
+    }
+    
+    if let Some(chunk_size) = args.chunk_size {
+        modified_config.chunk_size = chunk_size;
+        // Also update the model's chunk size
+        modified_config.model = modified_config.model.with_chunk_size(chunk_size);
+        println!("Setting chunk size to {} characters", chunk_size);
+        println!("Effective context length: {} characters", 
+               modified_config.max_chunks_per_epoch * chunk_size);
+    }
+    
+    if let Some(max_chunks) = args.max_chunks_per_epoch {
+        modified_config.max_chunks_per_epoch = max_chunks;
+        println!("Setting max chunks per epoch to {}", max_chunks);
+        println!("Effective context length: {} characters", 
+               max_chunks * modified_config.chunk_size);
+    }
+    
+    if let Some(context_length) = args.context_length {
+        let chunks_needed = calculate_chunks_for_context(modified_config.chunk_size, context_length);
+        modified_config.max_chunks_per_epoch = chunks_needed;
+        println!("Setting context length to {} characters", context_length);
+        println!("Using {} chunks with chunk size {}", chunks_needed, modified_config.chunk_size);
+    }
+    
+    if let Some(epochs) = args.num_epochs {
+        modified_config.num_epochs = epochs;
+        println!("Setting number of epochs to: {}", epochs);
+    }
+    
+    if let Some(epochs) = args.max_epochs {
+        modified_config.max_epochs = epochs;
+        println!("Setting maximum number of epochs to: {}", epochs);
+    }
+    
+    if let Some(loss) = args.target_valid_loss {
+        modified_config.target_valid_loss = loss;
+        println!("Setting target validation loss to: {}", loss);
+    }
+    
+    if let Some(loss) = args.target_test_loss {
+        modified_config.target_test_loss = loss;
+        println!("Setting target test loss to: {}", loss);
+    }
+    
+    if let Some(chunks) = args.update_chunks {
+        modified_config.tbptt_k1 = chunks;
+        println!("Setting update frequency to every {} chunks", chunks);
+    }
+    
+    if let Some(chunks) = args.backprop_chunks {
+        modified_config.tbptt_k2 = chunks;
+        println!("Setting backpropagation window to {} chunks", chunks);
+    }
+    
     // Handle token-based parameters
     let chunk_size = modified_config.chunk_size;
     
     // Default update_tokens to 25% of backprop_tokens if not specified, or chunk_size if neither is specified
-    let update_tokens = if let Some(bp_tokens) = backprop_tokens {
-        update_tokens.or(Some(bp_tokens / 4))
+    let update_tokens = if let Some(bp_tokens) = args.backprop_tokens {
+        args.update_tokens.or(Some(bp_tokens / 4))
     } else {
-        update_tokens.or(Some(chunk_size))
+        args.update_tokens.or(Some(chunk_size))
     };
     
     if let Some(tokens) = update_tokens {
@@ -1169,17 +465,236 @@ fn main() {
         println!("Setting update frequency to every {} tokens ({} chunks)", tokens, k1);
     }
     
-    if let Some(tokens) = backprop_tokens {
+    if let Some(tokens) = args.backprop_tokens {
         let k2 = calculate_chunks_for_tokens(chunk_size, tokens);
         modified_config.tbptt_k2 = k2;
         println!("Setting backpropagation window to {} tokens ({} chunks)", tokens, k2);
     }
     
-    // Save modified config for use
-    if update_tokens.is_some() || backprop_tokens.is_some() {
-        modified_config.save("temp_config.json").expect("Failed to save temporary config");
-        config_path = "temp_config.json".to_string();
+    if let Some(preserve) = args.preserve_hidden_states {
+        modified_config.preserve_hidden_states = preserve;
+        println!("Setting preserve hidden states to: {}", preserve);
     }
+    
+    if let Some(clip) = args.grad_clip {
+        modified_config.grad_clip = clip;
+        println!("Setting gradient clipping to: {}", clip);
+    }
+    
+    if let Some(interval) = args.log_interval {
+        modified_config.log_interval = interval;
+        println!("Setting log interval to: {} batches", interval);
+    }
+    
+    if let Some(interval) = args.checkpoint_interval {
+        modified_config.checkpoint_interval = interval;
+        println!("Setting checkpoint interval to: {} epochs", interval);
+    }
+    
+    // Handle optimizer-specific parameters
+    #[cfg(feature = "optimizer-sgd")]
+    if let Some(momentum) = args.momentum {
+        // Create a fresh SgdConfig with our custom momentum
+        let momentum_config = MomentumConfig {
+            momentum,
+            dampening: args.dampening.unwrap_or(0.0),
+            nesterov: args.nesterov.unwrap_or(false),
+        };
+        modified_config.optimizer = SgdConfig::new().with_momentum(Some(momentum_config));
+        println!("Setting momentum to: {}", momentum);
+    }
+    
+    #[cfg(feature = "optimizer-adam")]
+    if let Some(beta1) = args.beta1 {
+        // Update Adam parameters
+        modified_config.adam_beta1 = beta1;
+        modified_config.optimizer = AdamConfig::new()
+            .with_beta_1(beta1)
+            .with_beta_2(args.beta2.unwrap_or(modified_config.adam_beta2))
+            .with_epsilon(args.epsilon.unwrap_or(modified_config.adam_epsilon));
+        println!("Setting Adam beta1 to: {}", beta1);
+    }
+    
+    #[cfg(feature = "optimizer-adam")]
+    if let Some(beta2) = args.beta2 {
+        // Update Adam parameters
+        modified_config.adam_beta2 = beta2;
+        modified_config.optimizer = AdamConfig::new()
+            .with_beta_1(args.beta1.unwrap_or(modified_config.adam_beta1))
+            .with_beta_2(beta2)
+            .with_epsilon(args.epsilon.unwrap_or(modified_config.adam_epsilon));
+        println!("Setting Adam beta2 to: {}", beta2);
+    }
+    
+    #[cfg(feature = "optimizer-adam")]
+    if let Some(epsilon) = args.epsilon {
+        // Update Adam parameters
+        modified_config.adam_epsilon = epsilon;
+        modified_config.optimizer = AdamConfig::new()
+            .with_beta_1(args.beta1.unwrap_or(modified_config.adam_beta1))
+            .with_beta_2(args.beta2.unwrap_or(modified_config.adam_beta2))
+            .with_epsilon(epsilon);
+        println!("Setting Adam epsilon to: {}", epsilon);
+    }
+    
+    if let Some(weight_decay) = args.weight_decay {
+        #[cfg(feature = "optimizer-sgd")]
+        {
+            let weight_decay_config = WeightDecayConfig { penalty: weight_decay };
+            modified_config.optimizer = SgdConfig::new().with_weight_decay(Some(weight_decay_config));
+        }
+        
+        #[cfg(feature = "optimizer-adam")]
+        {
+            modified_config.weight_decay = Some(weight_decay);
+            modified_config.optimizer = modified_config.optimizer.with_weight_decay(
+                Some(WeightDecayConfig::new(weight_decay))
+            );
+        }
+        println!("Setting weight decay to: {}", weight_decay);
+    }
+    
+    if let Some(scheduler_type) = args.lr_scheduler {
+        let scheduler = match scheduler_type.to_lowercase().as_str() {
+            "cosine" => LRSchedulerType::Cosine,
+            "linear" => LRSchedulerType::Linear,
+            _ => LRSchedulerType::Constant,
+        };
+        modified_config.lr_scheduler = scheduler;
+        println!("Setting learning rate scheduler to: {:?}", scheduler);
+    }
+    
+    if let Some(factor) = args.min_lr_factor {
+        modified_config.min_lr_factor = factor;
+        println!("Setting minimum learning rate factor to: {}", factor);
+    }
+    
+    if let Some(epochs) = args.warmup_epochs {
+        modified_config.warmup_epochs = epochs;
+        println!("Setting warmup epochs to: {}", epochs);
+    }
+    
+    if let Some(threshold) = args.plateau_threshold {
+        modified_config.plateau_threshold = threshold;
+        if threshold <= 0.0 {
+            println!("Disabling learning rate reduction on plateau");
+        } else {
+            println!("Setting plateau threshold to: {:.4}%", threshold * 100.0);
+        }
+    }
+    
+    if let Some(factor) = args.plateau_factor {
+        modified_config.plateau_factor = factor;
+        println!("Setting plateau factor to: {}", factor);
+    }
+    
+    if let Some(epochs) = args.plateau_epochs {
+        modified_config.plateau_epochs = epochs;
+        println!("Setting plateau epochs to: {} consecutive epochs", epochs);
+    }
+    
+    if let Some(epochs) = args.stall_epochs {
+        modified_config.stall_epochs = epochs;
+        println!("Setting stall epochs to: {} epochs", epochs);
+    }
+    
+    if let Some(threshold) = args.stall_threshold {
+        modified_config.stall_threshold = threshold;
+        println!("Setting stall threshold to: {}% improvement", threshold * 100.0);
+    }
+    
+    // Model architecture parameters
+    if let Some(dim) = args.model_dim {
+        modified_config.model = MinGRULMConfig::new(
+            modified_config.model.num_tokens(),
+            dim
+        )
+        .with_depth(modified_config.model.depth())
+        .with_ff_mult(modified_config.model.ff_mult())
+        .with_expansion_factor(modified_config.model.expansion_factor())
+        .with_chunk_size(modified_config.model.chunk_size());
+        
+        println!("Setting model dimension to: {}", dim);
+    }
+    
+    if let Some(depth) = args.model_depth {
+        modified_config.model = MinGRULMConfig::new(
+            modified_config.model.num_tokens(),
+            modified_config.model.dim()
+        )
+        .with_depth(depth)
+        .with_ff_mult(modified_config.model.ff_mult())
+        .with_expansion_factor(modified_config.model.expansion_factor())
+        .with_chunk_size(modified_config.model.chunk_size());
+        
+        println!("Setting model depth to: {} layers", depth);
+    }
+    
+    if let Some(ff_mult) = args.model_ff_mult {
+        modified_config.model = MinGRULMConfig::new(
+            modified_config.model.num_tokens(),
+            modified_config.model.dim()
+        )
+        .with_depth(modified_config.model.depth())
+        .with_ff_mult(ff_mult)
+        .with_expansion_factor(modified_config.model.expansion_factor())
+        .with_chunk_size(modified_config.model.chunk_size());
+        
+        println!("Setting feed-forward multiplier to: {}", ff_mult);
+    }
+    
+    if let Some(exp_factor) = args.model_exp_factor {
+        modified_config.model = MinGRULMConfig::new(
+            modified_config.model.num_tokens(),
+            modified_config.model.dim()
+        )
+        .with_depth(modified_config.model.depth())
+        .with_ff_mult(modified_config.model.ff_mult())
+        .with_expansion_factor(exp_factor)
+        .with_chunk_size(modified_config.model.chunk_size());
+        
+        println!("Setting expansion factor to: {}", exp_factor);
+    }
+    
+    if let Some(param_count) = args.model_params {
+        // Compute the dimension needed to meet the parameter target
+        let optimal_dim = modified_config.model.compute_dim_for_param_count(param_count);
+        
+        // Update model dimension in the config
+        modified_config.model = MinGRULMConfig::new(
+            modified_config.model.num_tokens(),
+            optimal_dim
+        )
+        .with_depth(modified_config.model.depth())
+        .with_ff_mult(modified_config.model.ff_mult())
+        .with_expansion_factor(modified_config.model.expansion_factor())
+        .with_chunk_size(modified_config.model.chunk_size());
+        
+        // Calculate actual parameter count for display
+        let actual_params = modified_config.model.calculate_parameters();
+        
+        // Format parameter counts with appropriate suffixes
+        let format_params = |p: usize| -> String {
+            if p >= 1_000_000_000 {
+                format!("{:.2}G", p as f64 / 1_000_000_000.0)
+            } else if p >= 1_000_000 {
+                format!("{:.2}M", p as f64 / 1_000_000.0)
+            } else if p >= 1_000 {
+                format!("{:.2}K", p as f64 / 1_000.0)
+            } else {
+                format!("{}", p)
+            }
+        };
+        
+        println!("Target parameter count: {}", format_params(param_count));
+        println!("Setting model dimension to: {} (gives {} parameters)", 
+                 optimal_dim, format_params(actual_params));
+    }
+    
+    // Save modified config
+    let temp_config_path = "temp_config.json";
+    modified_config.save(temp_config_path).expect("Failed to save temporary config");
+    let config_path = temp_config_path;
     
     // Create vocabulary from text
     let mut vocab = CharVocab::new();
@@ -1251,6 +766,11 @@ fn main() {
     println!("To generate text with the trained model, use:");
     println!("cargo run --release --bin generate -- --model {} --vocab {}/vocab.txt", 
              model_path, artifact_dir);
+    
+    // Clean up temporary config file if it was created
+    if std::path::Path::new("temp_config.json").exists() {
+        std::fs::remove_file("temp_config.json").ok();
+    }
 }
 
 /// Calculate the number of chunks needed for a desired context length

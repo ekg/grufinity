@@ -5,6 +5,7 @@ use burn::{
     tensor::{Tensor, Int, backend::Backend},
     module::Module,
 };
+use clap::Parser;
 use rand::Rng;
 use std::io::Write;
 use grufinity::{
@@ -27,29 +28,58 @@ fn debug(msg: &str) {
     }
 }
 
-// Print help information
-fn print_help() {
-    eprintln!("GRUfinity Text Generation");
-    eprintln!("========================");
-    eprintln!("Usage: cargo run --release --bin generate -- [OPTIONS]");
-    eprintln!("\nOptions:");
-    eprintln!("  --model PATH                   Path to trained model file");
-    eprintln!("  --vocab PATH                   Path to vocabulary file");
-    eprintln!("  --prompt TEXT                  Initial prompt to seed generation");
-    eprintln!("  --length NUM                   Number of characters to generate (default: 100)");
-    eprintln!("                                 Binary suffixes: k=1024, m=1048576, g=1073741824");
-    eprintln!("  --chunk-size NUM               Characters per chunk for processing (default: 64)");
-    eprintln!("  --temperature VALUE            Sampling temperature (default: 0.8)");
-    eprintln!("  --top-k VALUE                  Top-k sampling value (default: 40)");
-    eprintln!("                                 Binary suffixes: k=1024, m=1048576, g=1073741824");
-    eprintln!("  --config PATH                  Path to model configuration (optional)");
-    eprintln!("  --device-id ID                 CUDA/GPU device ID to use (default: 0)");
-    eprintln!("  --verbose, -v                  Enable verbose debug output");
-    eprintln!("\nExample:");
-    eprintln!("  cargo run --release --bin generate -- \\");
-    eprintln!("    --model artifacts/model_final.bin \\");
-    eprintln!("    --prompt \"Once upon a time\" \\");
-    eprintln!("    --length 500");
+/// GRUfinity text generation command line arguments
+#[derive(Parser, Debug)]
+#[command(
+    name = "GRUfinity Text Generation",
+    version,
+    about = "Generate text using a trained GRUfinity model",
+    long_about = None
+)]
+struct GenerateArgs {
+    /// Path to trained model file
+    #[arg(long)]
+    model: Option<String>,
+
+    /// Path to vocabulary file
+    #[arg(long)]
+    vocab: Option<String>,
+
+    /// Initial prompt to seed generation
+    #[arg(long, default_value = "Hello")]
+    prompt: String,
+
+    /// Number of characters to generate
+    #[arg(long, default_value_t = 100)]
+    length: usize,
+
+    /// Characters per chunk for processing
+    #[arg(long, default_value_t = 64)]
+    chunk_size: usize,
+
+    /// Sampling temperature (higher = more random)
+    #[arg(long, default_value_t = 0.8)]
+    temperature: f64,
+
+    /// Top-k sampling value (0 = disabled)
+    #[arg(long, default_value_t = 40)]
+    top_k: usize,
+
+    /// Path to model configuration (optional)
+    #[arg(long)]
+    config: Option<String>,
+
+    /// CUDA/GPU device ID to use
+    #[arg(long, default_value_t = 0)]
+    device_id: usize,
+
+    /// Enable verbose debug output
+    #[arg(short, long)]
+    verbose: bool,
+
+    /// Legacy option (use prompt instead)
+    #[arg(long, hide = true)]
+    seed: Option<String>,
 }
 
 // Initialize appropriate device based on enabled features
@@ -653,154 +683,44 @@ where
 }
 
 fn main() {
-    // Parse command-line arguments
-    let args: Vec<String> = std::env::args().collect();
+    // Parse command-line arguments using clap
+    let args = GenerateArgs::parse();
     
-    // Check for help
-    if args.len() > 1 && (args[1] == "--help" || args[1] == "-h") {
-        print_help();
-        return;
-    }
+    // Set default paths if not provided
+    let model_path = args.model.unwrap_or_else(|| "mingru_artifacts/model_final.bin".to_string());
+    let vocab_path = args.vocab.unwrap_or_else(|| "mingru_artifacts/vocab.txt".to_string());
+    let config_path = args.config.unwrap_or_else(|| "mingru_artifacts/config.json".to_string());
     
-    // Default values
-    let mut model_path = "mingru_artifacts/model_final.bin".to_string();
-    let mut vocab_path = "mingru_artifacts/vocab.txt".to_string();
-    let mut prompt = "Hello".to_string();
-    let mut length = 100;
-    let mut chunk_size = 64;
-    let mut temperature = 0.8;
-    let mut top_k: usize = 40; // Default to top-40 sampling
-    let mut config_path = "mingru_artifacts/config.json".to_string();
-    let mut device_id: usize = 0;
-    let mut verbose = false;
+    // Handle legacy seed option
+    let prompt = match args.seed {
+        Some(seed) => {
+            println!("Using deprecated --seed option. Use --prompt instead.");
+            println!("Prompt set to: \"{}\"", seed);
+            seed
+        },
+        None => args.prompt
+    };
     
-    // Parse arguments
-    for i in 1..args.len() {
-        if i + 1 >= args.len() && (args[i].starts_with("--") && args[i] != "--help" && args[i] != "-h") {
-            eprintln!("Warning: Option {} has no value", args[i]);
-            continue;
-        }
-        
-        match args[i].as_str() {
-            "--model" => {
-                if i + 1 < args.len() {
-                    model_path = args[i + 1].clone();
-                    println!("Model path set to: {}", model_path);
-                }
-            },
-            "--vocab" => {
-                if i + 1 < args.len() {
-                    vocab_path = args[i + 1].clone();
-                    println!("Vocabulary path set to: {} (will use default byte vocabulary if not found)", vocab_path);
-                }
-            },
-            "--prompt" => {
-                if i + 1 < args.len() {
-                    prompt = args[i + 1].clone();
-                    println!("Prompt set to: \"{}\"", prompt);
-                }
-            },
-            "--length" => {
-                if i + 1 < args.len() {
-                    if let Ok(n) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        length = n;
-                        let suffix = args[i + 1].chars().last().unwrap_or('_');
-                        if suffix == 'k' || suffix == 'K' || suffix == 'm' || suffix == 'M' || suffix == 'g' || suffix == 'G' {
-                            println!("Generation length set to: {} (parsed from {})", length, args[i + 1]);
-                        } else {
-                            println!("Generation length set to: {}", length);
-                        }
-                    } else {
-                        eprintln!("Warning: Invalid length value: {}", args[i + 1]);
-                    }
-                }
-            },
-            "--chunk-size" => {
-                if i + 1 < args.len() {
-                    if let Ok(n) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        chunk_size = n;
-                        let suffix = args[i + 1].chars().last().unwrap_or('_');
-                        if suffix == 'k' || suffix == 'K' || suffix == 'm' || suffix == 'M' || suffix == 'g' || suffix == 'G' {
-                            println!("Chunk size explicitly set to: {} (parsed from {})", chunk_size, args[i + 1]);
-                        } else {
-                            println!("Chunk size explicitly set to: {}", chunk_size);
-                        }
-                    } else {
-                        eprintln!("Warning: Invalid chunk size value: {}", args[i + 1]);
-                    }
-                }
-            },
-            "--temperature" => {
-                if i + 1 < args.len() {
-                    if let Ok(t) = parse_with_suffix::<f64>(&args[i + 1]) {
-                        temperature = t;
-                        println!("Temperature set to: {}", temperature);
-                    } else {
-                        eprintln!("Warning: Invalid temperature value: {}", args[i + 1]);
-                    }
-                }
-            },
-            "--config" => {
-                if i + 1 < args.len() {
-                    config_path = args[i + 1].clone();
-                    println!("Config path explicitly set to: {}", config_path);
-                }
-            },
-            "--device-id" => {
-                if i + 1 < args.len() {
-                    if let Ok(id) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        device_id = id;
-                        println!("Device ID set to: {}", device_id);
-                    } else {
-                        eprintln!("Warning: Invalid device ID value: {}", args[i + 1]);
-                    }
-                }
-            },
-            "--top-k" => {
-                if i + 1 < args.len() {
-                    if let Ok(k) = parse_with_suffix::<usize>(&args[i + 1]) {
-                        top_k = k;
-                        let suffix = args[i + 1].chars().last().unwrap_or('_');
-                        if suffix == 'k' || suffix == 'K' || suffix == 'm' || suffix == 'M' || suffix == 'g' || suffix == 'G' {
-                            debug(&format!("Top-k sampling set to: {} (parsed from {})", top_k, args[i + 1]));
-                        } else {
-                            debug(&format!("Top-k sampling set to: {}", top_k));
-                        }
-                    } else {
-                        eprintln!("Warning: Invalid top-k value: {}", args[i + 1]);
-                    }
-                }
-            },
-            "--verbose" | "-v" => {
-                verbose = true;
-            },
-            // For backward compatibility
-            "--seed" => {
-                if i + 1 < args.len() {
-                    prompt = args[i + 1].clone();
-                    println!("Using deprecated --seed option. Use --prompt instead.");
-                    println!("Prompt set to: \"{}\"", prompt);
-                }
-            },
-            _ => {
-                // Only warn about unrecognized options, not values
-                if args[i].starts_with("--") {
-                    eprintln!("Warning: Unrecognized option: {}", args[i]);
-                }
-            }
-        }
-    }
+    // Print configuration
+    println!("Model path set to: {}", model_path);
+    println!("Vocabulary path set to: {} (will use default byte vocabulary if not found)", vocab_path);
+    println!("Prompt set to: \"{}\"", prompt);
+    println!("Generation length set to: {}", args.length);
+    println!("Chunk size explicitly set to: {}", args.chunk_size);
+    println!("Temperature set to: {}", args.temperature);
+    println!("Device ID set to: {}", args.device_id);
+    debug(&format!("Top-k sampling set to: {}", args.top_k));
     
     // Set verbosity
     unsafe {
-        VERBOSE = verbose;
+        VERBOSE = args.verbose;
     }
     
     // Set up the configured backend
     use_configured_backend!();
     
     // Initialize device based on enabled features
-    let device = initialize_device::<RawBackend>(device_id);
+    let device = initialize_device::<RawBackend>(args.device_id);
     
     // Load vocabulary or create default byte vocabulary
     let mut vocab = CharVocab::new();
@@ -813,10 +733,11 @@ fn main() {
     }
     
     // Try to locate config file
-    locate_config_file(&mut config_path, &model_path);
+    let mut config_path_mut = config_path.clone();
+    locate_config_file(&mut config_path_mut, &model_path);
     
     // Load model configuration
-    let config = load_model_config(&config_path, chunk_size, vocab.size());
+    let config = load_model_config(&config_path_mut, args.chunk_size, vocab.size());
     
     // Initialize and load model
     let model = initialize_model::<RawBackend>(&config, &model_path, &device);
@@ -827,18 +748,18 @@ fn main() {
     let model = model.unwrap();
     
     // Log generation parameters to stderr
-    if verbose {
-        eprintln!("Generating {} characters with temperature {}", length, temperature);
-        if top_k > 0 {
-            eprintln!("Using top-k sampling with k = {}", top_k);
+    if args.verbose {
+        eprintln!("Generating {} characters with temperature {}", args.length, args.temperature);
+        if args.top_k > 0 {
+            eprintln!("Using top-k sampling with k = {}", args.top_k);
         }
         
         // Get the actual chunk size from the model
         let model_chunk_size = model.config().chunk_size();
-        if chunk_size != model_chunk_size {
-            eprintln!("Using chunk size {} (model's native size: {})", chunk_size, model_chunk_size);
+        if args.chunk_size != model_chunk_size {
+            eprintln!("Using chunk size {} (model's native size: {})", args.chunk_size, model_chunk_size);
         } else {
-            eprintln!("Using chunk size: {}", chunk_size);
+            eprintln!("Using chunk size: {}", args.chunk_size);
         }
     }
     
@@ -848,7 +769,7 @@ fn main() {
     std::io::stdout().flush().unwrap();
     
     // Generate text with streaming enabled
-    let _output = generate_text(&model, &vocab, &prompt, length, chunk_size, temperature, top_k, &device, true);
+    let _output = generate_text(&model, &vocab, &prompt, args.length, args.chunk_size, args.temperature, args.top_k, &device, true);
     
     // Add a final newline
     println!();
