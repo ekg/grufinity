@@ -198,6 +198,7 @@ mod tests {
     #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_parallel_scan_simple() {
         let device = NdArrayDevice::default();
@@ -278,6 +279,7 @@ mod tests {
         assert!(abs_diff4 < 1e-5f32);
     }
     
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_parallel_scan_with_initial_state() {
         let device = NdArrayDevice::default();

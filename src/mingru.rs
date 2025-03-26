@@ -68,6 +68,7 @@ mod tests {
     #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_mingru_init() {
         let device = NdArrayDevice::default();
@@ -89,6 +90,7 @@ mod tests {
         assert!((mingru.expansion_factor - 1.5).abs() < 1e-6);
     }
     
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_mingru_forward_single_step() {
         let device = NdArrayDevice::default();

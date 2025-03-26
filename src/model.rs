@@ -30,6 +30,7 @@ mod tests {
     #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_model_init() {
         let device = NdArrayDevice::default();
@@ -52,6 +53,7 @@ mod tests {
         assert_eq!(model.chunk_size, 16);
     }
     
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_model_forward() {
         let device = NdArrayDevice::default();
@@ -82,6 +84,7 @@ mod tests {
         assert_eq!(hidden_states[0].dims(), [2, 38]); // [batch_size, hidden_dim] is 38 due to expansion factor
     }
     
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_parameter_count() {
         // Test that parameter count calculation is consistent
