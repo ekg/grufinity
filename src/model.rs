@@ -20,6 +20,100 @@ pub struct FeedForwardConfig {
     mult: f64,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use burn::backend::ndarray::{NdArray, NdArrayDevice};
+    
+    type TestBackend = NdArray<f32>;
+    
+    #[test]
+    fn test_model_init() {
+        let device = NdArrayDevice::default();
+        
+        // Create a small model config for testing
+        let config = MinGRULMConfig::new(10, 32) // vocab_size=10, dim=32
+            .with_depth(2)
+            .with_chunk_size(16);
+            
+        // Initialize the model
+        let model = config.init::<TestBackend>(&device);
+        
+        // Check model structure
+        assert_eq!(model.token_emb.weight.dims(), [10, 32]); // vocab_size x dim
+        assert_eq!(model.mingru_layers.len(), 2); // depth
+        assert_eq!(model.norm1_layers.len(), 2);
+        assert_eq!(model.norm2_layers.len(), 2);
+        assert_eq!(model.ff_layers.len(), 2);
+        assert_eq!(model.to_logits.weight.dims(), [10, 32]); // vocab_size x dim
+        assert_eq!(model.chunk_size, 16);
+    }
+    
+    #[test]
+    fn test_model_forward() {
+        let device = NdArrayDevice::default();
+        
+        // Create a small model config for testing
+        let config = MinGRULMConfig::new(10, 32)
+            .with_depth(1)  // Single layer for simpler testing
+            .with_chunk_size(16);
+            
+        // Initialize the model
+        let model = config.init::<TestBackend>(&device);
+        
+        // Create input tensor - batch of 2, sequence length of 4
+        let input_data: Vec<i32> = vec![
+            1, 2, 3, 4,  // Sample 1
+            5, 6, 7, 8,  // Sample 2
+        ];
+        
+        let input = Tensor::<TestBackend, 1, Int>::from_data(&input_data, &device)
+            .reshape([2, 4]);
+        
+        // Run forward pass
+        let (logits, hidden_states) = model.forward(input, None);
+        
+        // Check output shapes
+        assert_eq!(logits.dims(), [2, 4, 10]); // [batch_size, seq_len, vocab_size]
+        assert_eq!(hidden_states.len(), 1); // One per layer
+        assert_eq!(hidden_states[0].dims(), [2, 32]); // [batch_size, hidden_dim]
+    }
+    
+    #[test]
+    fn test_parameter_count() {
+        // Test that parameter count calculation is consistent
+        let config = MinGRULMConfig::new(256, 512)
+            .with_depth(3)
+            .with_ff_mult(4.0)
+            .with_expansion_factor(1.5);
+            
+        let param_count = config.calculate_parameters();
+        
+        // Not checking exact count, but verifying it's in a reasonable range
+        assert!(param_count > 1_000_000); // Should have over 1M parameters
+        assert!(param_count < 50_000_000); // But under 50M
+        
+        // Test dimension calculation
+        let target_params = 10_000_000; // 10M
+        let dim = config.compute_dim_for_param_count(target_params);
+        
+        // Verify dimension is a multiple of 32
+        assert_eq!(dim % 32, 0);
+        
+        // Create new config with that dimension and verify parameter count is close
+        let new_config = MinGRULMConfig::new(256, dim)
+            .with_depth(3)
+            .with_ff_mult(4.0)
+            .with_expansion_factor(1.5);
+            
+        let new_param_count = new_config.calculate_parameters();
+        
+        // Should be within 10% of target
+        let ratio = new_param_count as f64 / target_params as f64;
+        assert!(ratio > 0.9 && ratio < 1.1);
+    }
+}
+
 #[cfg(feature = "swiglu")]
 impl FeedForwardConfig {
     pub fn init<B: Backend>(&self, device: &B::Device) -> FeedForward<B> {

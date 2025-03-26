@@ -81,6 +81,16 @@ impl CharVocab {
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
+    #[cfg(test)]
+    pub fn get_byte_to_idx(&self) -> &HashMap<u8, usize> {
+        &self.byte_to_idx
+    }
+
+    #[cfg(test)]
+    pub fn get_idx_to_byte(&self) -> &HashMap<usize, u8> {
+        &self.idx_to_byte
+    }
+
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> crate::Result<()> {
         let mut file = File::create(&path)
             .map_err(|e| crate::GRUfinityError::Io(e))?;

@@ -185,6 +185,129 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
     result
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use burn::backend::ndarray::{NdArray, NdArrayDevice};
+    
+    type TestBackend = NdArray<f32>;
+    
+    #[test]
+    fn test_parallel_scan_simple() {
+        let device = NdArrayDevice::default();
+        
+        // Create simple test tensors
+        // coeffs (a_t): 3 samples, 4 time steps, 2 hidden dims
+        let coeffs_data = vec![
+            0.5, 0.6,  // Sample 1, t=0
+            0.4, 0.3,  // Sample 1, t=1
+            0.7, 0.2,  // Sample 1, t=2
+            0.1, 0.9,  // Sample 1, t=3
+            
+            0.3, 0.4,  // Sample 2, t=0
+            0.6, 0.7,  // Sample 2, t=1
+            0.1, 0.5,  // Sample 2, t=2
+            0.9, 0.2,  // Sample 2, t=3
+            
+            0.2, 0.1,  // Sample 3, t=0
+            0.8, 0.4,  // Sample 3, t=1
+            0.5, 0.7,  // Sample 3, t=2
+            0.3, 0.6,  // Sample 3, t=3
+        ];
+        
+        // values (b_t): Same shape
+        let values_data = vec![
+            0.1, 0.2,  // Sample 1, t=0
+            0.3, 0.4,  // Sample 1, t=1
+            0.5, 0.6,  // Sample 1, t=2
+            0.7, 0.8,  // Sample 1, t=3
+            
+            0.2, 0.3,  // Sample 2, t=0
+            0.4, 0.5,  // Sample 2, t=1
+            0.6, 0.7,  // Sample 2, t=2
+            0.8, 0.9,  // Sample 2, t=3
+            
+            0.3, 0.4,  // Sample 3, t=0
+            0.5, 0.6,  // Sample 3, t=1
+            0.7, 0.8,  // Sample 3, t=2
+            0.9, 0.1,  // Sample 3, t=3
+        ];
+        
+        let coeffs = Tensor::<TestBackend, 1, f32>::from_data(&coeffs_data, &device)
+            .reshape([3, 4, 2]);
+        let values = Tensor::<TestBackend, 1, f32>::from_data(&values_data, &device)
+            .reshape([3, 4, 2]);
+        
+        // Run parallel scan
+        let result = parallel_scan(coeffs.clone(), values.clone(), None);
+        
+        // Verify shape
+        assert_eq!(result.dims(), [3, 4, 2]);
+        
+        // Manually compute expected result for first sample, first dimension
+        // h_0 = 0 (no initial state)
+        // h_1 = a_1 * h_0 + b_1 = 0.5 * 0 + 0.1 = 0.1
+        // h_2 = a_2 * h_1 + b_2 = 0.4 * 0.1 + 0.3 = 0.34
+        // h_3 = a_3 * h_2 + b_3 = 0.7 * 0.34 + 0.5 = 0.738
+        // h_4 = a_4 * h_3 + b_4 = 0.1 * 0.738 + 0.7 = 0.7738
+        
+        // Extract results
+        let result_data = result.into_data().into_vec().unwrap();
+        
+        // Check first sample, first dimension
+        let h1 = result_data[0];
+        let h2 = result_data[2];
+        let h3 = result_data[4];
+        let h4 = result_data[6];
+        
+        // Allow for small floating point differences
+        assert!((h1 - 0.1).abs() < 1e-5);
+        assert!((h2 - 0.34).abs() < 1e-5);
+        assert!((h3 - 0.738).abs() < 1e-5);
+        assert!((h4 - 0.7738).abs() < 1e-5);
+    }
+    
+    #[test]
+    fn test_parallel_scan_with_initial_state() {
+        let device = NdArrayDevice::default();
+        
+        // Create simple test tensors - just 1 sample, 2 time steps, 1 dimension
+        let coeffs_data = vec![0.5, 0.4];
+        let values_data = vec![0.1, 0.3];
+        
+        let coeffs = Tensor::<TestBackend, 1, f32>::from_data(&coeffs_data, &device)
+            .reshape([1, 2, 1]);
+        let values = Tensor::<TestBackend, 1, f32>::from_data(&values_data, &device)
+            .reshape([1, 2, 1]);
+        
+        // Initial hidden state h0 = 0.5
+        let h0_data = vec![0.5];
+        let h0 = Tensor::<TestBackend, 1, f32>::from_data(&h0_data, &device)
+            .reshape([1, 1]);
+        
+        // Run parallel scan with initial state
+        let result = parallel_scan(coeffs.clone(), values.clone(), Some(h0));
+        
+        // Verify shape
+        assert_eq!(result.dims(), [1, 2, 1]);
+        
+        // Manually compute expected result:
+        // h_1 = a_1 * h_0 + b_1 = 0.5 * 0.5 + 0.1 = 0.35
+        // h_2 = a_2 * h_1 + b_2 = 0.4 * 0.35 + 0.3 = 0.44
+        
+        // Extract results
+        let result_data = result.into_data().into_vec().unwrap();
+        
+        // Check both time steps
+        let h1 = result_data[0];
+        let h2 = result_data[1];
+        
+        // Allow for small floating point differences
+        assert!((h1 - 0.35).abs() < 1e-5);
+        assert!((h2 - 0.44).abs() < 1e-5);
+    }
+}
+
 /// Compute inclusive scan (cumulative product) along dimension 1
 fn inclusive_scan_mul<B: Backend>(input: Tensor<B, 3>) -> Tensor<B, 3> {
     let [batch_size, seq_len, hidden_dim] = input.dims();
