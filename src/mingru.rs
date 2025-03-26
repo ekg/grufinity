@@ -59,14 +59,13 @@ pub struct MinGRUConfig {
 #[cfg(test)]
 mod tests {
     // Import specific items needed from parent module
-    use super::MinGRU;
     use super::MinGRUConfig;
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
     
     #[cfg(feature = "ndarray")]
-    use burn::tensor::Float;
+    use burn::tensor::{Float, Tensor};
     #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
