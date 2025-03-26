@@ -1,7 +1,7 @@
 use burn::data::dataloader::batcher::Batcher;
 use burn::{
     config::Config,
-    module::{AutodiffModule, Module},
+    module::AutodiffModule,
     nn::loss::CrossEntropyLossConfig,
     optim::{GradientsAccumulator, GradientsParams, Optimizer},
     record::{BinFileRecorder, FullPrecisionSettings},
@@ -33,15 +33,9 @@ use burn::{optim::momentum::MomentumConfig, optim::SgdConfig};
 #[cfg(feature = "optimizer-adam")]
 use burn::{optim::decay::WeightDecayConfig, optim::AdamConfig};
 
-#[cfg(all(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")), not(test)))]
-compile_error!("Either 'optimizer-sgd' or 'optimizer-adam' feature must be enabled for non-test builds");
-
-#[cfg(all(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")), test))]
-use burn::{
-    optim::AdamConfig,
-    module::Module,
-    tensor::backend::{AutodiffBackend, Backend}
-};
+// Enable both features for testing
+#[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
+use burn::optim::AdamConfig;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -1756,6 +1750,13 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         train_dataset.resample_positions(config.seed + epoch as u64 * 1000);
         valid_dataset.resample_positions(config.seed + epoch as u64 * 1000 + 500);
 
+        // Create optimizer - Adam or SGD based on enabled feature
+        #[cfg(feature = "optimizer-adam")]
+        let mut optimizer = config.optimizer.init::<B, MinGRULM<B>>();
+
+        #[cfg(feature = "optimizer-sgd")]
+        let mut optimizer = config.optimizer.init();
+        
         // Training phase
         let train_loss =
             trainer.train_epoch(&mut train_dataset, &train_batcher, &mut optimizer, epoch);

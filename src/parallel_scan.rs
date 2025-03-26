@@ -2,7 +2,7 @@ use burn::tensor::{backend::Backend, Tensor};
 // Float imported in tests module where needed
 
 #[cfg(feature = "tch")]
-use burn::backend::libtorch::{LibTorch, LibTorchDevice, TchTensor, TchBackend};
+use burn::backend::libtorch::{LibTorch, LibTorchDevice};
 
 /// Implementation of the parallel associative scan algorithm for efficient computation 
 /// of recurrent neural networks.
@@ -203,20 +203,27 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 /// LibTorch-specific implementation of logcumsumexp using the native torch function
 #[cfg(feature = "tch")]
 fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
-    use burn::backend::libtorch::{LibTorch, LibTorchDevice, TchTensor, TchBackend};
+    // Import only what we need for the LibTorch backend
+    use burn::backend::libtorch::{LibTorch, tensor::TchBackend};
     
     if let Some(libtorch_tensor) = (&x as &dyn std::any::Any).downcast_ref::<Tensor<LibTorch<f32>, 3>>() {
-        // Extract the raw tch::Tensor
-        let raw_tensor = libtorch_tensor.into_data().value();
+        // Get the device to use for creating new tensors
+        let device = x.device();
+        
+        // Convert to raw tensor
+        let data = libtorch_tensor.into_data();
+        
+        // Get the inner torch tensor
+        let raw_tensor = data.tensor();
         
         // Call the native logcumsumexp function along dim=1 (sequence dimension)
         let result = raw_tensor.logcumsumexp(1, None);
         
-        // Wrap it back in a Burn tensor
+        // Create a new tensor backend
         let result_burn = TchBackend::from_tch_tensor(result);
         
         // Convert to the correct tensor type
-        Tensor::<B, 3>::from_data(result_burn, &x.device())
+        Tensor::<B, 3>::from_data(result_burn, &device)
     } else {
         // Fallback to generic implementation if we couldn't downcast
         let [batch_size, seq_len, hidden_dim] = x.dims();
