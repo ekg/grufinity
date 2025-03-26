@@ -29,9 +29,7 @@ pub use burn::backend::Cuda;
 pub use burn::backend::cuda::CudaDevice;
 
 #[cfg(feature = "vulkan")]
-pub use burn::backend::Vulkan;
-#[cfg(feature = "vulkan")]
-pub use burn::backend::vulkan::VulkanDevice;
+pub use burn::backend::wgpu::{Vulkan, WgpuDevice as VulkanDevice};
 
 #[cfg(feature = "wgpu")]
 pub use burn::backend::wgpu::{Wgpu, WgpuDevice};
@@ -86,7 +84,7 @@ pub type RawBackend = Vulkan<f32, i32>;
 #[cfg(all(feature = "vulkan", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
-pub type BackendDevice = VulkanDevice;
+pub type BackendDevice = burn::backend::wgpu::WgpuDevice; // Vulkan uses WgpuDevice as its device type
 
 // 4. WGPU backend (fourth priority)
 #[cfg(all(feature = "wgpu", feature = "autodiff", 
