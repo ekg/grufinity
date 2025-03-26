@@ -863,9 +863,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
             // Slice the logits to the minimum sequence length
             let logits_sliced = if seq_len > min_seq_len {
-                logits.slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
+                logits.clone().slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
             } else {
-                logits
+                logits.clone()
             };
 
             // Slice the target to the minimum sequence length
@@ -880,7 +880,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
             // Reshape for loss calculation
             let logits_reshaped = logits_sliced.reshape([batch_size * min_seq_len, vocab_size]);
-            let targets_reshaped = target_sliced.reshape([target_batch_size * min_seq_len]);
+            let targets_reshaped = target_sliced.clone().reshape([target_batch_size * min_seq_len]);
 
             // Calculate loss with the adjusted tensors
             let loss_fn = CrossEntropyLossConfig::new().init(&device);
@@ -951,7 +951,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         println!("Training epoch {}", epoch);
 
         // Initialize for the epoch
-        let (accumulator, progress_bar, total_steps) = self.prepare_for_epoch(dataloader);
+        let (accumulator, progress_bar, total_steps) = self.prepare_for_epoch::<O>(dataloader);
         let mut accumulation_current = 0;
         let mut total_loss = 0.0;
         let mut batch_count = 0;
@@ -1438,8 +1438,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             (logits_reshaped, targets_reshaped)
         } else {
             // Reshape normally
-            let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
-            let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
+            let logits_reshaped = logits.clone().reshape([batch_size * seq_len, vocab_size]);
+            let targets_reshaped = batch.target.clone().reshape([batch_size * seq_len]);
 
             (logits_reshaped, targets_reshaped)
         };
