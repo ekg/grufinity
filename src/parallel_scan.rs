@@ -1,4 +1,4 @@
-use burn::tensor::{backend::Backend, Tensor, Float};  // Float is used as a type parameter
+use burn::tensor::{backend::Backend, Tensor};
 
 /// Implementation of the parallel associative scan algorithm for efficient computation 
 /// of recurrent neural networks.
@@ -261,10 +261,10 @@ mod tests {
         let h4 = result_data[6];
         
         // Allow for small floating point differences
-        assert!((h1 - 0.1).abs() < 1e-5);
-        assert!((h2 - 0.34).abs() < 1e-5);
-        assert!((h3 - 0.738).abs() < 1e-5);
-        assert!((h4 - 0.7738).abs() < 1e-5);
+        assert!((h1 - 0.1f32).abs() < 1e-5f32);
+        assert!((h2 - 0.34f32).abs() < 1e-5f32);
+        assert!((h3 - 0.738f32).abs() < 1e-5f32);
+        assert!((h4 - 0.7738f32).abs() < 1e-5f32);
     }
     
     #[test]
@@ -303,8 +303,8 @@ mod tests {
         let h2 = result_data[1];
         
         // Allow for small floating point differences
-        assert!((h1 - 0.35).abs() < 1e-5);
-        assert!((h2 - 0.44).abs() < 1e-5);
+        assert!((h1 - 0.35f32).abs() < 1e-5f32);
+        assert!((h2 - 0.44f32).abs() < 1e-5f32);
     }
 }
 

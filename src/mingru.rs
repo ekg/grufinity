@@ -1,6 +1,6 @@
 use burn::{
     module::Module,
-    tensor::{backend::Backend, Tensor, activation, Float},  // Float is used as a type parameter
+    tensor::{backend::Backend, Tensor, activation},
     nn::{Linear, LinearConfig},
     config::Config,
 };
@@ -89,7 +89,7 @@ mod tests {
         
         // Create a small MinGRU with no expansion for easier testing
         let config = MinGRUConfig::new(2, 2).with_expansion_factor(1.0);
-        let mut mingru = config.init::<TestBackend>(&device);
+        let mingru = config.init::<TestBackend>(&device);
         
         // Set weights manually for deterministic test
         let to_hidden_and_gate_weight_data = vec![
@@ -97,7 +97,7 @@ mod tests {
             0.5, 0.6, 0.7, 0.8, // input dim 1 -> hidden and gate
         ];
         
-        let to_hidden_and_gate_weight = Tensor::<TestBackend, 1, Float>::from_data(
+        let _to_hidden_and_gate_weight = Tensor::<TestBackend, 1, Float>::from_data(
             &*to_hidden_and_gate_weight_data, &device
         ).reshape([2, 4]);
         
