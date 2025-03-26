@@ -58,18 +58,21 @@ pub struct MinGRUConfig {
 
 #[cfg(test)]
 mod tests {
-    // Import specific items needed from parent module
-    // Import only what's needed from parent module
+    // Import needed for all backends
+    use super::{MinGRU, MinGRUConfig};
+    use burn::tensor::{backend::Backend, Float, Tensor};
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
-    
-    #[cfg(feature = "ndarray")]
-    use burn::tensor::{Float, Tensor};
     #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
-    #[cfg(feature = "ndarray")]
+    #[cfg(feature = "vulkan")]
+    use burn::backend::wgpu::{Vulkan, WgpuDevice};
+    #[cfg(feature = "vulkan")]
+    type TestBackend = Vulkan<f32, i32>;
+    
+    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_mingru_init() {
         let device = NdArrayDevice::default();
@@ -91,7 +94,7 @@ mod tests {
         assert!((mingru.expansion_factor - 1.5).abs() < 1e-6);
     }
     
-    #[cfg(feature = "ndarray")]
+    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_mingru_forward_single_step() {
         let device = NdArrayDevice::default();

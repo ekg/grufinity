@@ -22,18 +22,21 @@ pub struct FeedForwardConfig {
 
 #[cfg(test)]
 mod tests {
-    // Import specific items needed from parent module
-    // Only import what's needed from parent module
+    // Import needed for all backends
+    use super::{MinGRULM, MinGRULMConfig};
+    use burn::tensor::{backend::Backend, Int, Tensor};
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
-    
-    #[cfg(feature = "ndarray")]
-    use burn::tensor::{Int, Tensor};
     #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     
-    #[cfg(feature = "ndarray")]
+    #[cfg(feature = "vulkan")]
+    use burn::backend::wgpu::{Vulkan, WgpuDevice};
+    #[cfg(feature = "vulkan")]
+    type TestBackend = Vulkan<f32, i32>;
+    
+    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_model_init() {
         let device = NdArrayDevice::default();
@@ -56,7 +59,7 @@ mod tests {
         assert_eq!(model.chunk_size, 16);
     }
     
-    #[cfg(feature = "ndarray")]
+    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_model_forward() {
         let device = NdArrayDevice::default();
@@ -87,7 +90,7 @@ mod tests {
         assert_eq!(hidden_states[0].dims(), [2, 38]); // [batch_size, hidden_dim] is 38 due to expansion factor
     }
     
-    #[cfg(feature = "ndarray")]
+    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_parameter_count() {
         // Test that parameter count calculation is consistent
