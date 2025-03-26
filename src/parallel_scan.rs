@@ -190,7 +190,7 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 mod tests {
     // Import necessary items directly from parent module
     use super::parallel_scan;
-    use burn::tensor::{backend::Backend, Float, Tensor};
+    use burn::tensor::{Float, Tensor};
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
@@ -206,7 +206,15 @@ mod tests {
     #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_parallel_scan_simple() {
+        #[cfg(feature = "ndarray")]
+        #[cfg(feature = "ndarray")]
         let device = NdArrayDevice::default();
+        
+        #[cfg(feature = "vulkan")]
+        let device = WgpuDevice::default();
+        
+        #[cfg(feature = "vulkan")]
+        let device = WgpuDevice::default();
         
         // Create simple test tensors
         // coeffs (a_t): 3 samples, 4 time steps, 2 hidden dims

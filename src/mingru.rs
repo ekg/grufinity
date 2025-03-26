@@ -59,8 +59,8 @@ pub struct MinGRUConfig {
 #[cfg(test)]
 mod tests {
     // Import needed for all backends
-    use super::{MinGRU, MinGRUConfig};
-    use burn::tensor::{backend::Backend, Float, Tensor};
+    use super::MinGRUConfig;
+    use burn::tensor::{Float, Tensor};
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
@@ -68,14 +68,24 @@ mod tests {
     type TestBackend = NdArray<f32>;
     
     #[cfg(feature = "vulkan")]
-    use burn::backend::wgpu::{Vulkan, WgpuDevice};
+    use burn::backend::wgpu::Vulkan;
+    #[cfg(feature = "vulkan")]
+    use burn::backend::wgpu::WgpuDevice;
     #[cfg(feature = "vulkan")]
     type TestBackend = Vulkan<f32, i32>;
     
     #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_mingru_init() {
+        #[cfg(feature = "ndarray")]
+        #[cfg(feature = "ndarray")]
         let device = NdArrayDevice::default();
+        
+        #[cfg(feature = "vulkan")]
+        let device = WgpuDevice::default();
+        
+        #[cfg(feature = "vulkan")]
+        let device = WgpuDevice::default();
         
         // Create a simple MinGRU configuration
         let config = MinGRUConfig::new(10, 20) // input_size=10, hidden_size=20
