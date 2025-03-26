@@ -631,6 +631,7 @@ fn generate_text<B: Backend>(
 /// Parse a string with optional binary suffix (k, m, g) into a number
 /// Using binary units: k=1024, m=1024², g=1024³
 /// Examples: "1k" -> 1024, "2m" -> 2097152, "1.5g" -> 1610612736
+#[allow(dead_code)]
 fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
 where 
     T: std::str::FromStr + 'static,

@@ -265,8 +265,8 @@ fn main() {
     let device_id = args.device_id;
     
     // Token-based parameters (will be converted to chunks)
-    let update_tokens = args.update_tokens;
-    let backprop_tokens = args.backprop_tokens;
+    let _update_tokens = args.update_tokens;
+    let _backprop_tokens = args.backprop_tokens;
     
     // Set up the configured backend
     use_configured_backend!();

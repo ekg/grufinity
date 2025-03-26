@@ -9,6 +9,24 @@ use burn::{
     train::metric::MetricEntry,
 };
 
+/// Result of processing a batch during training
+#[derive(Debug)]
+enum BatchResult {
+    /// Batch was skipped due to invalid data
+    Skip,
+    /// Batch was processed successfully
+    Success { loss: f32 },
+}
+
+/// Result of processing a validation batch
+#[derive(Debug)]
+enum ValidationResult {
+    /// Batch was skipped due to invalid data
+    Skip,
+    /// Batch was processed successfully
+    Success { loss: f32 },
+}
+
 #[cfg(feature = "optimizer-sgd")]
 use burn::{optim::momentum::MomentumConfig, optim::SgdConfig};
 
@@ -932,6 +950,61 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
     ) -> f32 {
         println!("Training epoch {}", epoch);
 
+        // Initialize for the epoch
+        let (accumulator, progress_bar, total_steps) = self.prepare_for_epoch(dataloader);
+        let mut accumulation_current = 0;
+        let mut total_loss = 0.0;
+        let mut batch_count = 0;
+
+        // Process chunks using a definite counter to ensure we respect max_chunks_per_epoch
+        let mut step = 0;
+        while step < total_steps {
+            let result = self.process_batch(
+                dataloader, 
+                batcher, 
+                optimizer, 
+                &mut accumulator, 
+                &mut accumulation_current,
+                step, 
+                total_steps, 
+                epoch, 
+                &progress_bar
+            );
+            
+            // Handle batch result
+            match result {
+                BatchResult::Skip => {
+                    step += 1;
+                    continue;
+                },
+                BatchResult::Success { loss } => {
+                    total_loss += loss;
+                    batch_count += 1;
+                    
+                    // Update progress
+                    self.update_progress_for_batch(step, total_steps, loss, &progress_bar);
+                },
+            }
+
+            // Move to next chunk and increment step counter
+            if !dataloader.next_chunk() {
+                // If we can't advance, reset and resample to get fresh chunks
+                dataloader.reset();
+                dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
+            }
+
+            step += 1;
+        }
+
+        // Apply any remaining gradients and finalize the epoch
+        self.finalize_epoch(&mut accumulator, accumulation_current, total_loss, batch_count, optimizer, &progress_bar)
+    }
+    
+    /// Prepare for training epoch by initializing metrics, progress bar, etc.
+    fn prepare_for_epoch<O: Optimizer<MinGRULM<B>, B>>(
+        &mut self,
+        dataloader: &mut ContinuousChunkedTextDataset,
+    ) -> (GradientsAccumulator<MinGRULM<B>>, ProgressBar, usize) {
         // Reset epoch metrics
         self.metrics.start_epoch();
 
@@ -946,120 +1019,118 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 .progress_chars("#>-")
         );
 
-        let mut total_loss = 0.0;
-        let mut batch_count = 0;
-
         // Gradient accumulation state
-        let mut accumulator = GradientsAccumulator::<MinGRULM<B>>::new();
-        let mut accumulation_current = 0;
+        let accumulator = GradientsAccumulator::<MinGRULM<B>>::new();
 
         // Reset dataset and hidden states at the beginning of the epoch
         dataloader.reset();
         self.reset_hidden_states();
+        
+        (accumulator, progress_bar, total_steps)
+    }
+    
+    /// Process a single batch during training
+    fn process_batch<O: Optimizer<MinGRULM<B>, B>>(
+        &mut self,
+        dataloader: &mut ContinuousChunkedTextDataset,
+        batcher: &TextBatcher<B>,
+        optimizer: &mut O,
+        accumulator: &mut GradientsAccumulator<MinGRULM<B>>,
+        accumulation_current: &mut usize,
+        step: usize,
+        total_steps: usize,
+        epoch: usize,
+        progress_bar: &ProgressBar,
+    ) -> BatchResult {
+        // Get current chunks for all positions
+        let chunks = dataloader.get_current_chunks();
 
-        // Process chunks using a definite counter to ensure we respect max_chunks_per_epoch
-        let mut step = 0;
-        while step < total_steps {
-            // Get current chunks for all positions
-            let chunks = dataloader.get_current_chunks();
+        // Create batch from chunks
+        let chunked_batcher = ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
+        let batch_opt = chunked_batcher.batch(chunks);
 
-            // Create batch from chunks
-            let chunked_batcher =
-                ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
-            let batch_opt = chunked_batcher.batch(chunks);
-
-            // Check if we got a valid batch
-            if batch_opt.is_none() {
-                progress_bar.inc(1);
-                progress_bar.set_message("Skipped batch - empty");
-
-                // We need to still move to next chunk and count even if we skip
-                if !dataloader.next_chunk() {
-                    // If we can't advance, reset and resample to get fresh chunks
-                    dataloader.reset();
-                    dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
-                }
-
-                step += 1;
-                continue;
-            }
-
-            let batch = batch_opt.unwrap();
-
-            // Double-check tensor dimensions to ensure they're valid
-            if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
-                progress_bar.inc(1);
-                progress_bar.set_message("Skipped batch - invalid dimensions");
-
-                // We need to still move to next chunk and count even if we skip
-                if !dataloader.next_chunk() {
-                    // If we can't advance, reset and resample to get fresh chunks
-                    dataloader.reset();
-                    dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
-                }
-
-                step += 1;
-                continue;
-            }
-
-            // Double-check that the batch is valid - tensors should have reasonable dimensions
-            if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
-                progress_bar.inc(1);
-                progress_bar.set_message("Skipped batch - invalid dimensions");
-
-                // We need to still move to next chunk and count even if we skip
-                if !dataloader.next_chunk() {
-                    // If we can't advance, reset and resample to get fresh chunks
-                    dataloader.reset();
-                    dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
-                }
-
-                step += 1;
-                continue;
-            }
-
-            // Process chunk and update model if needed
-            let do_update = (step + 1) % self.tbptt_k1 == 0 || step == total_steps - 1;
-            let loss = self.process_chunk(
-                &batch,
-                optimizer,
-                &mut accumulator,
-                &mut accumulation_current,
-                do_update,
-            );
-
-            total_loss += loss;
-            batch_count += 1;
-
-            // Update progress
+        // Check if we got a valid batch
+        if batch_opt.is_none() {
             progress_bar.inc(1);
+            progress_bar.set_message("Skipped batch - empty");
 
-            // Calculate tokens/s for display and reset counter for next time
-            let tokens_per_sec = self.metrics.recent_tokens_per_second();
-            self.metrics.update_timing();
-
-            progress_bar.set_message(format!(
-                "Chunk {}/{}, Loss: {:.6}, Speed: {:.1} tok/s",
-                step + 1,
-                total_steps,
-                loss,
-                tokens_per_sec
-            ));
-
-            // Update metrics
-            self.metrics
-                .update_progress((step as f32) / (total_steps as f32));
-
-            // Move to next chunk and increment step counter
+            // We need to still move to next chunk and count even if we skip
             if !dataloader.next_chunk() {
                 // If we can't advance, reset and resample to get fresh chunks
                 dataloader.reset();
                 dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
             }
 
-            step += 1;
+            return BatchResult::Skip;
         }
 
+        let batch = batch_opt.unwrap();
+
+        // Check if tensors have valid dimensions
+        if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
+            progress_bar.inc(1);
+            progress_bar.set_message("Skipped batch - invalid dimensions");
+
+            // We need to still move to next chunk and count even if we skip
+            if !dataloader.next_chunk() {
+                // If we can't advance, reset and resample to get fresh chunks
+                dataloader.reset();
+                dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
+            }
+
+            return BatchResult::Skip;
+        }
+
+        // Process chunk and update model if needed
+        let do_update = (step + 1) % self.tbptt_k1 == 0 || step == total_steps - 1;
+        let loss = self.process_chunk(
+            &batch,
+            optimizer,
+            accumulator,
+            accumulation_current,
+            do_update,
+        );
+
+        BatchResult::Success { loss }
+    }
+    
+    /// Update progress display after processing a batch
+    fn update_progress_for_batch(
+        &mut self, 
+        step: usize, 
+        total_steps: usize, 
+        loss: f32, 
+        progress_bar: &ProgressBar
+    ) {
+        // Update progress
+        progress_bar.inc(1);
+
+        // Calculate tokens/s for display and reset counter for next time
+        let tokens_per_sec = self.metrics.recent_tokens_per_second();
+        self.metrics.update_timing();
+
+        progress_bar.set_message(format!(
+            "Chunk {}/{}, Loss: {:.6}, Speed: {:.1} tok/s",
+            step + 1,
+            total_steps,
+            loss,
+            tokens_per_sec
+        ));
+
+        // Update metrics
+        self.metrics.update_progress((step as f32) / (total_steps as f32));
+    }
+    
+    /// Finalize epoch by applying remaining gradients and calculating metrics
+    fn finalize_epoch<O: Optimizer<MinGRULM<B>, B>>(
+        &mut self,
+        accumulator: &mut GradientsAccumulator<MinGRULM<B>>,
+        accumulation_current: usize,
+        total_loss: f32,
+        batch_count: usize,
+        optimizer: &mut O,
+        progress_bar: &ProgressBar,
+    ) -> f32 {
         // Ensure we apply any remaining gradients
         if accumulation_current > 0 {
             let grads = accumulator.grads();
@@ -1067,7 +1138,12 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         }
 
         // Finalize metrics
-        let epoch_loss = total_loss / batch_count as f32;
+        let epoch_loss = if batch_count > 0 {
+            total_loss / batch_count as f32
+        } else {
+            0.0 // Avoid division by zero
+        };
+        
         self.metrics.update_batch_loss(epoch_loss);
 
         // Calculate perplexity from loss
@@ -1096,6 +1172,66 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
     ) -> f32 {
         println!("Validating model...");
 
+        // Initialize for validation
+        let (progress_bar, model, total_steps) = self.prepare_for_validation(dataloader);
+        let mut total_loss = 0.0;
+        let mut batch_count = 0;
+
+        // Track hidden states per position
+        let mut hidden_states_map: HashMap<usize, Vec<Tensor<B::InnerBackend, 2>>> = HashMap::new();
+
+        // Process chunks using a definite counter to ensure we respect max_chunks
+        let mut step = 0;
+        let validation_limit = 200; // Limit validation to 200 chunks for speed
+        while step < total_steps && step < validation_limit {
+            let result = self.process_validation_batch(
+                dataloader,
+                batcher,
+                &model,
+                step,
+                &mut hidden_states_map,
+                &progress_bar
+            );
+            
+            match result {
+                ValidationResult::Skip => {
+                    step += 1;
+                    continue;
+                },
+                ValidationResult::Success { loss } => {
+                    total_loss += loss;
+                    batch_count += 1;
+                    
+                    // Update progress
+                    progress_bar.inc(1);
+                    progress_bar.set_message(format!(
+                        "Chunk {}/{}, Loss: {:.6}",
+                        step + 1,
+                        total_steps,
+                        loss
+                    ));
+                },
+            }
+
+            // Move to next chunk and increment step counter
+            if !dataloader.next_chunk() {
+                // If we can't advance, reset and resample to get fresh chunks
+                dataloader.reset();
+                dataloader.resample_positions(step as u64 + 10000);
+            }
+
+            step += 1;
+        }
+
+        // Finalize validation and return average loss
+        self.finalize_validation(total_loss, batch_count, &progress_bar)
+    }
+    
+    /// Prepare for validation by creating progress bar and initializing the model
+    fn prepare_for_validation(
+        &self,
+        dataloader: &mut ContinuousChunkedTextDataset,
+    ) -> (ProgressBar, MinGRULM<B::InnerBackend>, usize) {
         let total_steps = dataloader.max_chunks;
 
         let progress_bar = ProgressBar::new(total_steps as u64);
@@ -1108,198 +1244,220 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         // AutodiffModule trait provides valid() method
         let model = AutodiffModule::valid(&self.model);
-        let mut total_loss = 0.0;
-        let mut batch_count = 0;
 
         // Reset to beginning
         dataloader.reset();
+        
+        (progress_bar, model, total_steps)
+    }
+    
+    /// Process a single batch during validation
+    fn process_validation_batch(
+        &self,
+        dataloader: &mut ContinuousChunkedTextDataset,
+        batcher: &TextBatcher<B::InnerBackend>,
+        model: &MinGRULM<B::InnerBackend>,
+        step: usize,
+        hidden_states_map: &mut HashMap<usize, Vec<Tensor<B::InnerBackend, 2>>>,
+        progress_bar: &ProgressBar,
+    ) -> ValidationResult {
+        // Get current chunks for validation
+        let chunks = dataloader.get_current_chunks();
+        let chunked_batcher = ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
+        let batch_opt = chunked_batcher.batch(chunks);
 
-        // Track hidden states per position
-        let mut hidden_states_map: HashMap<usize, Vec<Tensor<B::InnerBackend, 2>>> = HashMap::new();
-
-        // Process chunks using a definite counter to ensure we respect max_chunks
-        let mut step = 0;
-        while step < total_steps && step < 200 {
-            // Add a validation limit of 200 chunks for speed
-            let chunks = dataloader.get_current_chunks();
-            let chunked_batcher =
-                ChunkedTextBatcher::new(batcher.vocab.clone(), batcher.device.clone());
-            let batch_opt = chunked_batcher.batch(chunks);
-
-            // Check if we got a valid batch
-            if batch_opt.is_none() {
-                progress_bar.inc(1);
-                progress_bar.set_message("Skipped batch - empty");
-
-                // We need to still move to next chunk and count even if we skip
-                if !dataloader.next_chunk() {
-                    // If we can't advance, reset and resample to get fresh chunks
-                    dataloader.reset();
-                    dataloader.resample_positions(step as u64 + 10000);
-                }
-                step += 1;
-                continue;
-            }
-
-            let batch = batch_opt.unwrap();
-
-            // Skip chunks that don't have valid dimensions
-            if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
-                progress_bar.inc(1);
-                progress_bar.set_message("Skipped batch - invalid dimensions");
-
-                // We need to still move to next chunk and count even if we skip
-                if !dataloader.next_chunk() {
-                    // If we can't advance, reset and resample to get fresh chunks
-                    dataloader.reset();
-                    dataloader.resample_positions(step as u64 + 10000);
-                }
-                step += 1;
-                continue;
-            }
-
-            // Prepare batch hidden states
-            let batch_size = batch.doc_ids.len();
-            let mut batch_hidden_states = None;
-            let mut hidden_states_vec = Vec::new();
-
-            if !hidden_states_map.is_empty() {
-                for doc_id in &batch.doc_ids {
-                    if let Some(state) = hidden_states_map.get(doc_id) {
-                        hidden_states_vec.push(state.clone());
-                    }
-                }
-
-                if !hidden_states_vec.is_empty() && hidden_states_vec.len() == batch_size {
-                    // Transpose the structure to get layers of batch hidden states
-                    let mut merged_states = Vec::new();
-                    let num_layers = hidden_states_vec[0].len();
-
-                    for layer in 0..num_layers {
-                        let layer_states: Vec<_> = hidden_states_vec
-                            .iter()
-                            .map(|states| states[layer].clone())
-                            .collect();
-
-                        merged_states.push(Tensor::cat(layer_states, 0));
-                    }
-
-                    batch_hidden_states = Some(merged_states);
-                }
-            }
-
-            // Forward pass with hidden states
-            let (logits, next_hidden) = model.forward(batch.input.clone(), batch_hidden_states);
-
-            // Update hidden states for each position
-            for (i, &doc_id) in batch.doc_ids.iter().enumerate() {
-                // Check if this is a padded position (end of text)
-                let is_padded = batch.is_last_chunks.get(i).cloned().unwrap_or(false)
-                    || batch.is_padded.get(i).cloned().unwrap_or(false);
-
-                if !is_padded {
-                    // Extract individual hidden state for this position
-                    let doc_next_hidden: Vec<Tensor<B::InnerBackend, 2>> = next_hidden
-                        .iter()
-                        .map(|h| {
-                            // Safe slice with dimension check
-                            if i < h.dims()[0] {
-                                h.clone().slice([i..i + 1, 0..h.dims()[1]])
-                            } else {
-                                // Create a 2D tensor with proper dimensions
-                                Tensor::zeros([1, h.dims()[1]], &h.device())
-                            }
-                        })
-                        .collect();
-
-                    // Apply tanh nonlinearity to hidden states before storing (if feature enabled)
-                    #[cfg(feature = "tanh")]
-                    let doc_next_hidden_processed: Vec<
-                        Tensor<B::InnerBackend, 2>,
-                    > = doc_next_hidden.iter().map(|h| h.clone().tanh()).collect();
-
-                    #[cfg(not(feature = "tanh"))]
-                    let doc_next_hidden_processed = doc_next_hidden;
-
-                    // Store for next chunk
-                    hidden_states_map.insert(doc_id, doc_next_hidden_processed);
-                } else {
-                    // Remove hidden state for padded positions
-                    hidden_states_map.remove(&doc_id);
-                }
-            }
-
-            // Calculate loss
-            let [batch_size, seq_len, vocab_size] = logits.dims();
-            let [target_batch_size, target_seq_len] = batch.target.dims();
-
-            // Check for dimension mismatch
-            let (loss_reshaped, targets_reshaped) = if batch_size != target_batch_size
-                || seq_len != target_seq_len
-            {
-                println!("Warning: Dimension mismatch in validation. logits: [{}, {}, {}], target: [{}, {}]",
-                         batch_size, seq_len, vocab_size, target_batch_size, target_seq_len);
-
-                // Use the minimum sequence length
-                let min_seq_len = seq_len.min(target_seq_len);
-
-                // Slice the logits to the minimum sequence length
-                let logits_sliced = if seq_len > min_seq_len {
-                    logits.slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
-                } else {
-                    logits
-                };
-
-                // Slice the target to the minimum sequence length
-                let target_sliced = if target_seq_len > min_seq_len {
-                    batch
-                        .target
-                        .clone()
-                        .slice([0..target_batch_size, 0..min_seq_len])
-                } else {
-                    batch.target.clone()
-                };
-
-                // Reshape for loss calculation
-                let logits_reshaped = logits_sliced.reshape([batch_size * min_seq_len, vocab_size]);
-                let targets_reshaped = target_sliced.reshape([target_batch_size * min_seq_len]);
-
-                (logits_reshaped, targets_reshaped)
-            } else {
-                // Reshape normally
-                let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
-                let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
-
-                (logits_reshaped, targets_reshaped)
-            };
-
-            let device = loss_reshaped.device();
-            let loss_fn = CrossEntropyLossConfig::new().init(&device);
-            let loss = loss_fn.forward(loss_reshaped, targets_reshaped);
-
-            let loss_value = loss.into_scalar().to_f32();
-            total_loss += loss_value;
-            batch_count += 1;
-
-            // Update progress
+        // Check if we got a valid batch
+        if batch_opt.is_none() {
             progress_bar.inc(1);
-            progress_bar.set_message(format!(
-                "Chunk {}/{}, Loss: {:.6}",
-                step + 1,
-                total_steps,
-                loss_value
-            ));
+            progress_bar.set_message("Skipped batch - empty");
 
-            // Move to next chunk and increment step counter
+            // We need to still move to next chunk and count even if we skip
             if !dataloader.next_chunk() {
                 // If we can't advance, reset and resample to get fresh chunks
                 dataloader.reset();
                 dataloader.resample_positions(step as u64 + 10000);
             }
-
-            step += 1;
+            return ValidationResult::Skip;
         }
 
+        let batch = batch_opt.unwrap();
+
+        // Skip chunks that don't have valid dimensions
+        if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
+            progress_bar.inc(1);
+            progress_bar.set_message("Skipped batch - invalid dimensions");
+
+            // We need to still move to next chunk and count even if we skip
+            if !dataloader.next_chunk() {
+                // If we can't advance, reset and resample to get fresh chunks
+                dataloader.reset();
+                dataloader.resample_positions(step as u64 + 10000);
+            }
+            return ValidationResult::Skip;
+        }
+
+        // Prepare batch hidden states
+        let batch_hidden_states = self.prepare_validation_hidden_states(&batch, hidden_states_map);
+
+        // Forward pass with hidden states
+        let (logits, next_hidden) = model.forward(batch.input.clone(), batch_hidden_states);
+
+        // Update hidden states for each position
+        self.update_validation_hidden_states(&batch, next_hidden, hidden_states_map);
+
+        // Calculate loss
+        let loss = self.calculate_validation_loss(&batch, &logits);
+        
+        ValidationResult::Success { loss }
+    }
+    
+    /// Prepare hidden states for validation forward pass
+    fn prepare_validation_hidden_states(
+        &self,
+        batch: &ChunkedTextBatch<B::InnerBackend>,
+        hidden_states_map: &HashMap<usize, Vec<Tensor<B::InnerBackend, 2>>>,
+    ) -> Option<Vec<Tensor<B::InnerBackend, 2>>> {
+        let batch_size = batch.doc_ids.len();
+        let mut hidden_states_vec = Vec::new();
+
+        if hidden_states_map.is_empty() {
+            return None;
+        }
+
+        // Collect hidden states for each document in the batch
+        for doc_id in &batch.doc_ids {
+            if let Some(state) = hidden_states_map.get(doc_id) {
+                hidden_states_vec.push(state.clone());
+            }
+        }
+
+        // If we have hidden states for all documents in the batch, merge them
+        if !hidden_states_vec.is_empty() && hidden_states_vec.len() == batch_size {
+            // Transpose the structure to get layers of batch hidden states
+            let mut merged_states = Vec::new();
+            let num_layers = hidden_states_vec[0].len();
+
+            for layer in 0..num_layers {
+                let layer_states: Vec<_> = hidden_states_vec
+                    .iter()
+                    .map(|states| states[layer].clone())
+                    .collect();
+
+                merged_states.push(Tensor::cat(layer_states, 0));
+            }
+
+            Some(merged_states)
+        } else {
+            None
+        }
+    }
+    
+    /// Update hidden states map after validation forward pass
+    fn update_validation_hidden_states(
+        &self,
+        batch: &ChunkedTextBatch<B::InnerBackend>,
+        next_hidden: Vec<Tensor<B::InnerBackend, 2>>,
+        hidden_states_map: &mut HashMap<usize, Vec<Tensor<B::InnerBackend, 2>>>,
+    ) {
+        for (i, &doc_id) in batch.doc_ids.iter().enumerate() {
+            // Check if this is a padded position (end of text)
+            let is_padded = batch.is_last_chunks.get(i).cloned().unwrap_or(false)
+                || batch.is_padded.get(i).cloned().unwrap_or(false);
+
+            if !is_padded {
+                // Extract individual hidden state for this position
+                let doc_next_hidden: Vec<Tensor<B::InnerBackend, 2>> = next_hidden
+                    .iter()
+                    .map(|h| {
+                        // Safe slice with dimension check
+                        if i < h.dims()[0] {
+                            h.clone().slice([i..i + 1, 0..h.dims()[1]])
+                        } else {
+                            // Create a 2D tensor with proper dimensions
+                            Tensor::zeros([1, h.dims()[1]], &h.device())
+                        }
+                    })
+                    .collect();
+
+                // Apply tanh nonlinearity to hidden states before storing (if feature enabled)
+                #[cfg(feature = "tanh")]
+                let doc_next_hidden_processed: Vec<
+                    Tensor<B::InnerBackend, 2>,
+                > = doc_next_hidden.iter().map(|h| h.clone().tanh()).collect();
+
+                #[cfg(not(feature = "tanh"))]
+                let doc_next_hidden_processed = doc_next_hidden;
+
+                // Store for next chunk
+                hidden_states_map.insert(doc_id, doc_next_hidden_processed);
+            } else {
+                // Remove hidden state for padded positions
+                hidden_states_map.remove(&doc_id);
+            }
+        }
+    }
+    
+    /// Calculate loss for a validation batch
+    fn calculate_validation_loss(
+        &self,
+        batch: &ChunkedTextBatch<B::InnerBackend>,
+        logits: &Tensor<B::InnerBackend, 3>,
+    ) -> f32 {
+        let [batch_size, seq_len, vocab_size] = logits.dims();
+        let [target_batch_size, target_seq_len] = batch.target.dims();
+
+        // Check for dimension mismatch
+        let (loss_reshaped, targets_reshaped) = if batch_size != target_batch_size || seq_len != target_seq_len {
+            println!("Warning: Dimension mismatch in validation. logits: [{}, {}, {}], target: [{}, {}]",
+                     batch_size, seq_len, vocab_size, target_batch_size, target_seq_len);
+
+            // Use the minimum sequence length
+            let min_seq_len = seq_len.min(target_seq_len);
+
+            // Slice the logits to the minimum sequence length
+            let logits_sliced = if seq_len > min_seq_len {
+                logits.slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
+            } else {
+                logits.clone()
+            };
+
+            // Slice the target to the minimum sequence length
+            let target_sliced = if target_seq_len > min_seq_len {
+                batch
+                    .target
+                    .clone()
+                    .slice([0..target_batch_size, 0..min_seq_len])
+            } else {
+                batch.target.clone()
+            };
+
+            // Reshape for loss calculation
+            let logits_reshaped = logits_sliced.reshape([batch_size * min_seq_len, vocab_size]);
+            let targets_reshaped = target_sliced.reshape([target_batch_size * min_seq_len]);
+
+            (logits_reshaped, targets_reshaped)
+        } else {
+            // Reshape normally
+            let logits_reshaped = logits.reshape([batch_size * seq_len, vocab_size]);
+            let targets_reshaped = batch.target.reshape([batch_size * seq_len]);
+
+            (logits_reshaped, targets_reshaped)
+        };
+
+        let device = loss_reshaped.device();
+        let loss_fn = CrossEntropyLossConfig::new().init(&device);
+        let loss = loss_fn.forward(loss_reshaped, targets_reshaped);
+
+        loss.into_scalar().to_f32()
+    }
+    
+    /// Finalize validation and compute average loss
+    fn finalize_validation(
+        &self,
+        total_loss: f32,
+        batch_count: usize,
+        progress_bar: &ProgressBar,
+    ) -> f32 {
         // Handle the case where no batches were valid
         if batch_count == 0 {
             progress_bar.finish_with_message("No valid validation batches found");

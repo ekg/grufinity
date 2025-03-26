@@ -7,10 +7,10 @@
 - [ ] Improve inline comments for complex logic
 
 ## Code Structure and Modularity
-- [ ] Break up large functions in train.rs and tbptt.rs
+- [x] Break up large functions in train.rs and tbptt.rs
 - [ ] Extract reusable components to separate modules
 - [ ] Refactor repetitive code patterns
-- [ ] Create helper functions for common operations
+- [x] Create helper functions for common operations
 
 ## Error Handling
 - [ ] Implement proper error types using thiserror
