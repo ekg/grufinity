@@ -1,8 +1,7 @@
 use burn::tensor::{backend::Backend, Tensor}; 
 // Float imported in tests module where needed
 
-#[cfg(feature = "tch")]
-use burn::backend::libtorch::{LibTorch, LibTorchDevice};
+// No imports needed at this level for LibTorch
 
 /// Implementation of the parallel associative scan algorithm for efficient computation 
 /// of recurrent neural networks.
@@ -203,27 +202,46 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 /// LibTorch-specific implementation of logcumsumexp using the native torch function
 #[cfg(feature = "tch")]
 fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
-    // Import only what we need for the LibTorch backend
-    use burn::backend::libtorch::{LibTorch, tensor::TchBackend};
+    use burn::backend::libtorch::LibTorch;
     
     if let Some(libtorch_tensor) = (&x as &dyn std::any::Any).downcast_ref::<Tensor<LibTorch<f32>, 3>>() {
         // Get the device to use for creating new tensors
         let device = x.device();
         
-        // Convert to raw tensor
-        let data = libtorch_tensor.into_data();
+        // Since we can't directly access the torch tensor, we need to recreate functionality
+        // using what's available in the public API
         
-        // Get the inner torch tensor
-        let raw_tensor = data.tensor();
+        // Clone the tensor to preserve original
+        let tensor_copy = libtorch_tensor.clone();
         
-        // Call the native logcumsumexp function along dim=1 (sequence dimension)
-        let result = raw_tensor.logcumsumexp(1, None);
+        // Do a cumulative sum operation in log space using burn's public API
+        // This is a workaround since we can't directly use torch's logcumsumexp
         
-        // Create a new tensor backend
-        let result_burn = TchBackend::from_tch_tensor(result);
+        // First compute the cumulative sum on the exponential of the input
+        let dims = tensor_copy.dims();
+        let mut result = Tensor::zeros_like(tensor_copy);
         
-        // Convert to the correct tensor type
-        Tensor::<B, 3>::from_data(result_burn, &device)
+        // Split into individual time steps to manually compute cumulative sum
+        for t in 0..dims[1] {
+            let current_slice = if t == 0 {
+                tensor_copy.slice([0..dims[0], 0..1, 0..dims[2]])
+            } else {
+                // Add previous with current using log-sum-exp trick
+                let prev = result.slice([0..dims[0], t-1..t, 0..dims[2]]);
+                let curr = tensor_copy.slice([0..dims[0], t..t+1, 0..dims[2]]);
+                
+                // Use log-sum-exp trick for numerical stability
+                let max_vals = prev.clone().max_pair(curr.clone());
+                let min_vals = prev.clone().min_pair(curr.clone());
+                let diff = min_vals - max_vals.clone();
+                max_vals + (Tensor::ones_like(&diff) + diff.exp()).log()
+            };
+            
+            result = result.slice_assign([0..dims[0], t..t+1, 0..dims[2]], current_slice);
+        }
+        
+        // Return the result
+        return result;
     } else {
         // Fallback to generic implementation if we couldn't downcast
         let [batch_size, seq_len, hidden_dim] = x.dims();
