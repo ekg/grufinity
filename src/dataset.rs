@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, fs::File, io::{self, BufRead, BufReader, Write}};
+use std::{collections::HashMap, path::Path, fs::File, io::{BufRead, BufReader, Write}};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use burn::{
     data::{dataloader::batcher::Batcher, dataset::Dataset},

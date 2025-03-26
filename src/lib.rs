@@ -28,6 +28,11 @@ pub use burn::backend::Cuda;
 #[cfg(feature = "cuda")]
 pub use burn::backend::cuda::CudaDevice;
 
+#[cfg(feature = "vulkan")]
+pub use burn::backend::Vulkan;
+#[cfg(feature = "vulkan")]
+pub use burn::backend::vulkan::VulkanDevice;
+
 #[cfg(feature = "wgpu")]
 pub use burn::backend::wgpu::{Wgpu, WgpuDevice};
 
