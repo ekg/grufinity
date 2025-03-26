@@ -180,6 +180,20 @@ pub type RawBackend = NdArray<f32>;
          not(feature = "tch")))]
 pub type BackendDevice = NdArrayDevice;
 
+// Test-only backend implementations
+// These are only available when running tests
+#[cfg(test)]
+pub use burn::backend::ndarray::{NdArray, NdArrayDevice};
+
+#[cfg(test)]
+pub type BackendWithAutodiff = Autodiff<NdArray<f32>>;
+
+#[cfg(test)]
+pub type RawBackend = NdArray<f32>;
+
+#[cfg(test)]
+pub type BackendDevice = NdArrayDevice;
+
 /// Run with the appropriate backend based on configured features
 #[macro_export]
 macro_rules! use_configured_backend {

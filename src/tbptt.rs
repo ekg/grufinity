@@ -1701,9 +1701,9 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         println!("- Using SGD optimizer with SGD configuration");
     }
 
-    // Declare and initialize the optimizer variable here so it's accessible in the loop
+    // Create optimizer - Adam or SGD based on enabled feature
     #[cfg(feature = "optimizer-adam")]
-    let mut optimizer = config.optimizer.init();
+    let mut optimizer = config.optimizer.init::<B, MinGRULM<B>>();
 
     #[cfg(feature = "optimizer-sgd")]
     let mut optimizer = config.optimizer.init();

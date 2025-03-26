@@ -52,7 +52,7 @@ candle-metal = ["candle", "burn/metal"]
 candle-metal-full = ["candle", "burn/metal", "fusion", "autodiff"]
 
 # Test configuration
-default-test = ["optimizer-adam"]
+default-test = ["optimizer-adam", "ndarray", "autodiff"]
 
 # Test configuration
 [dev-dependencies]
