@@ -190,31 +190,14 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 mod tests {
     // Import necessary items directly from parent module
     use super::parallel_scan;
+    // Use the generic RawBackend from lib.rs
+    use crate::RawBackend;
     use burn::tensor::{Float, Tensor};
     
-    #[cfg(feature = "ndarray")]
-    use burn::backend::ndarray::{NdArray, NdArrayDevice};
-    #[cfg(feature = "ndarray")]
-    type TestBackend = NdArray<f32>;
-    
-    #[cfg(feature = "vulkan")]
-    use burn::backend::wgpu::{Vulkan, WgpuDevice};
-    #[cfg(feature = "vulkan")]
-    type TestBackend = Vulkan<f32, i32>;
-    
-    // Generic test implementation that works with any backend
-    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_parallel_scan_simple() {
-        #[cfg(feature = "ndarray")]
-        #[cfg(feature = "ndarray")]
-        let device = burn::backend::ndarray::NdArrayDevice::default();
-        
-        #[cfg(feature = "vulkan")]
-        let _device = WgpuDevice::default();
-        
-        #[cfg(feature = "vulkan")]
-        let device = WgpuDevice::default();
+        // Use the default device for whichever backend is configured
+        let device = RawBackend::Device::default();
         
         // Create simple test tensors
         // coeffs (a_t): 3 samples, 4 time steps, 2 hidden dims
@@ -253,9 +236,9 @@ mod tests {
             0.9, 0.1,  // Sample 3, t=3
         ];
         
-        let coeffs = Tensor::<TestBackend, 1, Float>::from_data(&*coeffs_data, &device)
+        let coeffs = Tensor::<RawBackend, 1, Float>::from_data(&*coeffs_data, &device)
             .reshape([3, 4, 2]);
-        let values = Tensor::<TestBackend, 1, Float>::from_data(&*values_data, &device)
+        let values = Tensor::<RawBackend, 1, Float>::from_data(&*values_data, &device)
             .reshape([3, 4, 2]);
         
         // Run parallel scan
@@ -292,23 +275,22 @@ mod tests {
         assert!(abs_diff4 < 1e-5f32);
     }
     
-    #[cfg(feature = "ndarray")]
     #[test]
     fn test_parallel_scan_with_initial_state() {
-        let device = burn::backend::ndarray::NdArrayDevice::default();
+        let device = RawBackend::Device::default();
         
         // Create simple test tensors - just 1 sample, 2 time steps, 1 dimension
         let coeffs_data = vec![0.5, 0.4];
         let values_data = vec![0.1, 0.3];
         
-        let coeffs = Tensor::<TestBackend, 1, Float>::from_data(&*coeffs_data, &device)
+        let coeffs = Tensor::<RawBackend, 1, Float>::from_data(&*coeffs_data, &device)
             .reshape([1, 2, 1]);
-        let values = Tensor::<TestBackend, 1, Float>::from_data(&*values_data, &device)
+        let values = Tensor::<RawBackend, 1, Float>::from_data(&*values_data, &device)
             .reshape([1, 2, 1]);
         
         // Initial hidden state h0 = 0.5
         let h0_data = vec![0.5];
-        let h0 = Tensor::<TestBackend, 1, Float>::from_data(&*h0_data, &device)
+        let h0 = Tensor::<RawBackend, 1, Float>::from_data(&*h0_data, &device)
             .reshape([1, 1]);
         
         // Run parallel scan with initial state

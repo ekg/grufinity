@@ -58,41 +58,20 @@ pub struct MinGRUConfig {
 
 #[cfg(test)]
 mod tests {
-    // Import needed for all backends
     use super::MinGRUConfig;
+    use crate::RawBackend;
     use burn::tensor::{Float, Tensor};
     
-    #[cfg(feature = "ndarray")]
-    use burn::backend::ndarray::{NdArray, NdArrayDevice};
-    #[cfg(feature = "ndarray")]
-    type TestBackend = NdArray<f32>;
-    
-    #[cfg(feature = "vulkan")]
-    use burn::backend::wgpu::Vulkan;
-    #[cfg(feature = "vulkan")]
-    use burn::backend::wgpu::WgpuDevice;
-    #[cfg(feature = "vulkan")]
-    type TestBackend = Vulkan<f32, i32>;
-    
-    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_mingru_init() {
-        #[cfg(feature = "ndarray")]
-        #[cfg(feature = "ndarray")]
-        let device = burn::backend::ndarray::NdArrayDevice::default();
-        
-        #[cfg(feature = "vulkan")]
-        let _device = WgpuDevice::default();
-        
-        #[cfg(feature = "vulkan")]
-        let device = WgpuDevice::default();
+        let device = RawBackend::Device::default();
         
         // Create a simple MinGRU configuration
         let config = MinGRUConfig::new(10, 20) // input_size=10, hidden_size=20
             .with_expansion_factor(1.5);
         
-        // Initialize the MinGRU module
-        let mingru = config.init::<TestBackend>(&device);
+        // Initialize the MinGRU module with the generic backend
+        let mingru = config.init::<RawBackend>(&device);
         
         // Verify module structure
         assert_eq!(mingru.to_hidden_and_gate.weight.dims(), [10, 60]); // 2 * 20 * 1.5 = 60
@@ -104,14 +83,13 @@ mod tests {
         assert!((mingru.expansion_factor - 1.5).abs() < 1e-6);
     }
     
-    #[cfg(feature = "ndarray")]
     #[test]
     fn test_mingru_forward_single_step() {
-        let device = burn::backend::ndarray::NdArrayDevice::default();
+        let device = RawBackend::Device::default();
         
         // Create a small MinGRU with no expansion for easier testing
         let config = MinGRUConfig::new(2, 2).with_expansion_factor(1.0);
-        let mingru = config.init::<TestBackend>(&device);
+        let mingru = config.init::<RawBackend>(&device);
         
         // Set weights manually for deterministic test
         let to_hidden_and_gate_weight_data = vec![
@@ -119,7 +97,7 @@ mod tests {
             0.5, 0.6, 0.7, 0.8, // input dim 1 -> hidden and gate
         ];
         
-        let _to_hidden_and_gate_weight = Tensor::<TestBackend, 1, Float>::from_data(
+        let _to_hidden_and_gate_weight = Tensor::<RawBackend, 1, Float>::from_data(
             &*to_hidden_and_gate_weight_data, &device
         ).reshape([2, 4]);
         
@@ -129,12 +107,12 @@ mod tests {
         
         // Create input tensor - single time step
         let x_data = vec![1.0, 2.0]; // batch=1, seq_len=1, input_size=2
-        let x = Tensor::<TestBackend, 1, Float>::from_data(&*x_data, &device)
+        let x = Tensor::<RawBackend, 1, Float>::from_data(&*x_data, &device)
             .reshape([1, 1, 2]);
         
         // Create initial hidden state
         let h0_data = vec![0.0, 0.0]; // batch=1, hidden_size=2
-        let h0 = Tensor::<TestBackend, 1, Float>::from_data(&*h0_data, &device)
+        let h0 = Tensor::<RawBackend, 1, Float>::from_data(&*h0_data, &device)
             .reshape([1, 2]);
         
         // Run forward pass
@@ -143,66 +121,6 @@ mod tests {
         // Verify shapes
         assert_eq!(output.dims(), [1, 1, 2]);
         assert_eq!(next_hidden.dims(), [1, 2]);
-        
-        // Extract results
-        let output_data: Vec<f32> = output.into_data().into_vec().unwrap();
-        let next_hidden_data: Vec<f32> = next_hidden.into_data().into_vec().unwrap();
-        
-        // Basic checks (not the exact values due to activation functions)
-        assert!(output_data.len() == 2);
-        assert!(next_hidden_data.len() == 2);
-        // Activation transforms prevent exact checking, so just verify values are reasonable
-        for val in output_data.iter().chain(next_hidden_data.iter()) {
-            assert!(val.is_finite());
-        }
-    }
-    
-    #[cfg(feature = "vulkan")]
-    #[test]
-    fn test_mingru_forward_single_step() {
-        let device = burn::backend::wgpu::WgpuDevice::default();
-        
-        // Create a small MinGRU with no expansion for easier testing
-        let config = MinGRUConfig::new(2, 2).with_expansion_factor(1.0);
-        let mingru = config.init::<TestBackend>(&device);
-        
-        // Set weights manually for deterministic test
-        let to_hidden_and_gate_weight_data = vec![
-            0.1, 0.2, 0.3, 0.4, // input dim 0 -> hidden and gate
-            0.5, 0.6, 0.7, 0.8, // input dim 1 -> hidden and gate
-        ];
-        
-        let _to_hidden_and_gate_weight = Tensor::<TestBackend, 1, Float>::from_data(
-            &*to_hidden_and_gate_weight_data, &device
-        ).reshape([2, 4]);
-        
-        // Can't directly assign to weight as it's a Param<Tensor>
-        // Instead, we can check that it has the expected shape for this test
-        assert_eq!(mingru.to_hidden_and_gate.weight.dims(), [2, 4]);
-        
-        // Create input tensor - single time step
-        let x_data = vec![1.0, 2.0]; // batch=1, seq_len=1, input_size=2
-        let x = Tensor::<TestBackend, 1, Float>::from_data(&*x_data, &device)
-            .reshape([1, 1, 2]);
-        
-        // Create initial hidden state
-        let h0_data = vec![0.0, 0.0]; // batch=1, hidden_size=2
-        let h0 = Tensor::<TestBackend, 1, Float>::from_data(&*h0_data, &device)
-            .reshape([1, 2]);
-        
-        // Run forward pass
-        let (output, next_hidden) = mingru.forward(x, Some(h0));
-        
-        // Verify shapes
-        assert_eq!(output.dims(), [1, 1, 2]);
-        assert_eq!(next_hidden.dims(), [1, 2]);
-        
-        // Manually compute the expected output (simplified version)
-        // hidden = [0.1, 0.2] * 1.0 + [0.5, 0.6] * 2.0 = [0.1, 0.2] + [1.0, 1.2] = [1.1, 1.4]
-        // gate = [0.3, 0.4] * 1.0 + [0.7, 0.8] * 2.0 = [0.3, 0.4] + [1.4, 1.6] = [1.7, 2.0]
-        // gate = sigmoid(gate) = sigmoid([1.7, 2.0])
-        // hidden = g_function(hidden) (simplified here as identity)
-        // output = gate * hidden + (1 - gate) * prev_hidden
         
         // Extract results
         let output_data: Vec<f32> = output.into_data().into_vec().unwrap();

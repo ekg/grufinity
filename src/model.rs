@@ -22,42 +22,21 @@ pub struct FeedForwardConfig {
 
 #[cfg(test)]
 mod tests {
-    // Import needed for all backends
     use super::MinGRULMConfig;
+    use crate::RawBackend;
     use burn::tensor::{Int, Tensor};
     
-    #[cfg(feature = "ndarray")]
-    use burn::backend::ndarray::{NdArray, NdArrayDevice};
-    #[cfg(feature = "ndarray")]
-    type TestBackend = NdArray<f32>;
-    
-    #[cfg(feature = "vulkan")]
-    use burn::backend::wgpu::Vulkan;
-    #[cfg(feature = "vulkan")]
-    use burn::backend::wgpu::WgpuDevice;
-    #[cfg(feature = "vulkan")]
-    type TestBackend = Vulkan<f32, i32>;
-    
-    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_model_init() {
-        #[cfg(feature = "ndarray")]
-        #[cfg(feature = "ndarray")]
-        let device = burn::backend::ndarray::NdArrayDevice::default();
-        
-        #[cfg(feature = "vulkan")]
-        let _device = WgpuDevice::default();
-        
-        #[cfg(feature = "vulkan")]
-        let device = WgpuDevice::default();
+        let device = RawBackend::Device::default();
         
         // Create a small model config for testing
         let config = MinGRULMConfig::new(10, 32) // vocab_size=10, dim=32
             .with_depth(2)
             .with_chunk_size(16);
             
-        // Initialize the model
-        let model = config.init::<TestBackend>(&device);
+        // Initialize the model with the generic backend
+        let model = config.init::<RawBackend>(&device);
         
         // Check model structure
         assert_eq!(model.token_emb.weight.dims(), [10, 32]); // shape is [vocab_size, dim]
@@ -69,10 +48,9 @@ mod tests {
         assert_eq!(model.chunk_size, 16);
     }
     
-    #[cfg(feature = "ndarray")]
     #[test]
     fn test_model_forward() {
-        let device = burn::backend::ndarray::NdArrayDevice::default();
+        let device = RawBackend::Device::default();
         
         // Create a small model config for testing
         let config = MinGRULMConfig::new(10, 32)
@@ -80,7 +58,7 @@ mod tests {
             .with_chunk_size(16);
             
         // Initialize the model
-        let model = config.init::<TestBackend>(&device);
+        let model = config.init::<RawBackend>(&device);
         
         // Create input tensor - batch of 2, sequence length of 4
         let input_data: Vec<i32> = vec![
@@ -88,7 +66,7 @@ mod tests {
             5, 6, 7, 8,  // Sample 2
         ];
         
-        let input = Tensor::<TestBackend, 1, Int>::from_data(&input_data[..], &device)
+        let input = Tensor::<RawBackend, 1, Int>::from_data(&input_data[..], &device)
             .reshape([2, 4]);
         
         // Run forward pass
@@ -100,38 +78,6 @@ mod tests {
         assert_eq!(hidden_states[0].dims(), [2, 38]); // [batch_size, hidden_dim] is 38 due to expansion factor
     }
     
-    #[cfg(feature = "vulkan")]
-    #[test]
-    fn test_model_forward() {
-        let device = burn::backend::wgpu::WgpuDevice::default();
-        
-        // Create a small model config for testing
-        let config = MinGRULMConfig::new(10, 32)
-            .with_depth(1)  // Single layer for simpler testing
-            .with_chunk_size(16);
-            
-        // Initialize the model
-        let model = config.init::<TestBackend>(&device);
-        
-        // Create input tensor - batch of 2, sequence length of 4
-        let input_data: Vec<i32> = vec![
-            1, 2, 3, 4,  // Sample 1
-            5, 6, 7, 8,  // Sample 2
-        ];
-        
-        let input = Tensor::<TestBackend, 1, Int>::from_data(&input_data[..], &device)
-            .reshape([2, 4]);
-        
-        // Run forward pass
-        let (logits, hidden_states) = model.forward(input, None);
-        
-        // Check output shapes
-        assert_eq!(logits.dims(), [2, 4, 10]); // [batch_size, seq_len, vocab_size]
-        assert_eq!(hidden_states.len(), 1); // One per layer
-        assert_eq!(hidden_states[0].dims(), [2, 38]); // [batch_size, hidden_dim] is 38 due to expansion factor
-    }
-    
-    #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_parameter_count() {
         // Test that parameter count calculation is consistent
