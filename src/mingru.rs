@@ -25,6 +25,20 @@ use crate::parallel_scan::{parallel_scan_log};
 /// g(x) = sigmoid(x)  for x < 0
 ///
 /// This formulation reduces computation by ~33% while maintaining similar expressivity.
+///
+/// # Comparison with Standard GRU
+///
+/// Standard GRU uses two gates and requires more computation:
+///
+/// z_t = σ(W_z · [h_{t-1}, x_t] + b_z)         # Update gate
+/// r_t = σ(W_r · [h_{t-1}, x_t] + b_r)         # Reset gate
+/// h̃_t = tanh(W_h · [r_t ⊙ h_{t-1}, x_t] + b_h) # Candidate hidden state
+/// h_t = (1 - z_t) ⊙ h_{t-1} + z_t ⊙ h̃_t      # New hidden state
+///
+/// MinGRU simplifies by:
+/// 1. Removing the reset gate (r_t)
+/// 2. Using a simpler activation function g(x) instead of tanh
+/// 3. Combining the projection operations for efficiency
 #[derive(Config, Debug)]
 pub struct MinGRUConfig {
     /// Dimension of the input features

@@ -61,6 +61,15 @@ pub fn parallel_scan_log<B: Backend>(
 }
 
 /// Vectorized implementation of the standard parallel scan
+///
+/// This provides an O(log n) algorithm for computing recurrences of the form:
+/// h_t = a_t * h_{t-1} + b_t
+///
+/// The key insight is using cumulative products and sums to vectorize the computation:
+/// 1. Compute a_star = prefix_prod(a_t) = [1, a_1, a_1*a_2, a_1*a_2*a_3, ...]
+/// 2. Compute b_star = [h_0, b_1/a_1, b_2/a_2, ..., b_T/a_T]
+/// 3. Compute prefix_sum of b_star
+/// 4. Multiply by a_star to get the hidden states
 fn parallel_scan_standard_impl<B: Backend>(
     coeffs: Tensor<B, 3>, 
     values: Tensor<B, 3>,
