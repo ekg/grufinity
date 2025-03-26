@@ -64,9 +64,9 @@ struct TrainingArgs {
     #[arg(long)]
     max_chunks_per_epoch: Option<usize>,
 
-    /// Set context length in characters
+    /// Set context length in characters (supports k, m, g suffixes)
     #[arg(long)]
-    context_length: Option<usize>,
+    context_length: Option<String>,
 
     /// Number of training epochs
     #[arg(long)]
@@ -196,9 +196,9 @@ struct TrainingArgs {
     #[arg(long)]
     model_exp_factor: Option<f64>,
 
-    /// Target number of model parameters
+    /// Target number of model parameters (supports k, m, g suffixes)
     #[arg(long)]
-    model_params: Option<usize>,
+    model_params: Option<String>,
 }
 
 /// Parse a string with optional metric suffix (k, m, g) into a number
@@ -417,11 +417,19 @@ fn main() {
                max_chunks * modified_config.chunk_size);
     }
     
-    if let Some(context_length) = args.context_length {
-        let chunks_needed = calculate_chunks_for_context(modified_config.chunk_size, context_length);
-        modified_config.max_chunks_per_epoch = chunks_needed;
-        println!("Setting context length to {} characters", context_length);
-        println!("Using {} chunks with chunk size {}", chunks_needed, modified_config.chunk_size);
+    if let Some(context_length_str) = args.context_length {
+        match parse_with_suffix::<usize>(&context_length_str) {
+            Ok(context_length) => {
+                let chunks_needed = calculate_chunks_for_context(modified_config.chunk_size, context_length);
+                modified_config.max_chunks_per_epoch = chunks_needed;
+                println!("Setting context length to {} characters", context_length);
+                println!("Using {} chunks with chunk size {}", chunks_needed, modified_config.chunk_size);
+            },
+            Err(e) => {
+                eprintln!("Error parsing context length '{}': {}", context_length_str, e);
+                std::process::exit(1);
+            }
+        }
     }
     
     if let Some(epochs) = args.num_epochs {
@@ -661,7 +669,16 @@ fn main() {
         println!("Setting expansion factor to: {}", exp_factor);
     }
     
-    if let Some(param_count) = args.model_params {
+    if let Some(param_count_str) = args.model_params {
+        // Parse the parameter count with suffix support
+        let param_count = match parse_with_suffix::<usize>(&param_count_str) {
+            Ok(count) => count,
+            Err(e) => {
+                eprintln!("Error parsing model parameters '{}': {}", param_count_str, e);
+                std::process::exit(1);
+            }
+        };
+        
         // Compute the dimension needed to meet the parameter target
         let optimal_dim = modified_config.model.compute_dim_for_param_count(param_count);
         
