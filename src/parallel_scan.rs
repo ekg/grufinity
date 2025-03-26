@@ -1,4 +1,4 @@
-use burn::tensor::{backend::Backend, Tensor, Float};
+use burn::tensor::{backend::Backend, Tensor, Float};  // Float is used as a type parameter
 
 /// Implementation of the parallel associative scan algorithm for efficient computation 
 /// of recurrent neural networks.
@@ -233,9 +233,9 @@ mod tests {
             0.9, 0.1,  // Sample 3, t=3
         ];
         
-        let coeffs = Tensor::<TestBackend, 1, Float>::from_data(&coeffs_data, &device)
+        let coeffs = Tensor::<TestBackend, 1, Float>::from_data(&*coeffs_data, &device)
             .reshape([3, 4, 2]);
-        let values = Tensor::<TestBackend, 1, Float>::from_data(&values_data, &device)
+        let values = Tensor::<TestBackend, 1, Float>::from_data(&*values_data, &device)
             .reshape([3, 4, 2]);
         
         // Run parallel scan
@@ -275,14 +275,14 @@ mod tests {
         let coeffs_data = vec![0.5, 0.4];
         let values_data = vec![0.1, 0.3];
         
-        let coeffs = Tensor::<TestBackend, 1, Float>::from_data(&coeffs_data, &device)
+        let coeffs = Tensor::<TestBackend, 1, Float>::from_data(&*coeffs_data, &device)
             .reshape([1, 2, 1]);
-        let values = Tensor::<TestBackend, 1, Float>::from_data(&values_data, &device)
+        let values = Tensor::<TestBackend, 1, Float>::from_data(&*values_data, &device)
             .reshape([1, 2, 1]);
         
         // Initial hidden state h0 = 0.5
         let h0_data = vec![0.5];
-        let h0 = Tensor::<TestBackend, 1, Float>::from_data(&h0_data, &device)
+        let h0 = Tensor::<TestBackend, 1, Float>::from_data(&*h0_data, &device)
             .reshape([1, 1]);
         
         // Run parallel scan with initial state
