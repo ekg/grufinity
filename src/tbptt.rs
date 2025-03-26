@@ -951,7 +951,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         println!("Training epoch {}", epoch);
 
         // Initialize for the epoch
-        let (accumulator, progress_bar, total_steps) = self.prepare_for_epoch::<O>(dataloader);
+        let (mut accumulator, progress_bar, total_steps) = self.prepare_for_epoch::<O>(dataloader);
         let mut accumulation_current = 0;
         let mut total_loss = 0.0;
         let mut batch_count = 0;
@@ -1416,7 +1416,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
             // Slice the logits to the minimum sequence length
             let logits_sliced = if seq_len > min_seq_len {
-                logits.slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
+                logits.clone().slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
             } else {
                 logits.clone()
             };
