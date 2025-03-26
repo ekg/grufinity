@@ -184,52 +184,64 @@ pub type BackendDevice = NdArrayDevice;
 pub fn get_backend_name() -> &'static str {
     #[cfg(feature = "cuda")]
     {
-        return "CUDA";
+        "CUDA"
     }
     #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
     {
-        return "Candle CUDA";
+        "Candle CUDA"
     }
     #[cfg(all(feature = "vulkan", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
     {
-        return "Vulkan";
+        "Vulkan"
     }
     #[cfg(all(feature = "wgpu", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle"), not(feature = "vulkan")))]
     {
-        return "WebGPU";
+        "WebGPU"
     }
     #[cfg(all(feature = "candle-metal", 
           not(feature = "cuda"), not(feature = "candle-cuda"), 
           not(feature = "wgpu"), not(feature = "vulkan")))]
     {
-        return "Candle Metal";
+        "Candle Metal"
     }
     #[cfg(all(feature = "candle", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan")))]
     {
-        return "Candle CPU";
+        "Candle CPU"
     }
     #[cfg(all(feature = "tch", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")))]
     {
-        return "LibTorch";
+        "LibTorch"
     }
     #[cfg(all(feature = "ndarray", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), 
          not(feature = "tch")))]
     {
-        return "NdArray";
+        "NdArray"
     }
     
     // Fallback for unknown combinations
-    "Unknown Backend"
+    #[cfg(not(any(
+        feature = "cuda",
+        all(feature = "candle-cuda", not(feature = "cuda")),
+        all(feature = "vulkan", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle")),
+        all(feature = "wgpu", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle"), not(feature = "vulkan")),
+        all(feature = "candle-metal", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "wgpu"), not(feature = "vulkan")),
+        all(feature = "candle", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan")),
+        all(feature = "tch", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")),
+        all(feature = "ndarray", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), not(feature = "tch"))
+    )))]
+    {
+        "Unknown Backend"
+    }
 }
 
 // Test-only backend implementations

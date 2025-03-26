@@ -263,7 +263,7 @@ fn main() {
     let data_path = args.data.unwrap_or_else(|| "data/sample.txt".to_string());
     let artifact_dir = args.output;
     let config_path = args.config.unwrap_or_default();
-    let device_id = args.device_id;
+    let _device_id = args.device_id;
     
     // Token-based parameters (will be converted to chunks)
     let _update_tokens = args.update_tokens;
