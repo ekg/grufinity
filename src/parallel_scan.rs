@@ -219,7 +219,7 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
         
         // First compute the cumulative sum on the exponential of the input
         let dims = tensor_copy.dims();
-        let mut result = Tensor::zeros_like(tensor_copy);
+        let mut result = Tensor::zeros_like(&tensor_copy);
         
         // Split into individual time steps to manually compute cumulative sum
         for t in 0..dims[1] {
@@ -240,8 +240,8 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
             result = result.slice_assign([0..dims[0], t..t+1, 0..dims[2]], current_slice);
         }
         
-        // Return the result
-        return result;
+        // Convert the LibTorch tensor back to generic B type
+        return Tensor::<B, 3>::from_data(result.into_data(), &device);
     } else {
         // Fallback to generic implementation if we couldn't downcast
         let [batch_size, seq_len, hidden_dim] = x.dims();

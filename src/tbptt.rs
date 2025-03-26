@@ -1757,8 +1757,11 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         #[cfg(feature = "optimizer-sgd")]
         let mut optimizer = config.optimizer.init();
         
+        // Create optimizer reference for the match expression
+        let optimizer_ref = &mut optimizer;
+        
         // Training phase
-        let train_loss = match &mut optimizer {
+        let train_loss = match optimizer_ref {
             #[cfg(feature = "optimizer-adam")]
             optimizer => trainer.train_epoch(&mut train_dataset, &train_batcher, optimizer, epoch),
             #[cfg(feature = "optimizer-sgd")]
