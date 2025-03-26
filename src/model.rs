@@ -23,13 +23,13 @@ pub struct FeedForwardConfig {
 #[cfg(test)]
 mod tests {
     // Import specific items needed from parent module
-    use super::MinGRULMConfig;
+    // Only import what's needed from parent module
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
     
     #[cfg(feature = "ndarray")]
-    use burn::tensor::{Float, Int, Tensor};
+    use burn::tensor::{Int, Tensor};
     #[cfg(feature = "ndarray")]
     type TestBackend = NdArray<f32>;
     

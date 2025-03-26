@@ -59,7 +59,7 @@ pub struct MinGRUConfig {
 #[cfg(test)]
 mod tests {
     // Import specific items needed from parent module
-    use super::MinGRUConfig;
+    // Import only what's needed from parent module
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};

@@ -188,7 +188,7 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 
 #[cfg(test)]
 mod tests {
-    use super::parallel_scan;
+    // Import necessary items directly from parent module
     
     #[cfg(feature = "ndarray")]
     use burn::backend::ndarray::{NdArray, NdArrayDevice};
