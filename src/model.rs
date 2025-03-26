@@ -38,15 +38,19 @@ mod tests {
     #[cfg(feature = "vulkan")]
     type TestBackend = Vulkan<f32, i32>;
     
+    // Import NdArrayDevice for tests regardless of active features
+    #[cfg(test)]
+    use burn::backend::ndarray::NdArrayDevice;
+    
     #[cfg(any(feature = "ndarray", feature = "vulkan"))]
     #[test]
     fn test_model_init() {
         #[cfg(feature = "ndarray")]
         #[cfg(feature = "ndarray")]
-        let device = NdArrayDevice::default();
+        let device = burn::backend::ndarray::NdArrayDevice::default();
         
         #[cfg(feature = "vulkan")]
-        let device = WgpuDevice::default();
+        let _device = WgpuDevice::default();
         
         #[cfg(feature = "vulkan")]
         let device = WgpuDevice::default();
