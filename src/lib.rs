@@ -181,17 +181,45 @@ pub type RawBackend = NdArray<f32>;
 pub type BackendDevice = NdArrayDevice;
 
 // Test-only backend implementations
-// These are only available when running tests
-#[cfg(test)]
+// These are only available when running tests and should be used preferentially over
+// feature-specific backends when testing
+#[cfg(all(test, not(any(feature = "ndarray"))))]
 pub use burn::backend::ndarray::{NdArray, NdArrayDevice};
 
-#[cfg(test)]
+#[cfg(all(test, feature = "autodiff", not(any(
+    all(feature = "cuda", feature = "autodiff"),
+    all(feature = "candle-cuda", feature = "autodiff", not(feature = "cuda")),
+    all(feature = "vulkan", feature = "autodiff", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle")),
+    all(feature = "wgpu", feature = "autodiff", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle"), not(feature = "vulkan")),
+    all(feature = "candle-metal", feature = "autodiff", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "wgpu"), not(feature = "vulkan")),
+    all(feature = "candle", feature = "autodiff", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan")),
+    all(feature = "tch", feature = "autodiff", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")),
+    all(feature = "ndarray", feature = "autodiff", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), not(feature = "tch"))
+))))]
 pub type BackendWithAutodiff = Autodiff<NdArray<f32>>;
 
-#[cfg(test)]
+#[cfg(all(test, not(any(
+    feature = "cuda",
+    all(feature = "candle-cuda", not(feature = "cuda")),
+    all(feature = "vulkan", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle")),
+    all(feature = "wgpu", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle"), not(feature = "vulkan")),
+    all(feature = "candle-metal", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "wgpu"), not(feature = "vulkan")),
+    all(feature = "candle", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan")),
+    all(feature = "tch", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")),
+    all(feature = "ndarray", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), not(feature = "tch"))
+))))]
 pub type RawBackend = NdArray<f32>;
 
-#[cfg(test)]
+#[cfg(all(test, not(any(
+    feature = "cuda",
+    all(feature = "candle-cuda", not(feature = "cuda")),
+    all(feature = "vulkan", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle")),
+    all(feature = "wgpu", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle"), not(feature = "vulkan")),
+    all(feature = "candle-metal", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "wgpu"), not(feature = "vulkan")),
+    all(feature = "candle", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan")),
+    all(feature = "tch", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")),
+    all(feature = "ndarray", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), not(feature = "tch"))
+))))]
 pub type BackendDevice = NdArrayDevice;
 
 /// Run with the appropriate backend based on configured features
