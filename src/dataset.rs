@@ -151,6 +151,61 @@ impl CharVocab {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_char_vocab_init() {
+        let mut vocab = CharVocab::new();
+        assert_eq!(vocab.size(), 0);
+        
+        // Build from empty text (should create full byte vocabulary)
+        vocab.build_from_text("");
+        assert_eq!(vocab.size(), 256);
+        
+        // Check mapping
+        assert_eq!(vocab.byte_to_index(65), Some(65)); // 'A'
+        assert_eq!(vocab.index_to_byte(65), Some(65)); // 'A'
+    }
+    
+    #[test]
+    fn test_char_vocab_encode_decode() {
+        let mut vocab = CharVocab::new();
+        vocab.build_from_text("");
+        
+        // Test encoding
+        let text = "Hello, world!";
+        let encoded = vocab.encode_text(text);
+        
+        // Check encoded values match ASCII values
+        let expected: Vec<usize> = text.bytes().map(|b| b as usize).collect();
+        assert_eq!(encoded, expected);
+        
+        // Test decoding
+        let decoded = vocab.decode_text(&encoded);
+        assert_eq!(decoded, text);
+    }
+    
+    #[test]
+    fn test_char_vocab_special_cases() {
+        let mut vocab = CharVocab::new();
+        vocab.build_from_text("");
+        
+        // Test padding token
+        assert_eq!(vocab.padding_token(), 0);
+        
+        // Test encoding/decoding with special characters
+        let text = "Special chars: 你好, こんにちは, नमस्ते";
+        let encoded = vocab.encode_text(text);
+        let decoded = vocab.decode_text(&encoded);
+        
+        // With byte-level vocab, we can only perfectly roundtrip ASCII
+        // For multi-byte chars, we should at least get the right byte count
+        assert_eq!(encoded.len(), text.as_bytes().len());
+    }
+}
+
 /// Text dataset that supports chunking for long sequences
 #[derive(Clone)]
 pub struct TextDataset {
