@@ -1304,8 +1304,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         let batch = batch_opt.unwrap();
 
-        // Skip chunks that don't have valid dimensions
-        if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
+        // Skip chunks that don't have valid dimensions with better tensor shape checking
+        if batch.input.dims().len() < 2 || batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
             progress_bar.inc(1);
             progress_bar.set_message("Skipped batch - invalid dimensions");
 
