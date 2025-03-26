@@ -64,7 +64,7 @@ mod tests {
     
     #[test]
     fn test_mingru_init() {
-        let device = RawBackend::Device::default();
+        let device = <RawBackend as Backend>::Device::default();
         
         // Create a simple MinGRU configuration
         let config = MinGRUConfig::new(10, 20) // input_size=10, hidden_size=20
@@ -85,7 +85,7 @@ mod tests {
     
     #[test]
     fn test_mingru_forward_single_step() {
-        let device = RawBackend::Device::default();
+        let device = <RawBackend as Backend>::Device::default();
         
         // Create a small MinGRU with no expansion for easier testing
         let config = MinGRUConfig::new(2, 2).with_expansion_factor(1.0);

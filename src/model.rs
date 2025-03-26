@@ -28,7 +28,7 @@ mod tests {
     
     #[test]
     fn test_model_init() {
-        let device = RawBackend::Device::default();
+        let device = <RawBackend as Backend>::Device::default();
         
         // Create a small model config for testing
         let config = MinGRULMConfig::new(10, 32) // vocab_size=10, dim=32
@@ -50,7 +50,7 @@ mod tests {
     
     #[test]
     fn test_model_forward() {
-        let device = RawBackend::Device::default();
+        let device = <RawBackend as Backend>::Device::default();
         
         // Create a small model config for testing
         let config = MinGRULMConfig::new(10, 32)

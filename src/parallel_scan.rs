@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn test_parallel_scan_simple() {
         // Use the default device for whichever backend is configured
-        let device = RawBackend::Device::default();
+        let device = <RawBackend as Backend>::Device::default();
         
         // Create simple test tensors
         // coeffs (a_t): 3 samples, 4 time steps, 2 hidden dims
@@ -277,7 +277,7 @@ mod tests {
     
     #[test]
     fn test_parallel_scan_with_initial_state() {
-        let device = RawBackend::Device::default();
+        let device = <RawBackend as Backend>::Device::default();
         
         // Create simple test tensors - just 1 sample, 2 time steps, 1 dimension
         let coeffs_data = vec![0.5, 0.4];
