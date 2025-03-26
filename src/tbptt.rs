@@ -1752,16 +1752,26 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 
         // Create optimizer - Adam or SGD based on enabled feature
         #[cfg(feature = "optimizer-adam")]
-        let mut optimizer = config.optimizer.init::<B, MinGRULM<B>>();
-
+        let mut adam_optimizer = config.optimizer.init::<B, MinGRULM<B>>();
+        
         #[cfg(feature = "optimizer-sgd")]
-        let mut optimizer = config.optimizer.init();
+        let mut sgd_optimizer = config.optimizer.init();
         
-        // Create optimizer reference for the match expression
-        let optimizer_ref = &mut optimizer;
-        
-        // Training phase
-        let train_loss = match optimizer_ref {
+        // Training phase - handle different optimizer types directly
+        let train_loss = 
+        #[cfg(feature = "optimizer-adam")]
+        {
+            trainer.train_epoch(&mut train_dataset, &train_batcher, &mut adam_optimizer, epoch)
+        }
+        #[cfg(feature = "optimizer-sgd")]
+        {
+            trainer.train_epoch(&mut train_dataset, &train_batcher, &mut sgd_optimizer, epoch)
+        }
+        #[cfg(not(any(feature = "optimizer-adam", feature = "optimizer-sgd")))]
+        {
+            let mut default_optimizer = AdamConfig::new().init::<B, MinGRULM<B>>();
+            trainer.train_epoch(&mut train_dataset, &train_batcher, &mut default_optimizer, epoch)
+        };
             #[cfg(feature = "optimizer-adam")]
             optimizer => trainer.train_epoch(&mut train_dataset, &train_batcher, optimizer, epoch),
             #[cfg(feature = "optimizer-sgd")]

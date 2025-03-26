@@ -224,11 +224,13 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
         // Split into individual time steps to manually compute cumulative sum
         for t in 0..dims[1] {
             let current_slice = if t == 0 {
-                tensor_copy.slice([0..dims[0], 0..1, 0..dims[2]])
+                // Clone to avoid moving
+                tensor_copy.clone().slice([0..dims[0], 0..1, 0..dims[2]])
             } else {
                 // Add previous with current using log-sum-exp trick
-                let prev = result.slice([0..dims[0], t-1..t, 0..dims[2]]);
-                let curr = tensor_copy.slice([0..dims[0], t..t+1, 0..dims[2]]);
+                // Clone to avoid moving
+                let prev = result.clone().slice([0..dims[0], t-1..t, 0..dims[2]]);
+                let curr = tensor_copy.clone().slice([0..dims[0], t..t+1, 0..dims[2]]);
                 
                 // Use log-sum-exp trick for numerical stability
                 let max_vals = prev.clone().max_pair(curr.clone());
