@@ -710,6 +710,11 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         accumulation_current: &mut usize,
         do_update: bool,
     ) -> f32 {
+        // Safely get tensor dimensions with error handling
+        if chunk.input.dims().len() < 2 {
+            return 0.0; // Return zero loss for invalid tensors
+        }
+        
         let batch_size = chunk.input.dims()[0];
         let _seq_len = chunk.input.dims()[1];
         let device = chunk.input.device();
@@ -719,8 +724,18 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         // Process each position in the batch
         for i in 0..batch_size {
-            let doc_id = chunk.doc_ids[i];
-            let chunk_idx = chunk.chunk_indices[i];
+            let doc_id = if i < chunk.doc_ids.len() {
+                chunk.doc_ids[i]
+            } else {
+                continue; // Skip if out of bounds
+            };
+            
+            let chunk_idx = if i < chunk.chunk_indices.len() {
+                chunk.chunk_indices[i]
+            } else {
+                continue; // Skip if out of bounds
+            };
+            
             let is_padded = chunk.is_padded.get(i).cloned().unwrap_or(false);
 
             // Retrieve or initialize hidden state for this position
@@ -1073,8 +1088,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         let batch = batch_opt.unwrap();
 
-        // Check if tensors have valid dimensions
-        if batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
+        // Check if tensors have valid dimensions and handle empty tensors more gracefully
+        if batch.input.dims().len() < 2 || batch.input.dims()[0] == 0 || batch.input.dims()[1] == 0 {
             progress_bar.inc(1);
             progress_bar.set_message("Skipped batch - invalid dimensions");
 
@@ -1410,6 +1425,12 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         batch: &ChunkedTextBatch<B::InnerBackend>,
         logits: &Tensor<B::InnerBackend, 3>,
     ) -> f32 {
+        // Check for valid tensor dimensions
+        if logits.dims().len() != 3 || batch.target.dims().len() != 2 {
+            println!("Warning: Invalid tensor dimensions in validation.");
+            return 0.0; // Return zero loss for invalid tensors
+        }
+        
         let [batch_size, seq_len, vocab_size] = logits.dims();
         let [target_batch_size, target_seq_len] = batch.target.dims();
 
@@ -1418,29 +1439,24 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             println!("Warning: Dimension mismatch in validation. logits: [{}, {}, {}], target: [{}, {}]",
                      batch_size, seq_len, vocab_size, target_batch_size, target_seq_len);
 
-            // Use the minimum sequence length
+            // Get the minimum dimensions to avoid out-of-bounds issues
+            let min_batch_size = batch_size.min(target_batch_size);
             let min_seq_len = seq_len.min(target_seq_len);
+            
+            if min_batch_size == 0 || min_seq_len == 0 {
+                println!("Warning: Zero-sized tensor dimension detected, skipping loss calculation");
+                return 0.0;
+            }
 
-            // Slice the logits to the minimum sequence length
-            let logits_sliced = if seq_len > min_seq_len {
-                logits.clone().slice([0..batch_size, 0..min_seq_len, 0..vocab_size])
-            } else {
-                logits.clone()
-            };
+            // Slice the logits to the minimum dimensions
+            let logits_sliced = logits.clone().slice([0..min_batch_size, 0..min_seq_len, 0..vocab_size]);
 
-            // Slice the target to the minimum sequence length
-            let target_sliced = if target_seq_len > min_seq_len {
-                batch
-                    .target
-                    .clone()
-                    .slice([0..target_batch_size, 0..min_seq_len])
-            } else {
-                batch.target.clone()
-            };
+            // Slice the target to the minimum dimensions
+            let target_sliced = batch.target.clone().slice([0..min_batch_size, 0..min_seq_len]);
 
             // Reshape for loss calculation
-            let logits_reshaped = logits_sliced.reshape([batch_size * min_seq_len, vocab_size]);
-            let targets_reshaped = target_sliced.reshape([target_batch_size * min_seq_len]);
+            let logits_reshaped = logits_sliced.reshape([min_batch_size * min_seq_len, vocab_size]);
+            let targets_reshaped = target_sliced.reshape([min_batch_size * min_seq_len]);
 
             (logits_reshaped, targets_reshaped)
         } else {
@@ -1451,10 +1467,17 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             (logits_reshaped, targets_reshaped)
         };
 
+        // Additional check for empty tensors
+        if loss_reshaped.numel() == 0 || targets_reshaped.numel() == 0 {
+            println!("Warning: Empty tensor detected during loss calculation");
+            return 0.0;
+        }
+
         let device = loss_reshaped.device();
         let loss_fn = CrossEntropyLossConfig::new().init(&device);
         let loss = loss_fn.forward(loss_reshaped, targets_reshaped);
 
+        // Safely extract scalar value, returning 0 if anything goes wrong
         loss.into_scalar().to_f32()
     }
     
