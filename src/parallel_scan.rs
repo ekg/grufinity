@@ -192,7 +192,7 @@ mod tests {
     use super::parallel_scan;
     // Use the generic RawBackend from lib.rs
     use crate::RawBackend;
-    use burn::tensor::{Float, Tensor};
+    use burn::tensor::{backend::Backend, Float, Tensor};
     
     #[test]
     fn test_parallel_scan_simple() {

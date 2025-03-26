@@ -24,7 +24,7 @@ pub struct FeedForwardConfig {
 mod tests {
     use super::MinGRULMConfig;
     use crate::RawBackend;
-    use burn::tensor::{Int, Tensor};
+    use burn::tensor::{backend::Backend, Int, Tensor};
     
     #[test]
     fn test_model_init() {
