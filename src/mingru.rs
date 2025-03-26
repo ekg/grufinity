@@ -6,13 +6,23 @@ use burn::{
 };
 use crate::parallel_scan::{parallel_scan_log};
 
-/// Configuration for MinGRU module
+/// Configuration for MinGRU (Minimal Gated Recurrent Unit) module.
+///
+/// The MinGRU is a simplified version of the GRU that uses a single gate
+/// and a special activation function to reduce computation while maintaining
+/// performance comparable to a standard GRU.
 #[derive(Config, Debug)]
 pub struct MinGRUConfig {
+    /// Dimension of the input features
     input_size: usize,
+    /// Dimension of the hidden state
     hidden_size: usize,
+    /// Factor to expand the hidden dimension in intermediate computations
+    /// Values > 1.0 increase model capacity with minimal computational overhead
     #[config(default = "1.0")]
     expansion_factor: f64,
+    /// Whether to include a projection layer to transform from expanded dimension
+    /// back to hidden_size. Always true when expansion_factor != 1.0
     #[config(default = "true")]
     proj_out: bool,
 }
@@ -48,29 +58,54 @@ impl MinGRUConfig {
     }
 }
 
-/// MinGRU implementation following the paper
+/// MinGRU implementation following the parallel associative scan algorithm.
+///
+/// Mathematical formulation of MinGRU:
+/// z_t = σ(W_z · [h_{t-1}, x_t] + b_z)         # Update gate
+/// h̃_t = W_h · [h_{t-1}, x_t] + b_h            # Candidate hidden state
+/// h_t = (1 - z_t) ⊙ h_{t-1} + z_t ⊙ g(h̃_t)    # New hidden state
+///
+/// where g(x) is a custom activation function:
+/// g(x) = x + 0.5  for x ≥ 0
+/// g(x) = sigmoid(x)  for x < 0
+///
+/// The parallel associative scan allows efficient computation across
+/// the entire sequence in O(log n) parallel steps instead of O(n) sequential steps.
 #[derive(Module, Debug)]
 pub struct MinGRU<B: Backend> {
+    /// Combined projection for hidden state and gate computations
+    /// Shape: [input_size, 2 * hidden_size * expansion_factor]
     to_hidden_and_gate: Linear<B>,
+    /// Optional projection layer to transform from expanded dimension back to hidden_size
+    /// Shape: [hidden_size * expansion_factor, hidden_size]
     to_out: Linear<B>,
+    /// Expansion factor for internal representations
     #[module(skip)]
     expansion_factor: f64,
+    /// Whether to use the output projection
     #[module(skip)]
     proj_out: bool,
 }
 
 impl<B: Backend> MinGRU<B> {
-    /// Forward pass of MinGRU
+    /// Forward pass of MinGRU implementing parallel or sequential processing.
+    ///
+    /// This implementation automatically chooses between:
+    /// 1. Sequential processing for single steps with existing hidden state
+    /// 2. Parallel processing using associative scan for multi-step sequences
     ///
     /// # Arguments
     ///
     /// * `x` - Input tensor of shape [batch_size, seq_len, input_size]
     /// * `prev_hidden` - Optional previous hidden state [batch_size, hidden_size]
+    ///                   If None, hidden state is initialized with zeros
     ///
     /// # Returns
     ///
-    /// * `output` - Output tensor [batch_size, seq_len, hidden_size]
-    /// * `next_hidden` - Next hidden state [batch_size, hidden_size]
+    /// * `output` - Output tensor of shape [batch_size, seq_len, hidden_size]
+    ///              Contains hidden states for all timesteps in the sequence
+    /// * `next_hidden` - Next hidden state of shape [batch_size, hidden_size]
+    ///                   To be used in subsequent calls for continuing sequences
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
         let [batch_size, seq_len, _] = x.dims();
         let _device = x.device();

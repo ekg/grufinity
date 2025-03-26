@@ -1,5 +1,7 @@
 # GRUfinity: Efficient Long-Context RNN Language Model
 
+**Development Status**: This project is being improved following best practices from Burn examples. See [TODO.md](TODO.md) for the current improvement plan.
+
 GRUfinity is a Rust implementation of the simplified Gated Recurrent Unit (GRU) architecture using the Burn machine learning framework. This implementation features two key innovations:
 
 1. **Parallel Associative Scan** - Enables efficient parallel computation of recurrent networks

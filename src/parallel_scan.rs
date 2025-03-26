@@ -1,7 +1,14 @@
 use burn::tensor::{backend::Backend, Tensor};
 
-/// Implementation of the parallel associative scan algorithm 
-/// for efficient computation of recurrence: h_t = a_t ⊙ h_{t-1} + b_t
+/// Implementation of the parallel associative scan algorithm for efficient computation 
+/// of recurrent neural networks.
+///
+/// This algorithm computes the recurrence relation: h_t = a_t ⊙ h_{t-1} + b_t
+/// in O(log n) parallel steps instead of O(n) sequential steps, enabling much faster
+/// processing of long sequences on parallel hardware like GPUs.
+///
+/// The key insight is that this recurrence can be reformulated as a scan operation
+/// with an associative binary operator, allowing parallel computation.
 pub fn parallel_scan<B: Backend>(
     coeffs: Tensor<B, 3>,  // a_t coefficients (batch_size, seq_len, hidden_dim)
     values: Tensor<B, 3>,  // b_t values (batch_size, seq_len, hidden_dim)
@@ -11,7 +18,17 @@ pub fn parallel_scan<B: Backend>(
 }
 
 /// Log-space implementation of the parallel associative scan algorithm
-/// for improved numerical stability
+/// for improved numerical stability when processing long sequences.
+///
+/// By performing computations in log space, we can avoid numerical underflow/overflow
+/// issues that often occur with long sequences due to repeated multiplication.
+///
+/// Mathematical formulation:
+/// Instead of computing h_t = (1-z_t) * h_{t-1} + z_t * g(h̃_t) directly,
+/// we compute:
+/// log(h_t) = logsumexp(log(1-z_t) + log(h_{t-1}), log(z_t) + log(g(h̃_t)))
+///
+/// Where logsumexp(a,b) = max(a,b) + log(1 + exp(min(a,b) - max(a,b)))
 pub fn parallel_scan_log<B: Backend>(
     log_coeffs: Tensor<B, 3>,  // log(a_t) coefficients (batch_size, seq_len, hidden_dim)
     log_values: Tensor<B, 3>,  // log(b_t) values (batch_size, seq_len, hidden_dim)

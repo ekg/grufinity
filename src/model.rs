@@ -80,17 +80,40 @@ impl<B: Backend> FeedForward<B> {
     }
 }
 
-/// MinGRU Language Model config
+/// MinGRU Language Model configuration.
+///
+/// This configuration defines a GRU-based language model with the following architecture:
+/// 1. Token embedding layer
+/// 2. Multiple MinGRU layers with feed-forward networks
+/// 3. Normalization layers (RMSNorm)
+/// 4. Final projection to vocabulary logits
+///
+/// The model processes text in chunks and can handle arbitrarily long sequences with
+/// constant memory usage by preserving hidden states between chunks.
 #[derive(Config, Debug)]
 pub struct MinGRULMConfig {
+    /// Number of tokens in vocabulary
     num_tokens: usize,
+    
+    /// Hidden dimension size throughout the model
     dim: usize,
+    
+    /// Number of MinGRU layers in the model
     #[config(default = "2")]
     depth: usize,
+    
+    /// Multiplier for feed-forward layer dimension
+    /// Controls the size of feed-forward networks as: dim * ff_mult
     #[config(default = "2.0")]
     ff_mult: f64,
+    
+    /// Expansion factor for MinGRU internal representations
+    /// Higher values increase model capacity with minimal computational overhead
     #[config(default = "1.2")]
     expansion_factor: f64,
+    
+    /// Size of chunks (in tokens) for processing long sequences
+    /// Affects both memory usage and context window size
     #[config(default = "256")]
     chunk_size: usize,
 }
