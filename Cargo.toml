@@ -68,3 +68,7 @@ path = "src/bin/generate.rs"
 name = "train"
 path = "src/bin/train.rs"
 
+[[example]]
+name = "libtorch_example"
+path = "examples/libtorch_example.rs"
+
