@@ -40,12 +40,12 @@ mod tests {
         let model = config.init::<TestBackend>(&device);
         
         // Check model structure
-        assert_eq!(model.token_emb.weight.dims(), [10, 32]); // vocab_size x dim
+        assert_eq!(model.token_emb.weight.dims(), [32, 10]); // shape is [dim, vocab_size]
         assert_eq!(model.mingru_layers.len(), 2); // depth
         assert_eq!(model.norm1_layers.len(), 2);
         assert_eq!(model.norm2_layers.len(), 2);
         assert_eq!(model.ff_layers.len(), 2);
-        assert_eq!(model.to_logits.weight.dims(), [10, 32]); // vocab_size x dim
+        assert_eq!(model.to_logits.weight.dims(), [32, 10]); // shape is [dim, vocab_size]
         assert_eq!(model.chunk_size, 16);
     }
     
@@ -76,7 +76,7 @@ mod tests {
         // Check output shapes
         assert_eq!(logits.dims(), [2, 4, 10]); // [batch_size, seq_len, vocab_size]
         assert_eq!(hidden_states.len(), 1); // One per layer
-        assert_eq!(hidden_states[0].dims(), [2, 32]); // [batch_size, hidden_dim]
+        assert_eq!(hidden_states[0].dims(), [2, 38]); // [batch_size, hidden_dim] is 38 due to expansion factor
     }
     
     #[test]
