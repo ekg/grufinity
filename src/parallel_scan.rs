@@ -1,4 +1,4 @@
-use burn::tensor::{backend::Backend, Tensor};
+use burn::tensor::{backend::Backend, Tensor, Float};
 
 /// Implementation of the parallel associative scan algorithm for efficient computation 
 /// of recurrent neural networks.
