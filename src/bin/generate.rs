@@ -15,7 +15,6 @@ use grufinity::{
     use_configured_backend,
     RawBackend,
     GRUfinityError,
-    Result as GRUfinityResult,
 };
 
 // Global verbosity setting for controlling debug output

@@ -203,6 +203,7 @@ struct TrainingArgs {
 
 /// Parse a string with optional metric suffix (k, m, g) into a number
 /// Examples: "1k" -> 1024, "2m" -> 2097152, "1.5g" -> 1610612736
+#[allow(dead_code)]
 fn parse_with_suffix<T>(s: &str) -> Result<T, String> 
 where 
     T: std::str::FromStr + 'static,

@@ -7,8 +7,15 @@ use burn::tensor::{backend::Backend, Tensor};
 /// in O(log n) parallel steps instead of O(n) sequential steps, enabling much faster
 /// processing of long sequences on parallel hardware like GPUs.
 ///
-/// The key insight is that this recurrence can be reformulated as a scan operation
-/// with an associative binary operator, allowing parallel computation.
+/// # Mathematical Formulation
+///
+/// The recurrence equation:
+/// h_t = a_t * h_{t-1} + b_t
+///
+/// Can be reformulated with an associative binary operator ⊕:
+/// (a_i, b_i) ⊕ (a_j, b_j) = (a_i * a_j, b_i + a_i * b_j)
+///
+/// This allows an O(log n) parallel scan algorithm instead of O(n) sequential computation.
 ///
 /// # Mathematical Formulation
 ///
