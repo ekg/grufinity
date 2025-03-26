@@ -11,6 +11,20 @@ use crate::parallel_scan::{parallel_scan_log};
 /// The MinGRU is a simplified version of the GRU that uses a single gate
 /// and a special activation function to reduce computation while maintaining
 /// performance comparable to a standard GRU.
+///
+/// # Mathematical Formulation
+///
+/// MinGRU uses a single update gate instead of the two gates in standard GRU:
+///
+/// z_t = σ(W_z · [h_{t-1}, x_t] + b_z)         # Update gate
+/// h̃_t = W_h · [h_{t-1}, x_t] + b_h            # Candidate hidden state
+/// h_t = (1 - z_t) ⊙ h_{t-1} + z_t ⊙ g(h̃_t)    # New hidden state
+///
+/// Where g(x) is a custom activation function:
+/// g(x) = x + 0.5  for x ≥ 0
+/// g(x) = sigmoid(x)  for x < 0
+///
+/// This formulation reduces computation by ~33% while maintaining similar expressivity.
 #[derive(Config, Debug)]
 pub struct MinGRUConfig {
     /// Dimension of the input features
@@ -106,6 +120,13 @@ impl<B: Backend> MinGRU<B> {
     ///              Contains hidden states for all timesteps in the sequence
     /// * `next_hidden` - Next hidden state of shape [batch_size, hidden_size]
     ///                   To be used in subsequent calls for continuing sequences
+    ///
+    /// # Tensor Shapes
+    ///
+    /// - x: [batch_size, seq_len, input_size]
+    /// - prev_hidden (optional): [batch_size, hidden_size]
+    /// - output: [batch_size, seq_len, hidden_size]
+    /// - next_hidden: [batch_size, hidden_size]
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
         let [batch_size, seq_len, _] = x.dims();
         let _device = x.device();

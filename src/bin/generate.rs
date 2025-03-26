@@ -339,24 +339,23 @@ fn initialize_model<B: Backend>(
     
     let path = std::path::PathBuf::from(model_path);
     
-    match recorder.load::<<MinGRULM<B> as Module<B>>::Record>(model_path.into(), device) {
-        Ok(record) => {
-            let model = model.load_record(record);
-            debug(&format!("Model loaded from: {}", model_path));
-            
-            // Print chunk size from the loaded model
-            let loaded_config = model.config();
-            debug(&format!("Model chunk size: {}", loaded_config.chunk_size()));
-            
-            Ok(model)
-        },
-        Err(e) => {
-            Err(GRUfinityError::ModelLoad {
-                path,
-                reason: format!("Failed to load model: {}", e)
-            })
-        }
-    }
+    // Use ? operator for early return on error
+    let record = recorder.load::<<MinGRULM<B> as Module<B>>::Record>(
+        model_path.into(), 
+        device
+    ).map_err(|e| GRUfinityError::ModelLoad {
+        path: path.clone(),
+        reason: format!("Failed to load model: {}", e)
+    })?;
+    
+    let model = model.load_record(record);
+    debug(&format!("Model loaded from: {}", model_path));
+    
+    // Print chunk size from the loaded model
+    let loaded_config = model.config();
+    debug(&format!("Model chunk size: {}", loaded_config.chunk_size()));
+    
+    Ok(model)
 }
 
 // Custom implementation of text generation with top-k sampling

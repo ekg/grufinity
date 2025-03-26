@@ -44,6 +44,8 @@ GRUfinity supports various backends through feature flags:
 - `autodiff` - Enable automatic differentiation (required for training)
 - `optimizer-adam` - Use Adam optimizer
 - `optimizer-sgd` - Use SGD optimizer (alternative to Adam)
+- `swiglu` - Use SwiGLU activation (otherwise uses SiLU)
+- `tanh` - Apply tanh nonlinearity between chunks (default: disabled)
 
 ### Accelerated Backends
 - `cuda` - CUDA JIT backend for NVIDIA GPUs
@@ -56,6 +58,33 @@ GRUfinity supports various backends through feature flags:
 - `wgpu-spirv-fusion` = Alias for `vulkan-fusion` (backward compatibility)
 - `cuda-full` = `cuda` + `fusion` + `autodiff`
 - `candle-cuda-full` = `candle` + `candle-cuda` + `fusion` + `autodiff`
+
+### Feature Selection Guidelines
+
+1. **For NVIDIA GPUs**: Use `cuda-full` feature for best performance
+   ```
+   cargo run --release --features cuda-full,optimizer-adam
+   ```
+
+2. **For Apple Silicon**: Use `candle-metal-full`  
+   ```
+   cargo run --release --features candle-metal-full,optimizer-adam
+   ```
+
+3. **For AMD/Intel GPUs**: Use `vulkan-fusion`
+   ```
+   cargo run --release --features vulkan-fusion,optimizer-adam
+   ```
+
+4. **For compatibility with any GPU**: Use `wgpu-fusion`
+   ```
+   cargo run --release --features wgpu-fusion,optimizer-adam
+   ```
+
+5. **For CPU-only usage**: Use `candle` (for newer machines) or `ndarray` (for maximum compatibility)
+   ```
+   cargo run --release --features candle,fusion,autodiff,optimizer-adam
+   ```
 
 ## Backend Selection
 

@@ -343,13 +343,23 @@ impl<B: Backend> MinGRULM<B> {
     ///
     /// # Arguments
     ///
-    /// * `x` - Input token IDs [batch_size, seq_len]
+    /// * `x` - Input token IDs with shape [batch_size, seq_len]
     /// * `hidden_states` - Optional previous hidden states for each layer
     ///
     /// # Returns
     ///
-    /// * `logits` - Output logits [batch_size, seq_len, vocab_size]
+    /// * `logits` - Output logits with shape [batch_size, seq_len, vocab_size]
     /// * `next_hidden_states` - Next hidden states for each layer
+    ///
+    /// # Tensor Shapes
+    ///
+    /// Input:
+    /// - x: [batch_size, seq_len] of type Int - Token IDs
+    /// - hidden_states (optional): Vec of [batch_size, hidden_size] tensors - One per layer
+    ///
+    /// Output:
+    /// - logits: [batch_size, seq_len, vocab_size] - Prediction scores for each token
+    /// - next_hidden_states: Vec of [batch_size, hidden_size] tensors - Updated states
     pub fn forward(
         &self, 
         x: Tensor<B, 2, Int>, 

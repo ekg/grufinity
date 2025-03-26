@@ -9,6 +9,22 @@ use burn::tensor::{backend::Backend, Tensor};
 ///
 /// The key insight is that this recurrence can be reformulated as a scan operation
 /// with an associative binary operator, allowing parallel computation.
+///
+/// # Mathematical Formulation
+///
+/// The recurrence equation:
+/// h_t = a_t * h_{t-1} + b_t
+///
+/// Can be reformulated with an associative binary operator ⊕:
+/// (a_i, b_i) ⊕ (a_j, b_j) = (a_i * a_j, b_i + a_i * b_j)
+///
+/// This allows an O(log n) parallel scan algorithm instead of O(n) sequential computation.
+///
+/// # Tensor Shapes:
+/// - coeffs: [batch_size, seq_len, hidden_dim] - Coefficients a_t
+/// - values: [batch_size, seq_len, hidden_dim] - Values b_t
+/// - h0: Optional[batch_size, hidden_dim] - Initial hidden state
+/// - Returns: [batch_size, seq_len, hidden_dim] - Output hidden states
 pub fn parallel_scan<B: Backend>(
     coeffs: Tensor<B, 3>,  // a_t coefficients (batch_size, seq_len, hidden_dim)
     values: Tensor<B, 3>,  // b_t values (batch_size, seq_len, hidden_dim)
