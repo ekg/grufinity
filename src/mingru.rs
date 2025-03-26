@@ -3,6 +3,7 @@ use burn::{
     tensor::{backend::Backend, Tensor, activation},
     nn::{Linear, LinearConfig},
     config::Config,
+    prelude::Float,
 };
 use crate::parallel_scan::{parallel_scan_log};
 
