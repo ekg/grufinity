@@ -244,15 +244,18 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
                 let min_vals = prev.clone().min_pair(curr.clone());
                 
                 // Create a minimum cap to avoid underflow
-                // Need to cast to LibTorchDevice since we're creating a LibTorch tensor
+                // Create LibTorch tensor with appropriate device handling
                 use burn::backend::libtorch::LibTorchDevice;
-                let device_libtorch = if let Some(cuda_device) = device.cuda_device_index() {
-                    LibTorchDevice::Cuda(cuda_device)
-                } else if device.is_mps() {
-                    LibTorchDevice::Mps
-                } else {
-                    LibTorchDevice::Cpu
-                };
+                
+                #[cfg(all(feature = "tch-gpu", not(target_os = "macos")))]
+                let device_libtorch = LibTorchDevice::Cuda(0); // Default to first CUDA device
+                
+                #[cfg(all(feature = "tch-gpu", target_os = "macos"))]
+                let device_libtorch = LibTorchDevice::Mps;
+                
+                #[cfg(not(feature = "tch-gpu"))]
+                let device_libtorch = LibTorchDevice::Cpu;
+                
                 let log_min_cap = Tensor::<LibTorch<f32>, 3>::full([dims[0], 1, dims[2]], -20.0f32, &device_libtorch);
                 
                 // Apply cap to difference to avoid very negative values
