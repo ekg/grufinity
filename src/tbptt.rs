@@ -1720,10 +1720,10 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 
     // Create optimizer - Adam or SGD based on enabled feature
     #[cfg(feature = "optimizer-adam")]
-    let mut optimizer = config.optimizer.init::<B, MinGRULM<B>>();
+    let _optimizer = config.optimizer.init::<B, MinGRULM<B>>();
 
     #[cfg(feature = "optimizer-sgd")]
-    let mut optimizer = config.optimizer.init();
+    let _optimizer = config.optimizer.init();
 
     for epoch in 1..=max_training_epochs {
         // Get learning rate for this epoch from the scheduler

@@ -270,8 +270,9 @@ fn main() {
     let device_id = args.device_id;
     
     // Token-based parameters (will be converted to chunks)
-    let _update_tokens = args.update_tokens;
-    let _backprop_tokens = args.backprop_tokens;
+    // Note: using references instead of moving the values
+    let _update_tokens_ref = &args.update_tokens;
+    let _backprop_tokens_ref = &args.backprop_tokens;
     
     // Set up the configured backend
     use_configured_backend!();
