@@ -869,10 +869,10 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         // Check for dimension mismatch
         if batch_size != target_batch_size || seq_len != target_seq_len {
-            println!(
-                "Warning: Dimension mismatch. logits: [{}, {}, {}], target: [{}, {}]",
-                batch_size, seq_len, vocab_size, target_batch_size, target_seq_len
-            );
+            // println!(
+            //     "Warning: Dimension mismatch. logits: [{}, {}, {}], target: [{}, {}]",
+            //     batch_size, seq_len, vocab_size, target_batch_size, target_seq_len
+            // );
 
             // Use the minimum sequence length
             let min_seq_len = seq_len.min(target_seq_len);
@@ -1430,8 +1430,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         // Check for dimension mismatch
         let (loss_reshaped, targets_reshaped) = if batch_size != target_batch_size || seq_len != target_seq_len {
-            println!("Warning: Dimension mismatch in validation. logits: [{}, {}, {}], target: [{}, {}]",
-                     batch_size, seq_len, vocab_size, target_batch_size, target_seq_len);
+            // println!("Warning: Dimension mismatch in validation. logits: [{}, {}, {}], target: [{}, {}]",
+            //          batch_size, seq_len, vocab_size, target_batch_size, target_seq_len);
 
             // Get the minimum dimensions to avoid out-of-bounds issues
             let min_batch_size = batch_size.min(target_batch_size);
