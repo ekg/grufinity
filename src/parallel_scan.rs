@@ -232,40 +232,14 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
         let max_vals = prev.clone().max_pair(curr.clone());
         let min_vals = prev.clone().min_pair(curr.clone());
         
-        // Create a minimum cap for numerical stability
-        // Use feature flags to determine the right device type
-        use burn::backend::libtorch::LibTorchDevice;
-        
-        // Select the appropriate LibTorch device based on feature flags
-        let device_libtorch = match std::any::type_name::<B::Device>() {
-            s if s.contains("LibTorchDevice") => {
-                // Use the appropriate CUDA/MPS/CPU device based on compile-time features
-                #[cfg(all(feature = "tch-gpu", not(target_os = "macos")))]
-                {
-                    LibTorchDevice::Cuda(0) // Default to first CUDA device
-                }
-                
-                #[cfg(all(feature = "tch-gpu", target_os = "macos"))]
-                {
-                    LibTorchDevice::Mps
-                }
-                
-                #[cfg(not(feature = "tch-gpu"))]
-                {
-                    LibTorchDevice::Cpu
-                }
-            },
-            _ => LibTorchDevice::Cpu // Default fallback
-        };
-        
-        // Create the minimum cap tensor with the appropriate device
-        use burn::backend::libtorch::LibTorch;
-        let log_min_cap = Tensor::<LibTorch<f32>, 3>::full(
+        // Create a minimum cap for numerical stability directly with the right tensor type
+        // This ensures type compatibility with other tensors in the computation
+        let log_min_cap = Tensor::<B, 3>::full(
             [batch_size, 1, hidden_dim], 
             -20.0f32, 
-            &device_libtorch
+            &device
         );
-        
+                
         // Apply cap to avoid underflow
         let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
         
