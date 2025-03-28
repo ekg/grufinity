@@ -244,7 +244,8 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
                 let min_vals = prev.clone().min_pair(curr.clone());
                 
                 // Create a minimum cap to avoid underflow
-                let log_min_cap = Tensor::full([dims[0], 1, dims[2]], -20.0f32, &device);
+                // Use the device from the tensor since we're inside LibTorch-specific code
+                let log_min_cap = Tensor::<LibTorch<f32>, 3>::full([dims[0], 1, dims[2]], -20.0f32, &device);
                 
                 // Apply cap to difference to avoid very negative values
                 let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
