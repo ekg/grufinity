@@ -190,7 +190,14 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
         // log(exp(a) + exp(b)) = max(a,b) + log(1 + exp(min(a,b) - max(a,b)))
         let max_vals = prev.clone().max_pair(curr.clone());
         let min_vals = prev.clone().min_pair(curr.clone());
-        let diff = min_vals - max_vals.clone();
+        
+        // Create a minimum cap for numerical stability
+        // -20 is reasonable since exp(-20) ≈ 2.06e-9 is very small but still representable
+        let log_min_cap = Tensor::full([batch_size, 1, hidden_dim], -20.0f32, &device);
+        
+        // Apply cap to difference to avoid very negative values that could underflow
+        let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
+        
         let logsumexp = max_vals + (Tensor::ones_like(&diff) + diff.exp()).log();
         
         result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], logsumexp);
@@ -235,7 +242,13 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
                 // Use log-sum-exp trick for numerical stability
                 let max_vals = prev.clone().max_pair(curr.clone());
                 let min_vals = prev.clone().min_pair(curr.clone());
-                let diff = min_vals - max_vals.clone();
+                
+                // Create a minimum cap to avoid underflow
+                let log_min_cap = Tensor::full([dims[0], 1, dims[2]], -20.0f32, &device);
+                
+                // Apply cap to difference to avoid very negative values
+                let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
+                
                 max_vals + (Tensor::ones_like(&diff) + diff.exp()).log()
             };
             
@@ -263,7 +276,13 @@ fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
             // Use log-sum-exp trick for numerical stability
             let max_vals = prev.clone().max_pair(curr.clone());
             let min_vals = prev.clone().min_pair(curr.clone());
-            let diff = min_vals - max_vals.clone();
+            
+            // Create a minimum cap for numerical stability
+            let log_min_cap = Tensor::full([batch_size, 1, hidden_dim], -20.0f32, &device);
+            
+            // Apply cap to difference to avoid very negative values
+            let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
+            
             let logsumexp = max_vals + (Tensor::ones_like(&diff) + diff.exp()).log();
             
             result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], logsumexp);
