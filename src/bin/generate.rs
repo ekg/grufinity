@@ -20,6 +20,29 @@ use grufinity::{
 // Global verbosity setting for controlling debug output
 static mut VERBOSE: bool = false;
 
+// Helper function to create LibTorch device when B::Device is LibTorchDevice
+#[cfg(feature = "tch")]
+fn create_device_for_libtorch<B: Backend>(device_id: usize) -> Option<B::Device> {
+    use burn::backend::libtorch::{LibTorch, LibTorchDevice};
+    use std::any::TypeId;
+    
+    // Only execute this when B is LibTorch with the same element type as our crate uses
+    if TypeId::of::<B>() == TypeId::of::<LibTorch<grufinity::Elem>>() {
+        // Create the appropriate LibTorch device based on features
+        let device = grufinity::create_libtorch_device(device_id);
+        
+        // We need to convert LibTorchDevice to B::Device
+        // This is safe because we've verified B is LibTorch with the right element type
+        return Some(unsafe { 
+            // We're using a pointer cast instead of transmute to avoid size issues
+            let device_ptr = &device as *const LibTorchDevice as *const B::Device;
+            std::ptr::read(device_ptr)
+        });
+    }
+    
+    None
+}
+
 // Helper to print debug info to stderr
 fn debug(msg: &str) {
     unsafe {
@@ -90,14 +113,12 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     let mut device_initialized = false;
     
     // Create appropriate device based on backend type
+    // Handle LibTorch devices with a separate specialized function
     #[cfg(feature = "tch")]
     {
-        // Special case for LibTorch - need to check if B::Device is LibTorchDevice
-        if std::any::TypeId::of::<B::Device>() == std::any::TypeId::of::<burn::backend::libtorch::LibTorchDevice>() {
+        if let Some(device) = create_device_for_libtorch::<B>(device_id) {
             device_initialized = true;
-            let device = grufinity::create_libtorch_device(device_id);
-            // Safety: We've verified the type matches
-            return unsafe { std::mem::transmute(device) };
+            return device;
         }
     }
     
