@@ -28,6 +28,7 @@ autotune = ["burn/autotune"]
 swiglu = [] # Use SwiGLU activation (otherwise uses SiLU)
 tanh = [] # Apply tanh nonlinearity between chunks (default: disabled)
 f16 = [] # Use half-precision (f16) floating point for reduced memory usage
+native-logsumexp = [] # Use native implementation of logsumexp for LibTorch backend
 
 # Optional CUDA features - these should be explicitly requested
 candle-cuda = ["candle", "burn/candle-cuda"]

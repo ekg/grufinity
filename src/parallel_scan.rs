@@ -162,7 +162,7 @@ fn parallel_scan_log_impl<B: Backend>(
 /// Compute the log(cumsum(exp(x))) in a numerically stable way
 fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
     // Special implementation for LibTorch that uses native logcumsumexp
-    #[cfg(feature = "tch")]
+    #[cfg(all(feature = "tch", feature = "native-logsumexp"))]
     {
         use burn::backend::libtorch::LibTorch;
         if let Some(_) = (&x as &dyn std::any::Any).downcast_ref::<Tensor<LibTorch<f32>, 3>>() {
@@ -200,7 +200,7 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 }
 
 /// LibTorch-specific implementation of logcumsumexp using the native torch function
-#[cfg(feature = "tch")]
+#[cfg(all(feature = "tch", feature = "native-logsumexp"))]
 fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
     use burn::backend::libtorch::LibTorch;
     
