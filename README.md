@@ -44,7 +44,9 @@ GRUfinity supports various backends through feature flags:
 - `autodiff` - Enable automatic differentiation (required for training)
 - `optimizer-adam` - Use Adam optimizer
 - `optimizer-sgd` - Use SGD optimizer (alternative to Adam)
-- `swiglu` - Use SwiGLU activation (otherwise uses SiLU)
+- `g-func` - Use original activation function (g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0)
+- `swish` - Use Swish/SiLU activation function (f(x) = x * sigmoid(x)) - default
+- `swiglu` - Use SwiGLU activation (instead of SiLU)
 - `tanh` - Apply tanh nonlinearity between chunks (default: disabled)
 
 ### Accelerated Backends

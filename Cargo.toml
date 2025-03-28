@@ -14,7 +14,7 @@ clap = { version = "4.4.18", features = ["derive"] }
 thiserror = "1.0.50"
 
 [features]
-default = ["optimizer-adam", "autodiff"]  # Default includes Adam optimizer and autodiff, CPU backend must be explicitly chosen
+default = ["optimizer-adam", "autodiff", "swish"]  # Default includes Adam optimizer, autodiff, and swish activation
 
 # Core features - no dependencies included here
 wgpu = ["burn/wgpu"]
@@ -25,6 +25,8 @@ tch = ["burn/tch"]
 ndarray = ["burn/ndarray"]
 autodiff = ["burn/autodiff"]
 autotune = ["burn/autotune"]
+g-func = [] # Original activation function: g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0
+swish = [] # Swish/SiLU activation function: f(x) = x * sigmoid(x)
 swiglu = [] # Use SwiGLU activation (otherwise uses SiLU)
 tanh = [] # Apply tanh nonlinearity between chunks (default: disabled)
 f16 = [] # Use half-precision (f16) floating point for reduced memory usage

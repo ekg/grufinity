@@ -295,33 +295,73 @@ impl<B: Backend> MinGRU<B> {
         parallel_scan_log(log_coeffs, log_values, prev_hidden)
     }
     
-    /// g(x) function as defined in the paper: 
-    /// g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0
+    /// Activation function based on feature flag
     fn g_function(&self, x: Tensor<B, 2>) -> Tensor<B, 2> {
-        let zeros = Tensor::zeros_like(&x);
-        let x_positive = x.clone().greater_equal(zeros.clone()).float();
-        let x_negative = x.clone().lower(zeros).float();
-    
-        (x_positive * (x.clone() + 0.5)) + (x_negative * activation::sigmoid(x))
+        #[cfg(feature = "g-func")]
+        {
+            // Original g(x) function from the paper: 
+            // g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0
+            let zeros = Tensor::zeros_like(&x);
+            let x_positive = x.clone().greater_equal(zeros.clone()).float();
+            let x_negative = x.clone().lower(zeros).float();
+            
+            (x_positive * (x.clone() + 0.5)) + (x_negative * activation::sigmoid(x))
+        }
+        
+        #[cfg(all(feature = "swish", not(feature = "g-func")))]
+        {
+            // Swish/SiLU activation: f(x) = x * sigmoid(x)
+            x.clone() * activation::sigmoid(x)
+        }
+        
+        #[cfg(not(any(feature = "g-func", feature = "swish")))]
+        {
+            // Default to SiLU if no specific activation is selected
+            activation::silu(x)
+        }
     }
 
-    /// log(g(x)) function as defined in the paper:
-    /// log(g(x)) = log(x + 0.5) for x >= 0, -softplus(-x) for x < 0
+    /// Log-space version of the activation function
     fn log_g_function(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
-        let [batch_size, seq_len, hidden_dim] = x.dims();
-        let device = x.device();
-        let zeros = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
-    
-        let x_positive = x.clone().greater_equal(zeros.clone()).float();
-        let x_negative = x.clone().lower(zeros).float();
-    
-        // For x >= 0: log(x + 0.5)
-        // Using ReLU to ensure we don't take log of negative numbers
-        let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
-    
-        // For x < 0: log(sigmoid(x)) = -softplus(-x)
-        let log_g_neg = -activation::softplus(-x, 1.0);
-    
-        (x_positive * log_g_pos) + (x_negative * log_g_neg)
+        #[cfg(feature = "g-func")]
+        {
+            // Original log(g(x)) function from the paper:
+            // log(g(x)) = log(x + 0.5) for x >= 0, -softplus(-x) for x < 0
+            let [batch_size, seq_len, hidden_dim] = x.dims();
+            let device = x.device();
+            let zeros = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
+        
+            let x_positive = x.clone().greater_equal(zeros.clone()).float();
+            let x_negative = x.clone().lower(zeros).float();
+        
+            // For x >= 0: log(x + 0.5)
+            // Using ReLU to ensure we don't take log of negative numbers
+            let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
+        
+            // For x < 0: log(sigmoid(x)) = -softplus(-x)
+            let log_g_neg = -activation::softplus(-x.clone(), 1.0);
+        
+            (x_positive * log_g_pos) + (x_negative * log_g_neg)
+        }
+        
+        #[cfg(all(feature = "swish", not(feature = "g-func")))]
+        {
+            // Log-space Swish: log(x * sigmoid(x))
+            // log(x) + log(sigmoid(x)) = log(x) - softplus(-x)
+            let x_log = x.clone().clamp(1e-9, f32::MAX).log();
+            let sigmoid_log = -activation::softplus(-x, 1.0);
+            
+            x_log + sigmoid_log
+        }
+        
+        #[cfg(not(any(feature = "g-func", feature = "swish")))]
+        {
+            // Default log-space SiLU if no specific activation is selected
+            // Using the same approximation as for Swish since they're the same
+            let x_log = x.clone().clamp(1e-9, f32::MAX).log();
+            let sigmoid_log = -activation::softplus(-x, 1.0);
+            
+            x_log + sigmoid_log
+        }
     }
 }

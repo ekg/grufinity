@@ -171,7 +171,31 @@ impl<B: Backend> FeedForward<B> {
     pub fn forward(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
         let x1 = self.w1.forward(x.clone());
         let x2 = self.w2.forward(x);
-        let x = x1 * activation::silu(x2); // SiLU implementation matching SwiGLU behavior
+        
+        // Activation function based on feature flags
+        #[cfg(feature = "g-func")]
+        let activated = {
+            // Original g(x) function
+            let zeros = Tensor::zeros_like(&x2);
+            let x_positive = x2.clone().greater_equal(zeros.clone()).float();
+            let x_negative = x2.clone().lower(zeros).float();
+            
+            (x_positive * (x2.clone() + 0.5)) + (x_negative * activation::sigmoid(x2))
+        };
+        
+        #[cfg(all(feature = "swish", not(feature = "g-func")))]
+        let activated = {
+            // Swish/SiLU activation
+            x2.clone() * activation::sigmoid(x2)
+        };
+        
+        #[cfg(not(any(feature = "g-func", feature = "swish")))]
+        let activated = {
+            // Default to SiLU
+            activation::silu(x2)
+        };
+        
+        let x = x1 * activated;
         self.proj.forward(x)
     }
 }
