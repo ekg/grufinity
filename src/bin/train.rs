@@ -56,9 +56,9 @@ struct TrainingArgs {
     #[arg(long)]
     batch_size: Option<usize>,
 
-    /// Characters per chunk
+    /// Characters per chunk (supports k, m, g suffixes)
     #[arg(long)]
-    chunk_size: Option<usize>,
+    chunk_size: Option<String>,
 
     /// Chunks to process per epoch
     #[arg(long)]
@@ -84,21 +84,21 @@ struct TrainingArgs {
     #[arg(long)]
     target_test_loss: Option<f32>,
 
-    /// Update parameters every NUM chunks (k1 parameter)
+    /// Update parameters every NUM chunks (k1 parameter, supports k, m, g suffixes)
     #[arg(long)]
-    update_chunks: Option<usize>,
+    update_chunks: Option<String>,
 
-    /// Backprop through NUM chunks (k2 parameter)
+    /// Backprop through NUM chunks (k2 parameter, supports k, m, g suffixes)
     #[arg(long)]
-    backprop_chunks: Option<usize>,
+    backprop_chunks: Option<String>,
 
-    /// Update parameters every ~NUM tokens (converted to chunks)
+    /// Update parameters every ~NUM tokens (converted to chunks, supports k, m, g suffixes)
     #[arg(long)]
-    update_tokens: Option<usize>,
+    update_tokens: Option<String>,
 
-    /// Backprop through ~NUM tokens (converted to chunks)
+    /// Backprop through ~NUM tokens (converted to chunks, supports k, m, g suffixes)
     #[arg(long)]
-    backprop_tokens: Option<usize>,
+    backprop_tokens: Option<String>,
 
     /// Preserve hidden states between batches
     #[arg(long)]
@@ -399,13 +399,21 @@ fn main() {
         println!("Setting batch size to {} random start positions", batch_size);
     }
     
-    if let Some(chunk_size) = args.chunk_size {
-        modified_config.chunk_size = chunk_size;
-        // Also update the model's chunk size
-        modified_config.model = modified_config.model.with_chunk_size(chunk_size);
-        println!("Setting chunk size to {} characters", chunk_size);
-        println!("Effective context length: {} characters", 
-               modified_config.max_chunks_per_epoch * chunk_size);
+    if let Some(chunk_size_str) = args.chunk_size {
+        match parse_with_suffix::<usize>(&chunk_size_str) {
+            Ok(chunk_size) => {
+                modified_config.chunk_size = chunk_size;
+                // Also update the model's chunk size
+                modified_config.model = modified_config.model.with_chunk_size(chunk_size);
+                println!("Setting chunk size to {} characters", chunk_size);
+                println!("Effective context length: {} characters", 
+                       modified_config.max_chunks_per_epoch * chunk_size);
+            },
+            Err(e) => {
+                eprintln!("Error parsing chunk size '{}': {}", chunk_size_str, e);
+                std::process::exit(1);
+            }
+        }
     }
     
     if let Some(max_chunks) = args.max_chunks_per_epoch {
@@ -450,36 +458,85 @@ fn main() {
         println!("Setting target test loss to: {}", loss);
     }
     
-    if let Some(chunks) = args.update_chunks {
-        modified_config.tbptt_k1 = chunks;
-        println!("Setting update frequency to every {} chunks", chunks);
+    if let Some(chunks_str) = args.update_chunks {
+        match parse_with_suffix::<usize>(&chunks_str) {
+            Ok(chunks) => {
+                modified_config.tbptt_k1 = chunks;
+                println!("Setting update frequency to every {} chunks", chunks);
+            },
+            Err(e) => {
+                eprintln!("Error parsing update chunks '{}': {}", chunks_str, e);
+                std::process::exit(1);
+            }
+        }
     }
     
-    if let Some(chunks) = args.backprop_chunks {
-        modified_config.tbptt_k2 = chunks;
-        println!("Setting backpropagation window to {} chunks", chunks);
+    if let Some(chunks_str) = args.backprop_chunks {
+        match parse_with_suffix::<usize>(&chunks_str) {
+            Ok(chunks) => {
+                modified_config.tbptt_k2 = chunks;
+                println!("Setting backpropagation window to {} chunks", chunks);
+            },
+            Err(e) => {
+                eprintln!("Error parsing backprop chunks '{}': {}", chunks_str, e);
+                std::process::exit(1);
+            }
+        }
     }
     
     // Handle token-based parameters
     let chunk_size = modified_config.chunk_size;
     
-    // Default update_tokens to 25% of backprop_tokens if not specified, or chunk_size if neither is specified
-    let update_tokens = if let Some(bp_tokens) = args.backprop_tokens {
-        args.update_tokens.or(Some(bp_tokens / 4))
-    } else {
-        args.update_tokens.or(Some(chunk_size))
+    // Parse and default update_tokens
+    let parsed_backprop_tokens = match &args.backprop_tokens {
+        Some(bp_tokens_str) => {
+            match parse_with_suffix::<usize>(bp_tokens_str) {
+                Ok(tokens) => Some(tokens),
+                Err(e) => {
+                    eprintln!("Error parsing backprop tokens '{}': {}", bp_tokens_str, e);
+                    std::process::exit(1);
+                }
+            }
+        },
+        None => None
     };
     
-    if let Some(tokens) = update_tokens {
-        let k1 = calculate_chunks_for_tokens(chunk_size, tokens);
-        modified_config.tbptt_k1 = k1;
-        println!("Setting update frequency to every {} tokens ({} chunks)", tokens, k1);
+    // Default update_tokens to 25% of backprop_tokens if not specified, or chunk_size if neither is specified
+    let update_tokens_str = if args.update_tokens.is_none() && parsed_backprop_tokens.is_some() {
+        // Create a string representation of 25% of backprop_tokens
+        Some((parsed_backprop_tokens.unwrap() / 4).to_string())
+    } else if args.update_tokens.is_none() {
+        Some(chunk_size.to_string())
+    } else {
+        args.update_tokens.clone()
+    };
+    
+    if let Some(tokens_str) = update_tokens_str {
+        match parse_with_suffix::<usize>(&tokens_str) {
+            Ok(tokens) => {
+                let k1 = calculate_chunks_for_tokens(chunk_size, tokens);
+                modified_config.tbptt_k1 = k1;
+                println!("Setting update frequency to every {} tokens ({} chunks)", tokens, k1);
+            },
+            Err(e) => {
+                eprintln!("Error parsing update tokens '{}': {}", tokens_str, e);
+                std::process::exit(1);
+            }
+        }
     }
     
-    if let Some(tokens) = args.backprop_tokens {
-        let k2 = calculate_chunks_for_tokens(chunk_size, tokens);
-        modified_config.tbptt_k2 = k2;
-        println!("Setting backpropagation window to {} tokens ({} chunks)", tokens, k2);
+    if let Some(tokens_str) = args.backprop_tokens {
+        match parse_with_suffix::<usize>(&tokens_str) {
+            Ok(tokens) => {
+                let k2 = calculate_chunks_for_tokens(chunk_size, tokens);
+                modified_config.tbptt_k2 = k2;
+                println!("Setting backpropagation window to {} tokens ({} chunks)", tokens, k2);
+            },
+            Err(e) => {
+                eprintln!("Error parsing backprop tokens '{}': {}", tokens_str, e);
+                std::process::exit(1);
+            }
+        }
     }
     
     if let Some(preserve) = args.preserve_hidden_states {

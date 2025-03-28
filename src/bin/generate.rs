@@ -50,13 +50,13 @@ struct GenerateArgs {
     #[arg(long, default_value = "Hello")]
     prompt: String,
 
-    /// Number of characters to generate
-    #[arg(long, default_value_t = 100)]
-    length: usize,
+    /// Number of characters to generate (supports k, m, g suffixes)
+    #[arg(long, default_value = "100")]
+    length: String,
 
-    /// Characters per chunk for processing
-    #[arg(long, default_value_t = 64)]
-    chunk_size: usize,
+    /// Characters per chunk for processing (supports k, m, g suffixes)
+    #[arg(long, default_value = "64")]
+    chunk_size: String,
 
     /// Sampling temperature (higher = more random)
     #[arg(long, default_value_t = 0.8)]
@@ -756,12 +756,31 @@ fn main() {
         None => args.prompt
     };
     
+    // Parse generation length and chunk size with suffix support
+    let generation_length = match parse_with_suffix::<usize>(&args.length) {
+        Ok(len) => len,
+        Err(e) => {
+            eprintln!("Error parsing generation length '{}': {}", args.length, e);
+            eprintln!("Using default value of 100");
+            100
+        }
+    };
+    
+    let chunk_size = match parse_with_suffix::<usize>(&args.chunk_size) {
+        Ok(size) => size,
+        Err(e) => {
+            eprintln!("Error parsing chunk size '{}': {}", args.chunk_size, e);
+            eprintln!("Using default value of 64");
+            64
+        }
+    };
+    
     // Print configuration
     println!("Model path set to: {}", model_path);
     println!("Vocabulary path set to: {} (will use default byte vocabulary if not found)", vocab_path);
     println!("Prompt set to: \"{}\"", prompt);
-    println!("Generation length set to: {}", args.length);
-    println!("Chunk size explicitly set to: {}", args.chunk_size);
+    println!("Generation length set to: {}", generation_length);
+    println!("Chunk size explicitly set to: {}", chunk_size);
     println!("Temperature set to: {}", args.temperature);
     println!("Device ID set to: {}", args.device_id);
     debug(&format!("Top-k sampling set to: {}", args.top_k));
@@ -792,7 +811,7 @@ fn main() {
     locate_config_file(&mut config_path_mut, &model_path);
     
     // Load model configuration
-    let config = match load_model_config(&config_path_mut, args.chunk_size, vocab.size()) {
+    let config = match load_model_config(&config_path_mut, chunk_size, vocab.size()) {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!("Warning: Failed to load config: {}", e);
@@ -837,7 +856,7 @@ fn main() {
     std::io::stdout().flush().unwrap();
     
     // Generate text with streaming enabled
-    let _output = generate_text(&model, &vocab, &prompt, args.length, args.chunk_size, args.temperature, args.top_k, &device, true);
+    let _output = generate_text(&model, &vocab, &prompt, generation_length, chunk_size, args.temperature, args.top_k, &device, true);
     
     // Add a final newline
     println!();
