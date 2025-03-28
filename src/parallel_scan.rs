@@ -161,12 +161,14 @@ fn parallel_scan_log_impl<B: Backend>(
 
 /// Compute the log(cumsum(exp(x))) in a numerically stable way
 fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
-    // Special implementation for LibTorch that uses native logcumsumexp
+    // If we're using LibTorch with native-logsumexp, use the specialized implementation
     #[cfg(all(feature = "tch", feature = "native-logsumexp"))]
     {
         use burn::backend::libtorch::LibTorch;
-        if let Some(_) = (&x as &dyn std::any::Any).downcast_ref::<Tensor<LibTorch<f32>, 3>>() {
-            // Extract the raw torch tensor and use the native logcumsumexp
+        // This is a compile-time specialization based on the type of B
+        // Use type_name instead of runtime downcasting for efficiency
+        let type_name = std::any::type_name::<B>();
+        if type_name.contains("LibTorch") {
             return libtorch_logcumsumexp(x);
         }
     }
@@ -207,101 +209,75 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 }
 
 /// LibTorch-specific implementation of logcumsumexp using the native torch function
+/// This implementation is optimized for LibTorch backend based on feature flags
 #[cfg(all(feature = "tch", feature = "native-logsumexp"))]
 fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
-    use burn::backend::libtorch::LibTorch;
+    // Get basic dimensions and device info
+    let [batch_size, seq_len, hidden_dim] = x.dims();
+    let device = x.device();
     
-    if let Some(libtorch_tensor) = (&x as &dyn std::any::Any).downcast_ref::<Tensor<LibTorch<f32>, 3>>() {
-        // Get the device to use for creating new tensors
-        let device = x.device();
+    // Create result tensor 
+    let mut result = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
+    
+    // Copy first element
+    let first = x.clone().slice([0..batch_size, 0..1, 0..hidden_dim]);
+    result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
+    
+    // Compute cumulative log-sum-exp for remaining elements
+    for t in 1..seq_len {
+        let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
+        let curr = x.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
         
-        // Since we can't directly access the torch tensor, we need to recreate functionality
-        // using what's available in the public API
+        // Use log-sum-exp trick for numerical stability
+        let max_vals = prev.clone().max_pair(curr.clone());
+        let min_vals = prev.clone().min_pair(curr.clone());
         
-        // Clone the tensor to preserve original
-        let tensor_copy = libtorch_tensor.clone();
+        // Create a minimum cap for numerical stability
+        // Use feature flags to determine the right device type
+        use burn::backend::libtorch::LibTorchDevice;
         
-        // Do a cumulative sum operation in log space using burn's public API
-        // This is a workaround since we can't directly use torch's logcumsumexp
-        
-        // First compute the cumulative sum on the exponential of the input
-        let dims = tensor_copy.dims();
-        let mut result = Tensor::zeros_like(&tensor_copy);
-        
-        // Split into individual time steps to manually compute cumulative sum
-        for t in 0..dims[1] {
-            let current_slice = if t == 0 {
-                // Clone to avoid moving
-                tensor_copy.clone().slice([0..dims[0], 0..1, 0..dims[2]])
-            } else {
-                // Add previous with current using log-sum-exp trick
-                // Clone to avoid moving
-                let prev = result.clone().slice([0..dims[0], t-1..t, 0..dims[2]]);
-                let curr = tensor_copy.clone().slice([0..dims[0], t..t+1, 0..dims[2]]);
-                
-                // Use log-sum-exp trick for numerical stability
-                let max_vals = prev.clone().max_pair(curr.clone());
-                let min_vals = prev.clone().min_pair(curr.clone());
-                
-                // Create a minimum cap to avoid underflow
-                // Create LibTorch tensor with appropriate device handling
-                use burn::backend::libtorch::LibTorchDevice;
-                
+        // Select the appropriate LibTorch device based on feature flags
+        let device_libtorch = match std::any::type_name::<B::Device>() {
+            s if s.contains("LibTorchDevice") => {
+                // Use the appropriate CUDA/MPS/CPU device based on compile-time features
                 #[cfg(all(feature = "tch-gpu", not(target_os = "macos")))]
-                let device_libtorch = LibTorchDevice::Cuda(0); // Default to first CUDA device
+                {
+                    LibTorchDevice::Cuda(0) // Default to first CUDA device
+                }
                 
                 #[cfg(all(feature = "tch-gpu", target_os = "macos"))]
-                let device_libtorch = LibTorchDevice::Mps;
+                {
+                    LibTorchDevice::Mps
+                }
                 
                 #[cfg(not(feature = "tch-gpu"))]
-                let device_libtorch = LibTorchDevice::Cpu;
-                
-                let log_min_cap = Tensor::<LibTorch<f32>, 3>::full([dims[0], 1, dims[2]], -20.0f32, &device_libtorch);
-                
-                // Apply cap to difference to avoid very negative values
-                let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
-                
-                max_vals + (Tensor::ones_like(&diff) + diff.exp()).log()
-            };
-            
-            result = result.slice_assign([0..dims[0], t..t+1, 0..dims[2]], current_slice);
-        }
+                {
+                    LibTorchDevice::Cpu
+                }
+            },
+            _ => LibTorchDevice::Cpu // Default fallback
+        };
         
-        // Convert the LibTorch tensor back to generic B type
-        return Tensor::<B, 3>::from_data(result.into_data(), &device);
-    } else {
-        // Fallback to generic implementation if we couldn't downcast
-        let [batch_size, seq_len, hidden_dim] = x.dims();
-        let device = x.device();
+        // Create the minimum cap tensor with the appropriate device
+        use burn::backend::libtorch::LibTorch;
+        let log_min_cap = Tensor::<LibTorch<f32>, 3>::full(
+            [batch_size, 1, hidden_dim], 
+            -20.0f32, 
+            &device_libtorch
+        );
         
-        let mut result = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
+        // Apply cap to avoid underflow
+        let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
         
-        // Copy first element
-        let first = x.clone().slice([0..batch_size, 0..1, 0..hidden_dim]);
-        result = result.slice_assign([0..batch_size, 0..1, 0..hidden_dim], first);
+        // Compute logsumexp with the capped difference
+        let logsumexp = max_vals + (Tensor::ones_like(&diff) + diff.exp()).log();
         
-        // Compute log(exp(result[t-1]) + exp(x[t])) for remaining elements
-        for t in 1..seq_len {
-            let prev = result.clone().slice([0..batch_size, t-1..t, 0..hidden_dim]);
-            let curr = x.clone().slice([0..batch_size, t..t+1, 0..hidden_dim]);
-            
-            // Use log-sum-exp trick for numerical stability
-            let max_vals = prev.clone().max_pair(curr.clone());
-            let min_vals = prev.clone().min_pair(curr.clone());
-            
-            // Create a minimum cap for numerical stability
-            let log_min_cap = Tensor::full([batch_size, 1, hidden_dim], -20.0f32, &device);
-            
-            // Apply cap to difference to avoid very negative values
-            let diff = (min_vals - max_vals.clone()).max_pair(log_min_cap);
-            
-            let logsumexp = max_vals + (Tensor::ones_like(&diff) + diff.exp()).log();
-            
-            result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], logsumexp);
-        }
-        
-        result
+        // Store result
+        result = result.slice_assign([0..batch_size, t..t+1, 0..hidden_dim], logsumexp);
     }
+    
+    // Return the computed result
+    result
 }
 
 #[cfg(test)]
