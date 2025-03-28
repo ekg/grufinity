@@ -507,10 +507,10 @@ impl<B: Backend> MinGRULM<B> {
         // Initialize hidden states
         let mut next_hidden_states = Vec::with_capacity(self.mingru_layers.len());
     
-        // Check if we need to chunk the sequence - only based on sequence length
-        if seq_len > self.chunk_size {
+        // Check if we need to chunk the sequence - based on sequence length and hidden states
+        if seq_len > self.chunk_size && hidden_states.is_none() {
             // Process in chunks and carry hidden states between them
-            return self.forward_chunked(x, hidden_states);
+            return self.forward_chunked(x, None);
         }
     
         // Process through layers
@@ -608,7 +608,7 @@ impl<B: Backend> MinGRULM<B> {
     
     /// Get hidden dimension for other modules
     pub fn dim(&self) -> usize {
-        self.token_emb.weight.dims()[0] // embedding dimension is first dimension of weight matrix
+        self.token_emb.weight.dims()[1] // embedding dimension is second dimension of weight matrix
     }
 
     fn forward_no_chunking(
