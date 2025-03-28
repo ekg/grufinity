@@ -231,7 +231,8 @@ cargo run --release --bin generate --features wgpu,fusion,autodiff,optimizer-ada
 
 GRUfinity uses a MinGRU (Minimal Gated Recurrent Unit) architecture with several optimizations:
 
-1. **MinGRU Layers**: Simplified GRU cells with a single gate and efficient activation function:
+1. **GPU-Optimized Dimensions**: All model dimensions are multiples of 32 (preferably powers of 2 like 128, 256, 512, 1024) for optimal GPU memory alignment and computation
+2. **MinGRU Layers**: Simplified GRU cells with a single gate and efficient activation function:
    ```
    h_t = (1 - z_t) ⊙ h_{t-1} + z_t ⊙ g(h̃_t)
    

@@ -674,9 +674,15 @@ fn main() {
     
     // Model architecture parameters
     if let Some(dim) = args.model_dim {
+        // Round dimension to nearest multiple of 32 for optimal performance
+        let rounded_dim = MinGRULMConfig::round_to_multiple_of_32(dim);
+        if rounded_dim != dim {
+            println!("Rounding model dimension from {} to {} (multiple of 32)", dim, rounded_dim);
+        }
+        
         modified_config.model = MinGRULMConfig::new(
             modified_config.model.num_tokens(),
-            dim
+            rounded_dim
         )
         .with_depth(modified_config.model.depth())
         .with_ff_mult(modified_config.model.ff_mult())
@@ -870,7 +876,7 @@ fn create_default_config() -> TBPTTConfig {
     // Configure the model
     let model_config = MinGRULMConfig::new(
         256,           // num_tokens (all possible byte values)
-        1024           // dimension (increased from 512 to 1024)
+        1024           // dimension (power of 2 for optimal GPU performance)
     )
     .with_depth(3)     // testing with 3 layers
     .with_ff_mult(3.0) // keeping ff_mult at 3.0

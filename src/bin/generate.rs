@@ -248,6 +248,7 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
     if !std::path::Path::new(config_path).exists() {
         debug(&format!("Config file not found at: {}", config_path));
         
+        // Use 1024 as dimension (power of 2 for optimal GPU performance)
         let config = MinGRULMConfig::new(vocab_size, 1024)
             .with_depth(3)
             .with_ff_mult(3.0)
