@@ -161,7 +161,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
               not(feature = "candle-cuda")))]
     {
         device_initialized = true;
-        device = crate::create_libtorch_device(device_id);
+        device = grufinity::create_libtorch_device(device_id);
     }
     
     // Error if no backend feature is enabled
@@ -821,7 +821,7 @@ fn main() {
                 .with_depth(3)
                 .with_ff_mult(3.0)
                 .with_expansion_factor(1.5)
-                .with_chunk_size(args.chunk_size)
+                .with_chunk_size(chunk_size)
         }
     };
     
@@ -844,10 +844,10 @@ fn main() {
         
         // Get the actual chunk size from the model
         let model_chunk_size = model.config().chunk_size();
-        if args.chunk_size != model_chunk_size {
-            eprintln!("Using chunk size {} (model's native size: {})", args.chunk_size, model_chunk_size);
+        if chunk_size != model_chunk_size {
+            eprintln!("Using chunk size {} (model's native size: {})", chunk_size, model_chunk_size);
         } else {
-            eprintln!("Using chunk size: {}", args.chunk_size);
+            eprintln!("Using chunk size: {}", chunk_size);
         }
     }
     
