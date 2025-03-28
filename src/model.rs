@@ -288,7 +288,7 @@ impl MinGRULMConfig {
     }
     
     /// Round a dimension to the nearest multiple of 32
-    fn round_to_multiple_of_32(dim: usize) -> usize {
+    pub fn round_to_multiple_of_32(dim: usize) -> usize {
         let remainder = dim % 32;
         if remainder == 0 {
             return dim; // Already a multiple of 32
