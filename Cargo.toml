@@ -31,7 +31,7 @@ gelu = [] # GELU activation function: x * Φ(x) where Φ is the CDF of the stand
 swiglu = [] # Use SwiGLU activation (otherwise uses SiLU)
 tanh = [] # Apply tanh nonlinearity between chunks (default: disabled)
 f16 = [] # Use half-precision (f16) floating point for reduced memory usage
-native-logsumexp = [] # Use native implementation of logsumexp for LibTorch backend
+tch-logsumexp = [] # Use native implementation of logsumexp for LibTorch backend
 
 # Optional CUDA features - these should be explicitly requested
 candle-cuda = ["candle", "burn/candle-cuda"]

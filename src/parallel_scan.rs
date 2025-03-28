@@ -161,8 +161,8 @@ fn parallel_scan_log_impl<B: Backend>(
 
 /// Compute the log(cumsum(exp(x))) in a numerically stable way
 fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
-    // If we're using LibTorch with native-logsumexp, use the specialized implementation
-    #[cfg(all(feature = "tch", feature = "native-logsumexp"))]
+    // If we're using LibTorch with tch-logsumexp, use the specialized implementation
+    #[cfg(all(feature = "tch", feature = "tch-logsumexp"))]
     {
         use burn::backend::libtorch::LibTorch;
         // This is a compile-time specialization based on the type of B
@@ -210,7 +210,7 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
 
 /// LibTorch-specific implementation of logcumsumexp using the native torch function
 /// This implementation is optimized for LibTorch backend based on feature flags
-#[cfg(all(feature = "tch", feature = "native-logsumexp"))]
+#[cfg(all(feature = "tch", feature = "tch-logsumexp"))]
 fn libtorch_logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
     // Get basic dimensions and device info
     let [batch_size, seq_len, hidden_dim] = x.dims();
