@@ -308,13 +308,27 @@ impl<B: Backend> MinGRU<B> {
             (x_positive * (x.clone() + 0.5)) + (x_negative * activation::sigmoid(x))
         }
         
-        #[cfg(all(feature = "swish", not(feature = "g-func")))]
+        #[cfg(feature = "gelu")]
+        {
+            // GELU activation: x * Φ(x)
+            // Approximation: 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+            let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
+            let coeff = 0.044715 as f32;
+            
+            let x_cubed = x.clone().pow(3);
+            let inner = sqrt_2_div_pi * (x.clone() + coeff * x_cubed);
+            let tanh_part = inner.tanh();
+            
+            x.clone() * 0.5 * (Tensor::ones_like(&x) + tanh_part)
+        }
+        
+        #[cfg(all(feature = "swish", not(any(feature = "g-func", feature = "gelu"))))]
         {
             // Swish/SiLU activation: f(x) = x * sigmoid(x)
             x.clone() * activation::sigmoid(x)
         }
         
-        #[cfg(not(any(feature = "g-func", feature = "swish")))]
+        #[cfg(not(any(feature = "g-func", feature = "gelu", feature = "swish")))]
         {
             // Default to SiLU if no specific activation is selected
             activation::silu(x)
@@ -344,7 +358,35 @@ impl<B: Backend> MinGRU<B> {
             (x_positive * log_g_pos) + (x_negative * log_g_neg)
         }
         
-        #[cfg(all(feature = "swish", not(feature = "g-func")))]
+        #[cfg(feature = "gelu")]
+        {
+            // Log-space GELU: log(x * Φ(x))
+            // This is an approximation that preserves numerical stability
+            let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
+            let coeff = 0.044715 as f32;
+            
+            // For practical log-space implementation, we compute
+            // log(x) + log(0.5 * (1 + tanh(...)))
+            
+            // First get log(x) with care for zeroes
+            let x_log = x.clone().clamp(1e-9, f32::MAX).log();
+            
+            // Then compute log(0.5 * (1 + tanh(...)))
+            let x_cubed = x.clone().pow(3);
+            let inner = sqrt_2_div_pi * (x.clone() + coeff * x_cubed);
+            let tanh_part = inner.tanh();
+            
+            // log(0.5) + log(1 + tanh_part)
+            // Using log1p approximation for log(1 + tanh_part)
+            // log(0.5) = -0.693
+            let log_half = -0.693 as f32;
+            let log_gelu_part = log_half + (Tensor::ones_like(&tanh_part) + tanh_part).log();
+            
+            // Combine the parts
+            x_log + log_gelu_part
+        }
+        
+        #[cfg(all(feature = "swish", not(any(feature = "g-func", feature = "gelu"))))]
         {
             // Log-space Swish: log(x * sigmoid(x))
             // log(x) + log(sigmoid(x)) = log(x) - softplus(-x)
@@ -354,7 +396,7 @@ impl<B: Backend> MinGRU<B> {
             x_log + sigmoid_log
         }
         
-        #[cfg(not(any(feature = "g-func", feature = "swish")))]
+        #[cfg(not(any(feature = "g-func", feature = "gelu", feature = "swish")))]
         {
             // Default log-space SiLU if no specific activation is selected
             // Using the same approximation as for Swish since they're the same

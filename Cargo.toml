@@ -27,6 +27,7 @@ autodiff = ["burn/autodiff"]
 autotune = ["burn/autotune"]
 g-func = [] # Original activation function: g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0
 swish = [] # Swish/SiLU activation function: f(x) = x * sigmoid(x)
+gelu = [] # GELU activation function: x * Φ(x) where Φ is the CDF of the standard normal
 swiglu = [] # Use SwiGLU activation (otherwise uses SiLU)
 tanh = [] # Apply tanh nonlinearity between chunks (default: disabled)
 f16 = [] # Use half-precision (f16) floating point for reduced memory usage

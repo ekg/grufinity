@@ -46,6 +46,7 @@ GRUfinity supports various backends through feature flags:
 - `optimizer-sgd` - Use SGD optimizer (alternative to Adam)
 - `g-func` - Use original activation function (g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0)
 - `swish` - Use Swish/SiLU activation function (f(x) = x * sigmoid(x)) - default
+- `gelu` - Use GELU activation function (x * Φ(x) where Φ is the CDF of the standard normal)
 - `swiglu` - Use SwiGLU activation (instead of SiLU)
 - `tanh` - Apply tanh nonlinearity between chunks (default: disabled)
 

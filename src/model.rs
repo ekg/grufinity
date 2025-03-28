@@ -183,13 +183,26 @@ impl<B: Backend> FeedForward<B> {
             (x_positive * (x2.clone() + 0.5)) + (x_negative * activation::sigmoid(x2))
         };
         
-        #[cfg(all(feature = "swish", not(feature = "g-func")))]
+        #[cfg(feature = "gelu")]
+        let activated = {
+            // GELU activation
+            let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
+            let coeff = 0.044715 as f32;
+            
+            let x_cubed = x2.clone().pow(3);
+            let inner = sqrt_2_div_pi * (x2.clone() + coeff * x_cubed);
+            let tanh_part = inner.tanh();
+            
+            x2.clone() * 0.5 * (Tensor::ones_like(&x2) + tanh_part)
+        };
+        
+        #[cfg(all(feature = "swish", not(any(feature = "g-func", feature = "gelu"))))]
         let activated = {
             // Swish/SiLU activation
             x2.clone() * activation::sigmoid(x2)
         };
         
-        #[cfg(not(any(feature = "g-func", feature = "swish")))]
+        #[cfg(not(any(feature = "g-func", feature = "gelu", feature = "swish")))]
         let activated = {
             // Default to SiLU
             activation::silu(x2)
