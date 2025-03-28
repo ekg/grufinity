@@ -84,12 +84,24 @@ struct GenerateArgs {
 }
 
 // Initialize appropriate device based on enabled features
-#[allow(unused_variables)]
+// Initialize appropriate device based on backend type
 fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
     let mut device_initialized = false;
     
-    // Default device that will be returned if no specific backend is active
+    // Create appropriate device based on backend type
+    #[cfg(feature = "tch")]
+    {
+        // Special case for LibTorch - need to check if B::Device is LibTorchDevice
+        if std::any::TypeId::of::<B::Device>() == std::any::TypeId::of::<burn::backend::libtorch::LibTorchDevice>() {
+            device_initialized = true;
+            let device = grufinity::create_libtorch_device(device_id);
+            // Safety: We've verified the type matches
+            return unsafe { std::mem::transmute(device) };
+        }
+    }
+    
+    // Default device for other backends
     let device = B::Device::default();
     
     // Log the device type being used based on enabled features
@@ -118,7 +130,6 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     {
         device_initialized = true;
         // Note: Vulkan backend doesn't support direct device_id selection like CUDA
-        // It uses the default adapter selection mechanism from wgpu
         if device_id != 0 {
             debug("Warning: Vulkan backend doesn't support explicit device selection by ID");
             debug("Using default Vulkan device (device_id parameter ignored)");
@@ -141,27 +152,11 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
         }
     }
     
-    #[cfg(all(feature = "candle", not(feature = "candle-cuda"), not(feature = "cuda"), 
-              not(feature = "wgpu"), not(feature = "candle-metal")))]
-    {
-        device_initialized = true;
-        debug("Using Candle CPU device");
-        CandleDevice::Cpu
-    }
-    
     #[cfg(all(feature = "ndarray", not(feature = "cuda"), not(feature = "wgpu"), 
               not(feature = "candle"), not(feature = "candle-metal"), not(feature = "candle-cuda")))]
     {
         device_initialized = true;
         debug("Using NdArray device");
-    }
-    
-    #[cfg(all(feature = "tch", not(feature = "cuda"), not(feature = "wgpu"), 
-              not(feature = "candle"), not(feature = "ndarray"), not(feature = "candle-metal"), 
-              not(feature = "candle-cuda")))]
-    {
-        device_initialized = true;
-        device = grufinity::create_libtorch_device(device_id);
     }
     
     // Error if no backend feature is enabled
