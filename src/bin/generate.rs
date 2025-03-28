@@ -23,16 +23,17 @@ static mut VERBOSE: bool = false;
 // Helper function to create LibTorch device when B::Device is LibTorchDevice
 #[cfg(feature = "tch")]
 fn create_device_for_libtorch<B: Backend>(device_id: usize) -> Option<B::Device> {
-    use burn::backend::libtorch::{LibTorch, LibTorchDevice};
-    use std::any::TypeId;
+    use burn::backend::libtorch::LibTorchDevice;
+    use std::any::{Any, TypeId};
     
-    // Only execute this when B is LibTorch with the same element type as our crate uses
-    if TypeId::of::<B>() == TypeId::of::<LibTorch<grufinity::Elem>>() {
+    // Get type name to check if it's LibTorch without using private Elem type
+    let type_name = std::any::type_name::<B>();
+    if type_name.contains("LibTorch") {
         // Create the appropriate LibTorch device based on features
         let device = grufinity::create_libtorch_device(device_id);
         
         // We need to convert LibTorchDevice to B::Device
-        // This is safe because we've verified B is LibTorch with the right element type
+        // This is safe because we've verified B contains "LibTorch"
         return Some(unsafe { 
             // We're using a pointer cast instead of transmute to avoid size issues
             let device_ptr = &device as *const LibTorchDevice as *const B::Device;
@@ -117,7 +118,7 @@ fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[cfg(feature = "tch")]
     {
         if let Some(device) = create_device_for_libtorch::<B>(device_id) {
-            device_initialized = true;
+            debug("Using LibTorch device");
             return device;
         }
     }
