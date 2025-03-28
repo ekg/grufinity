@@ -13,6 +13,12 @@ pub use dataset::*;
 pub use tbptt::{TBPTTConfig, train_with_tbptt, LRSchedulerType};
 pub use errors::{GRUfinityError, Result, ResultExt};
 
+// Define element type based on the f16 feature flag
+#[cfg(feature = "f16")]
+type Elem = burn::tensor::f16;
+#[cfg(not(feature = "f16"))]
+type Elem = f32;
+
 // Re-export essential types for convenience
 pub use burn::{
     module::Module,
@@ -20,6 +26,10 @@ pub use burn::{
     config::Config,
     record::{Record, Recorder, BinFileRecorder, FullPrecisionSettings}
 };
+
+// Import f16 type when feature is enabled
+#[cfg(feature = "f16")]
+pub use burn::tensor::f16;
 
 // Import backend types at the crate level
 // Only import CUDA types when explicitly requested
@@ -73,21 +83,21 @@ pub use burn::backend::autodiff::Autodiff;
 
 // 1. CUDA (highest priority)
 #[cfg(all(feature = "cuda", feature = "autodiff"))]
-pub type BackendWithAutodiff = Autodiff<Cuda<f32>>;
+pub type BackendWithAutodiff = Autodiff<Cuda<Elem>>;
 #[cfg(all(feature = "cuda", not(feature = "autodiff")))]
-pub type BackendWithAutodiff = Cuda<f32>;
+pub type BackendWithAutodiff = Cuda<Elem>;
 #[cfg(feature = "cuda")]
-pub type RawBackend = Cuda<f32>;
+pub type RawBackend = Cuda<Elem>;
 #[cfg(feature = "cuda")]
 pub type BackendDevice = CudaDevice;
 
 // 2. Candle CUDA backend (second priority)
 #[cfg(all(feature = "candle-cuda", feature = "autodiff", not(feature = "cuda")))]
-pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
+pub type BackendWithAutodiff = Autodiff<Candle<Elem>>;
 #[cfg(all(feature = "candle-cuda", not(feature = "autodiff"), not(feature = "cuda")))]
-pub type BackendWithAutodiff = Candle<f32>;
+pub type BackendWithAutodiff = Candle<Elem>;
 #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
-pub type RawBackend = Candle<f32>;
+pub type RawBackend = Candle<Elem>;
 #[cfg(all(feature = "candle-cuda", not(feature = "cuda")))]
 pub type BackendDevice = CandleDevice;
 
@@ -95,15 +105,15 @@ pub type BackendDevice = CandleDevice;
 #[cfg(all(feature = "vulkan", feature = "autodiff", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
-pub type BackendWithAutodiff = Autodiff<Vulkan<f32, i32>>;
+pub type BackendWithAutodiff = Autodiff<Vulkan<Elem, i32>>;
 #[cfg(all(feature = "vulkan", not(feature = "autodiff"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
-pub type BackendWithAutodiff = Vulkan<f32, i32>;
+pub type BackendWithAutodiff = Vulkan<Elem, i32>;
 #[cfg(all(feature = "vulkan", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
-pub type RawBackend = Vulkan<f32, i32>;
+pub type RawBackend = Vulkan<Elem, i32>;
 #[cfg(all(feature = "vulkan", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle")))]
@@ -113,15 +123,15 @@ pub type BackendDevice = burn::backend::wgpu::WgpuDevice; // Vulkan uses WgpuDev
 #[cfg(all(feature = "wgpu", feature = "autodiff", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle"), not(feature = "vulkan")))]
-pub type BackendWithAutodiff = Autodiff<Wgpu<f32, i32>>;
+pub type BackendWithAutodiff = Autodiff<Wgpu<Elem, i32>>;
 #[cfg(all(feature = "wgpu", not(feature = "autodiff"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle"), not(feature = "vulkan")))]
-pub type BackendWithAutodiff = Wgpu<f32, i32>;
+pub type BackendWithAutodiff = Wgpu<Elem, i32>;
 #[cfg(all(feature = "wgpu", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle"), not(feature = "vulkan")))]
-pub type RawBackend = Wgpu<f32, i32>;
+pub type RawBackend = Wgpu<Elem, i32>;
 #[cfg(all(feature = "wgpu", 
           not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"),
           not(feature = "candle"), not(feature = "vulkan")))]
@@ -131,15 +141,15 @@ pub type BackendDevice = WgpuDevice;
 #[cfg(all(feature = "candle-metal", feature = "autodiff", 
           not(feature = "cuda"), not(feature = "candle-cuda"), 
           not(feature = "wgpu"), not(feature = "vulkan")))]
-pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
+pub type BackendWithAutodiff = Autodiff<Candle<Elem>>;
 #[cfg(all(feature = "candle-metal", not(feature = "autodiff"), 
           not(feature = "cuda"), not(feature = "candle-cuda"), 
           not(feature = "wgpu"), not(feature = "vulkan")))]
-pub type BackendWithAutodiff = Candle<f32>;
+pub type BackendWithAutodiff = Candle<Elem>;
 #[cfg(all(feature = "candle-metal", 
           not(feature = "cuda"), not(feature = "candle-cuda"), 
           not(feature = "wgpu"), not(feature = "vulkan")))]
-pub type RawBackend = Candle<f32>;
+pub type RawBackend = Candle<Elem>;
 #[cfg(all(feature = "candle-metal", 
           not(feature = "cuda"), not(feature = "candle-cuda"), 
           not(feature = "wgpu"), not(feature = "vulkan")))]
@@ -149,15 +159,15 @@ pub type BackendDevice = CandleDevice;
 #[cfg(all(feature = "candle", feature = "autodiff", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan")))]
-pub type BackendWithAutodiff = Autodiff<Candle<f32>>;
+pub type BackendWithAutodiff = Autodiff<Candle<Elem>>;
 #[cfg(all(feature = "candle", not(feature = "autodiff"), 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan")))]
-pub type BackendWithAutodiff = Candle<f32>;
+pub type BackendWithAutodiff = Candle<Elem>;
 #[cfg(all(feature = "candle", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan")))]
-pub type RawBackend = Candle<f32>;
+pub type RawBackend = Candle<Elem>;
 #[cfg(all(feature = "candle", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan")))]
@@ -167,15 +177,15 @@ pub type BackendDevice = CandleDevice;
 #[cfg(all(feature = "tch", feature = "autodiff", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")))]
-pub type BackendWithAutodiff = Autodiff<LibTorch<f32>>;
+pub type BackendWithAutodiff = Autodiff<LibTorch<Elem>>;
 #[cfg(all(feature = "tch", not(feature = "autodiff"), 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")))]
-pub type BackendWithAutodiff = LibTorch<f32>;
+pub type BackendWithAutodiff = LibTorch<Elem>;
 #[cfg(all(feature = "tch", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")))]
-pub type RawBackend = LibTorch<f32>;
+pub type RawBackend = LibTorch<Elem>;
 #[cfg(all(feature = "tch", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")))]
@@ -186,17 +196,17 @@ pub type BackendDevice = LibTorchDevice;
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), 
          not(feature = "tch")))]
-pub type BackendWithAutodiff = Autodiff<NdArray<f32>>;
+pub type BackendWithAutodiff = Autodiff<NdArray<Elem>>;
 #[cfg(all(feature = "ndarray", not(feature = "autodiff"), 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), 
          not(feature = "tch")))]
-pub type BackendWithAutodiff = NdArray<f32>;
+pub type BackendWithAutodiff = NdArray<Elem>;
 #[cfg(all(feature = "ndarray", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), 
          not(feature = "tch")))]
-pub type RawBackend = NdArray<f32>;
+pub type RawBackend = NdArray<Elem>;
 #[cfg(all(feature = "ndarray", 
          not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), 
          not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), 
@@ -304,7 +314,7 @@ pub type BackendWithAutodiff = Autodiff<NdArray<f32>>;
     all(feature = "tch", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle")),
     all(feature = "ndarray", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "wgpu"), not(feature = "vulkan"), not(feature = "candle"), not(feature = "tch"))
 ))))]
-pub type RawBackend = NdArray<f32>;
+pub type RawBackend = NdArray<Elem>;
 
 #[cfg(all(test, not(any(
     feature = "cuda",
