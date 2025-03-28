@@ -947,7 +947,10 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             // All optimizers need learning rate parameter
             let model = optimizer.step(self.learning_rate, self.model.clone(), grads);
             self.model = model;
+                
+            // Reset accumulation counter and create a fresh accumulator
             *accumulation_current = 0;
+            *accumulator = GradientsAccumulator::<MinGRULM<B>>::new();
 
             // Update metrics with current learning rate (for both Adam and SGD)
             self.metrics.update_lr(self.learning_rate);
@@ -1151,6 +1154,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         if accumulation_current > 0 {
             let grads = accumulator.grads();
             self.model = optimizer.step(self.learning_rate, self.model.clone(), grads);
+            
+            // Create a fresh accumulator to ensure clean state for next epoch
+            *accumulator = GradientsAccumulator::<MinGRULM<B>>::new();
         }
 
         // Finalize metrics
