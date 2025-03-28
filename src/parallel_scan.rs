@@ -164,7 +164,6 @@ fn logcumsumexp<B: Backend>(x: Tensor<B, 3>) -> Tensor<B, 3> {
     // If we're using LibTorch with tch-logsumexp, use the specialized implementation
     #[cfg(all(feature = "tch", feature = "tch-logsumexp"))]
     {
-        use burn::backend::libtorch::LibTorch;
         // This is a compile-time specialization based on the type of B
         // Use type_name instead of runtime downcasting for efficiency
         let type_name = std::any::type_name::<B>();
