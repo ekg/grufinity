@@ -189,7 +189,8 @@ impl<B: Backend> FeedForward<B> {
             let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
             let coeff = 0.044715 as f32;
             
-            let x_cubed = x2.clone().powf(3.0);
+            let exponent = Tensor::full_like(&x2, 3.0);
+            let x_cubed = x2.clone().powf(exponent);
             let inner = (x2.clone() + x_cubed * coeff) * sqrt_2_div_pi;
             let tanh_part = inner.tanh();
             

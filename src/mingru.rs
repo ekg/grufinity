@@ -315,7 +315,8 @@ impl<B: Backend> MinGRU<B> {
             let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
             let coeff = 0.044715 as f32;
             
-            let x_cubed = x.clone().powf(3.0);
+            let exponent = Tensor::full_like(&x, 3.0);
+            let x_cubed = x.clone().powf(exponent);
             let inner = (x.clone() + x_cubed * coeff) * sqrt_2_div_pi;
             let tanh_part = inner.tanh();
             
@@ -372,7 +373,8 @@ impl<B: Backend> MinGRU<B> {
             let x_log = x.clone().clamp(1e-9, f32::MAX).log();
             
             // Then compute log(0.5 * (1 + tanh(...)))
-            let x_cubed = x.clone().powf(3.0);
+            let exponent = Tensor::full_like(&x, 3.0);
+            let x_cubed = x.clone().powf(exponent);
             let inner = (x.clone() + x_cubed * coeff) * sqrt_2_div_pi;
             let tanh_part = inner.tanh();
             
