@@ -315,8 +315,8 @@ impl<B: Backend> MinGRU<B> {
             let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
             let coeff = 0.044715 as f32;
             
-            let x_cubed = x.clone().pow(3);
-            let inner = sqrt_2_div_pi * (x.clone() + coeff * x_cubed);
+            let x_cubed = x.clone().powf(3.0);
+            let inner = (x.clone() + x_cubed * coeff) * sqrt_2_div_pi;
             let tanh_part = inner.tanh();
             
             x.clone() * 0.5 * (Tensor::ones_like(&x) + tanh_part)
@@ -372,14 +372,14 @@ impl<B: Backend> MinGRU<B> {
             let x_log = x.clone().clamp(1e-9, f32::MAX).log();
             
             // Then compute log(0.5 * (1 + tanh(...)))
-            let x_cubed = x.clone().pow(3);
-            let inner = sqrt_2_div_pi * (x.clone() + coeff * x_cubed);
+            let x_cubed = x.clone().powf(3.0);
+            let inner = (x.clone() + x_cubed * coeff) * sqrt_2_div_pi;
             let tanh_part = inner.tanh();
             
             // log(0.5) + log(1 + tanh_part)
             // Using log1p approximation for log(1 + tanh_part)
             // log(0.5) = -0.693
-            let log_half = -0.693 as f32;
+            let log_half = Tensor::full_like(&tanh_part, -0.693);
             let log_gelu_part = log_half + (Tensor::ones_like(&tanh_part) + tanh_part).log();
             
             // Combine the parts
