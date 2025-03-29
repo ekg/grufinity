@@ -281,7 +281,7 @@ fn main() {
     #[allow(unused_assignments)]
     let _device: BackendDevice;
     #[allow(unused_assignments)]
-    let mut device_initialized = false;
+    let device_initialized = false;
     
     #[cfg(feature = "cuda")]
     let device = {
