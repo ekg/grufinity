@@ -96,7 +96,7 @@ mod tests {
         
         // Test g_function with positive values
         let positive_data = vec![1.0, 2.0];
-        let positive = Tensor::<RawBackend, 1, Float>::from_data(&positive_data, &device).reshape([1, 2]);
+        let positive = Tensor::<RawBackend, 1, Float>::from_data(&*positive_data, &device).reshape([1, 2]);
         let positive_result = mingru.g_function(positive);
         
         // Extract result for checking
@@ -108,7 +108,7 @@ mod tests {
         
         // Test g_function with negative values
         let negative_data = vec![-1.0, -2.0];
-        let negative = Tensor::<RawBackend, 1, Float>::from_data(&negative_data, &device).reshape([1, 2]);
+        let negative = Tensor::<RawBackend, 1, Float>::from_data(&*negative_data, &device).reshape([1, 2]);
         let negative_result = mingru.g_function(negative);
         
         // Extract result for checking
