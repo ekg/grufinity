@@ -130,6 +130,98 @@ mod tests {
     }
     
     #[test]
+    fn test_log_g_function() {
+        println!("Running test of log_g_function with backend: {}", get_backend_name());
+        let device = <RawBackend as Backend>::Device::default();
+        
+        // Create a MinGRU instance
+        let config = MinGRUConfig::new(2, 2);
+        let mingru = config.init::<RawBackend>(&device);
+        
+        // Test log_g_function with positive values
+        let positive_data = vec![1.0, 2.0];
+        let positive = Tensor::<RawBackend, 1, Float>::from_data(&*positive_data, &device).reshape([1, 1, 2]);
+        let positive_result = mingru.log_g_function(positive);
+        
+        // Extract result for checking
+        let positive_result_data: Vec<f32> = positive_result.into_data().into_vec().unwrap();
+        
+        // For x >= 0, log_g(x) = log(relu(x) + 0.5), so log(1.0 + 0.5) = log(1.5), log(2.0 + 0.5) = log(2.5)
+        let expected_log_1_5 = (1.5f32).ln();
+        let expected_log_2_5 = (2.5f32).ln();
+        
+        assert!((positive_result_data[0] - expected_log_1_5).abs() < 1e-5);
+        assert!((positive_result_data[1] - expected_log_2_5).abs() < 1e-5);
+        
+        // Test log_g_function with negative values
+        let negative_data = vec![-1.0, -2.0];
+        let negative = Tensor::<RawBackend, 1, Float>::from_data(&*negative_data, &device).reshape([1, 1, 2]);
+        let negative_result = mingru.log_g_function(negative);
+        
+        // Extract result for checking
+        let negative_result_data: Vec<f32> = negative_result.into_data().into_vec().unwrap();
+        
+        // For x < 0, log_g(x) = -softplus(-x) = log(sigmoid(x))
+        let expected_log_sigmoid_neg1 = -(-1.0f32).exp().ln_1p();  // -softplus(-(-1)) = -softplus(1)
+        let expected_log_sigmoid_neg2 = -(-2.0f32).exp().ln_1p();  // -softplus(-(-2)) = -softplus(2)
+        
+        // Print actual vs expected values for debugging
+        println!("Negative log test: actual(log_g(-1.0)) = {}, expected = {}, diff = {}", 
+            negative_result_data[0], expected_log_sigmoid_neg1, (negative_result_data[0] - expected_log_sigmoid_neg1).abs());
+        println!("Negative log test: actual(log_g(-2.0)) = {}, expected = {}, diff = {}", 
+            negative_result_data[1], expected_log_sigmoid_neg2, (negative_result_data[1] - expected_log_sigmoid_neg2).abs());
+        
+        assert!((negative_result_data[0] - expected_log_sigmoid_neg1).abs() < 1e-5);
+        assert!((negative_result_data[1] - expected_log_sigmoid_neg2).abs() < 1e-5);
+    }
+    
+    #[test]
+    fn test_g_and_log_g_correspondence() {
+        println!("Running test of g and log_g correspondence with backend: {}", get_backend_name());
+        let device = <RawBackend as Backend>::Device::default();
+        
+        // Create a MinGRU instance
+        let config = MinGRUConfig::new(2, 2);
+        let mingru = config.init::<RawBackend>(&device);
+        
+        // Test with various values: positive, negative, and zero
+        let test_data = vec![-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0];
+        let test_tensor_2d = Tensor::<RawBackend, 1, Float>::from_data(&*test_data, &device).reshape([1, test_data.len()]);
+        let test_tensor_3d = test_tensor_2d.clone().reshape([1, 1, test_data.len()]);
+        
+        // Calculate g(x) and log_g(x)
+        let g_result = mingru.g_function(test_tensor_2d);
+        let log_g_result = mingru.log_g_function(test_tensor_3d);
+        
+        // Calculate log(g(x)) manually
+        let epsilon = 1e-10;  // Small epsilon to avoid log(0)
+        let g_result_clamped = g_result.clamp(epsilon, f32::MAX);
+        let log_of_g_result = g_result_clamped.log();
+        
+        // Reshape log_g_result to match log_of_g_result for comparison
+        let log_g_result_reshaped = log_g_result.reshape([1, test_data.len()]);
+        
+        // Extract data for printing
+        let g_values: Vec<f32> = g_result.into_data().into_vec().unwrap();
+        let log_g_values: Vec<f32> = log_g_result_reshaped.clone().into_data().into_vec().unwrap();
+        let log_of_g_values: Vec<f32> = log_of_g_result.into_data().into_vec().unwrap();
+        
+        // Compare values
+        for i in 0..test_data.len() {
+            let x = test_data[i];
+            let g_x = g_values[i];
+            let log_g_x = log_g_values[i];
+            let log_of_g_x = log_of_g_values[i];
+            
+            println!("x = {}, g(x) = {}, log_g(x) = {}, log(g(x)) = {}, diff = {}", 
+                x, g_x, log_g_x, log_of_g_x, (log_g_x - log_of_g_x).abs());
+                
+            // Check that log_g(x) ≈ log(g(x))
+            assert!((log_g_x - log_of_g_x).abs() < 1e-5);
+        }
+    }
+    
+    #[test]
     fn test_mingru_forward_single_step() {
         println!("Running test with backend: {}", get_backend_name());
         let device = <RawBackend as Backend>::Device::default();
