@@ -399,7 +399,7 @@ impl<B: Backend> MinGRU<B> {
             
             let prev_h_reshaped = if prev_h_batch_size != batch_size {
                 // Repeat the hidden state for each item in the batch
-                let repeated = prev_h.repeat([batch_size / prev_h_batch_size.max(1), 1]);
+                let repeated = prev_h.repeat(&[batch_size / prev_h_batch_size.max(1), 1]);
                 
                 // If sizes still don't match, broadcast to match batch_size
                 if repeated.dims()[0] != batch_size {
