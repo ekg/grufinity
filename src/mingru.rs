@@ -195,7 +195,7 @@ mod tests {
         
         // Calculate log(g(x)) manually
         let epsilon = 1e-10;  // Small epsilon to avoid log(0)
-        let g_result_clamped = g_result.clamp(epsilon, f32::MAX);
+        let g_result_clamped = g_result.clone().clamp(epsilon, f32::MAX);
         let log_of_g_result = g_result_clamped.log();
         
         // Reshape log_g_result to match log_of_g_result for comparison
