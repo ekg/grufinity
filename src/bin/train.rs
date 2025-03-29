@@ -103,6 +103,10 @@ struct TrainingArgs {
     /// Preserve hidden states between batches
     #[arg(long)]
     preserve_hidden_states: Option<bool>,
+    
+    /// Use random sequence sampling instead of TBPTT
+    #[arg(long)]
+    random_sampling: Option<bool>,
 
     /// Gradient clipping value (0.0 to disable)
     #[arg(long)]
@@ -551,6 +555,16 @@ fn main() {
     if let Some(preserve) = args.preserve_hidden_states {
         modified_config.preserve_hidden_states = preserve;
         println!("Setting preserve hidden states to: {}", preserve);
+    }
+    
+    if let Some(random) = args.random_sampling {
+        modified_config.random_sampling = random;
+        // If random sampling is enabled, we need to disable hidden state preservation
+        if random {
+            modified_config.preserve_hidden_states = false;
+            println!("Random sequence sampling enabled - hidden state preservation disabled");
+        }
+        println!("Setting random sequence sampling to: {}", random);
     }
     
     if let Some(clip) = args.grad_clip {

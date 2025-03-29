@@ -356,6 +356,10 @@ pub struct TBPTTConfig {
     /// Whether to preserve hidden states between batches
     #[config(default = true)]
     pub preserve_hidden_states: bool,
+    
+    /// Whether to use random sequence sampling instead of TBPTT
+    #[config(default = false)]
+    pub random_sampling: bool,
 
     /// Random seed for reproducibility
     #[config(default = 42)]
@@ -703,7 +707,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         &self.metrics
     }
 
-    /// Process a single document chunk with TBPTT handling padded chunks
+    /// Process a single document chunk with TBPTT or random sampling
     pub fn process_chunk<O: Optimizer<MinGRULM<B>, B>>(
         &mut self,
         chunk: &ChunkedTextBatch<B>,
@@ -711,6 +715,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         accumulator: &mut GradientsAccumulator<MinGRULM<B>>,
         accumulation_current: &mut usize,
         do_update: bool,
+        random_sampling: bool,
     ) -> f32 {
         // Safely get tensor dimensions with error handling
         if chunk.input.dims().len() < 2 {
@@ -724,147 +729,156 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         // Get current hidden states for this document if available
         let mut current_hidden_states = Vec::new();
 
-        // Process each position in the batch
-        for i in 0..batch_size {
-            let doc_id = if i < chunk.doc_ids.len() {
-                chunk.doc_ids[i]
-            } else {
-                continue; // Skip if out of bounds
-            };
-            
-            let chunk_idx = if i < chunk.chunk_indices.len() {
-                chunk.chunk_indices[i]
-            } else {
-                continue; // Skip if out of bounds
-            };
-            
-            let is_padded = chunk.is_padded.get(i).cloned().unwrap_or(false);
-
-            // Retrieve or initialize hidden state for this position
-            let doc_hidden = if !is_padded && self.hidden_states.contains_key(&doc_id) {
-                let state = self.hidden_states.get(&doc_id).unwrap().clone();
-
-                // Detach if we're beyond the backprop window (tbptt_k2)
-                if chunk_idx % self.tbptt_k2 == 0 {
-                    // Detach to truncate backpropagation
-                    state.iter().map(|h| h.clone().detach()).collect()
+        // Skip hidden state handling if using random sampling mode
+        if !random_sampling && self.preserve_hidden_states {
+            // Process each position in the batch
+            for i in 0..batch_size {
+                let doc_id = if i < chunk.doc_ids.len() {
+                    chunk.doc_ids[i]
                 } else {
-                    state
-                }
-            } else {
-                // No previous state or padded chunk - initialize with zeros
-                Vec::new()
-            };
+                    continue; // Skip if out of bounds
+                };
+                
+                let chunk_idx = if i < chunk.chunk_indices.len() {
+                    chunk.chunk_indices[i]
+                } else {
+                    continue; // Skip if out of bounds
+                };
+                
+                let is_padded = chunk.is_padded.get(i).cloned().unwrap_or(false);
 
-            current_hidden_states.push(doc_hidden);
-        }
+                // Retrieve or initialize hidden state for this position
+                let doc_hidden = if !is_padded && self.hidden_states.contains_key(&doc_id) {
+                    let state = self.hidden_states.get(&doc_id).unwrap().clone();
 
-        // Flatten into vector of tensors for the batch
-        let batch_hidden =
-            if current_hidden_states.is_empty() || current_hidden_states[0].is_empty() {
-                None
-            } else {
-                // Make sure we have valid hidden states with consistent dimensions
-                let mut all_valid = true;
-                let hidden_dim = match current_hidden_states
-                    .get(0)
-                    .and_then(|hs| hs.get(0).map(|h| h.dims()[0]))
-                {
-                    Some(dim) => dim,
-                    None => {
-                        all_valid = false;
-                        96 // Default dimension from model config, adjust if needed
+                    // Detach if we're beyond the backprop window (tbptt_k2)
+                    if chunk_idx % self.tbptt_k2 == 0 {
+                        // Detach to truncate backpropagation
+                        state.iter().map(|h| h.clone().detach()).collect()
+                    } else {
+                        state
                     }
+                } else {
+                    // No previous state or padded chunk - initialize with zeros
+                    Vec::new()
                 };
 
-                if !all_valid {
-                    None
-                } else {
-                    // Collect hidden states for each layer
-                    let mut merged_states = Vec::new();
-                    let num_layers = current_hidden_states[0].len();
+                current_hidden_states.push(doc_hidden);
+            }
+        }
 
-                    for layer in 0..num_layers {
-                        let layer_states: Vec<_> = current_hidden_states
-                            .iter()
-                            .map(|doc_state| {
-                                if doc_state.len() > layer {
-                                    // Ensure tensor has correct dimensions
-                                    doc_state[layer].clone()
-                                } else {
-                                    // If layer doesn't exist, create zero tensor
-                                    Tensor::zeros([1, hidden_dim], &device)
-                                }
-                            })
-                            .collect();
-
-                        if layer_states.len() == batch_size {
-                            // Make sure we're not stacking empty tensors
-                            if !layer_states.is_empty() {
-                                // Stack along batch dimension
-                                merged_states.push(Tensor::cat(layer_states, 0));
-                            } else {
-                                // Skip this batch due to empty tensors
-                                return 0.0;
-                            }
-                        } else {
-                            // Skip this batch due to dimension mismatch
-                            return 0.0;
-                        }
-                    }
-
-                    Some(merged_states)
+        // Determine whether to use hidden states or not
+        let batch_hidden = if random_sampling || !self.preserve_hidden_states {
+            // In random sampling mode or when hidden states are not preserved,
+            // we always start with fresh hidden states (None)
+            None
+        } else if current_hidden_states.is_empty() || current_hidden_states[0].is_empty() {
+            None
+        } else {
+            // Make sure we have valid hidden states with consistent dimensions
+            let mut all_valid = true;
+            let hidden_dim = match current_hidden_states
+                .get(0)
+                .and_then(|hs| hs.get(0).map(|h| h.dims()[0]))
+            {
+                Some(dim) => dim,
+                None => {
+                    all_valid = false;
+                    96 // Default dimension from model config, adjust if needed
                 }
             };
 
-        // Forward pass with hidden state
+            if !all_valid {
+                None
+            } else {
+                // Collect hidden states for each layer
+                let mut merged_states = Vec::new();
+                let num_layers = current_hidden_states[0].len();
+
+                for layer in 0..num_layers {
+                    let layer_states: Vec<_> = current_hidden_states
+                        .iter()
+                        .map(|doc_state| {
+                            if doc_state.len() > layer {
+                                // Ensure tensor has correct dimensions
+                                doc_state[layer].clone()
+                            } else {
+                                // If layer doesn't exist, create zero tensor
+                                Tensor::zeros([1, hidden_dim], &device)
+                            }
+                        })
+                        .collect();
+
+                    if layer_states.len() == batch_size {
+                        // Make sure we're not stacking empty tensors
+                        if !layer_states.is_empty() {
+                            // Stack along batch dimension
+                            merged_states.push(Tensor::cat(layer_states, 0));
+                        } else {
+                            // Skip this batch due to empty tensors
+                            return 0.0;
+                        }
+                    } else {
+                        // Skip this batch due to dimension mismatch
+                        return 0.0;
+                    }
+                }
+
+                Some(merged_states)
+            }
+        };
+
+        // Forward pass with hidden state (or None for random sampling)
         let (logits, next_hidden) = self.model.forward(chunk.input.clone(), batch_hidden);
 
-        // Update hidden states for each document
-        for i in 0..batch_size {
-            let doc_id = chunk.doc_ids[i];
-            let is_last_chunk = chunk.is_last_chunks[i];
+        // Only update hidden states if we're not in random sampling mode and preservation is enabled
+        if !random_sampling && self.preserve_hidden_states {
+            // Update hidden states for each document
+            for i in 0..batch_size {
+                let doc_id = chunk.doc_ids[i];
+                let is_last_chunk = chunk.is_last_chunks[i];
 
-            // Extract this document's hidden state from the batch with safe dimension handling
-            let doc_next_hidden: Vec<Tensor<B, 2>> = next_hidden
-                .iter()
-                .map(|h| {
-                    // Check dimensions and ensure safe slicing
-                    let h_dims = h.dims();
+                // Extract this document's hidden state from the batch with safe dimension handling
+                let doc_next_hidden: Vec<Tensor<B, 2>> = next_hidden
+                    .iter()
+                    .map(|h| {
+                        // Check dimensions and ensure safe slicing
+                        let h_dims = h.dims();
 
-                    if h_dims.len() != 2 {
-                        // Create a tensor with the expected dimensions (must be 2D)
-                        return Tensor::zeros([1, self.model.dim()], &device);
-                    }
+                        if h_dims.len() != 2 {
+                            // Create a tensor with the expected dimensions (must be 2D)
+                            return Tensor::zeros([1, self.model.dim()], &device);
+                        }
 
-                    // Make sure we have valid dimensions for slicing
-                    if i < h_dims[0] {
-                        // Instead of squeezing, explicitly reshape to ensure correct 2D dimensions
-                        let hidden_dim = h_dims[1];
-                        let extracted = h.clone().slice([i..i + 1, 0..hidden_dim]);
-                        // Already a 2D tensor with shape [1, hidden_dim]
-                        extracted
-                    } else {
-                        // Create a properly sized tensor if index is out of bounds (must be 2D)
-                        Tensor::zeros([1, h_dims[1]], &device)
-                    }
-                })
-                .collect();
+                        // Make sure we have valid dimensions for slicing
+                        if i < h_dims[0] {
+                            // Instead of squeezing, explicitly reshape to ensure correct 2D dimensions
+                            let hidden_dim = h_dims[1];
+                            let extracted = h.clone().slice([i..i + 1, 0..hidden_dim]);
+                            // Already a 2D tensor with shape [1, hidden_dim]
+                            extracted
+                        } else {
+                            // Create a properly sized tensor if index is out of bounds (must be 2D)
+                            Tensor::zeros([1, h_dims[1]], &device)
+                        }
+                    })
+                    .collect();
 
-            // Apply tanh nonlinearity to hidden states before storing them (if feature enabled)
-            #[cfg(feature = "tanh")]
-            let doc_next_hidden_processed: Vec<Tensor<B, 2>> =
-                doc_next_hidden.iter().map(|h| h.clone().tanh()).collect();
+                // Apply tanh nonlinearity to hidden states before storing them (if feature enabled)
+                #[cfg(feature = "tanh")]
+                let doc_next_hidden_processed: Vec<Tensor<B, 2>> =
+                    doc_next_hidden.iter().map(|h| h.clone().tanh()).collect();
 
-            #[cfg(not(feature = "tanh"))]
-            let doc_next_hidden_processed = doc_next_hidden;
+                #[cfg(not(feature = "tanh"))]
+                let doc_next_hidden_processed = doc_next_hidden;
 
-            // Store unless this is the last chunk of a document
-            if !is_last_chunk && self.preserve_hidden_states {
-                self.hidden_states.insert(doc_id, doc_next_hidden_processed);
-            } else if is_last_chunk {
-                // Remove hidden state for completed documents
-                self.hidden_states.remove(&doc_id);
+                // Store unless this is the last chunk of a document
+                if !is_last_chunk {
+                    self.hidden_states.insert(doc_id, doc_next_hidden_processed);
+                } else if is_last_chunk {
+                    // Remove hidden state for completed documents
+                    self.hidden_states.remove(&doc_id);
+                }
             }
         }
 
@@ -987,7 +1001,8 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 step, 
                 total_steps, 
                 epoch, 
-                &progress_bar
+                &progress_bar,
+                random_sampling
             );
             
             // Handle batch result
@@ -1060,6 +1075,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         total_steps: usize,
         epoch: usize,
         progress_bar: &ProgressBar,
+        random_sampling: bool,
     ) -> BatchResult {
         // Get current chunks for all positions
         let chunks = dataloader.get_current_chunks();
@@ -1108,6 +1124,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
             accumulator,
             accumulation_current,
             do_update,
+            random_sampling,
         );
 
         BatchResult::Success { loss }
@@ -1666,6 +1683,17 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
     );
 
     println!("Training for up to {} epochs", max_training_epochs);
+    
+    // Log training mode
+    if config.random_sampling {
+        println!("Using RANDOM SEQUENCE SAMPLING mode (no hidden state passing)");
+        println!("- Each batch contains randomly sampled sequences");
+        println!("- No hidden state is passed between batches");
+    } else {
+        println!("Using TBPTT mode with hidden state passing");
+        println!("- Truncated Backpropagation Through Time with k1={}, k2={}", config.tbptt_k1, config.tbptt_k2);
+        println!("- Hidden states preserved between chunks: {}", config.preserve_hidden_states);
+    }
     if config.target_valid_loss > 0.0 {
         println!(
             "Will stop when validation loss reaches {:.6}",
@@ -1767,17 +1795,17 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
         let train_loss = {
             #[cfg(feature = "optimizer-adam")]
             {
-                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut adam_optimizer, epoch)
+                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut adam_optimizer, epoch, config.random_sampling)
             }
             #[cfg(feature = "optimizer-sgd")]
             {
-                let loss = trainer.train_epoch(&mut train_dataset, &train_batcher, &mut sgd_optimizer, epoch);
+                let loss = trainer.train_epoch(&mut train_dataset, &train_batcher, &mut sgd_optimizer, epoch, config.random_sampling);
                 loss
             }
             #[cfg(not(any(feature = "optimizer-adam", feature = "optimizer-sgd")))]
             {
                 let mut default_optimizer = AdamConfig::new().init::<B, MinGRULM<B>>();
-                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut default_optimizer, epoch)
+                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut default_optimizer, epoch, config.random_sampling)
             }
         };
 
