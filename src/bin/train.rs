@@ -440,8 +440,8 @@ fn main() {
                max_chunks * modified_config.chunk_size);
     }
     
-    if let Some(context_length_str) = args.context_length {
-        match parse_with_suffix::<usize>(&context_length_str) {
+    if let Some(ref context_length_str) = args.context_length {
+        match parse_with_suffix::<usize>(context_length_str) {
             Ok(context_length) => {
                 let chunks_needed = calculate_chunks_for_context(modified_config.chunk_size, context_length);
                 modified_config.max_chunks_per_epoch = chunks_needed;
@@ -455,8 +455,8 @@ fn main() {
         }
     }
     
-    if let Some(epoch_tokens_str) = args.epoch_tokens {
-        match parse_with_suffix::<usize>(&epoch_tokens_str) {
+    if let Some(ref epoch_tokens_str) = args.epoch_tokens {
+        match parse_with_suffix::<usize>(epoch_tokens_str) {
             Ok(tokens) => {
                 // Calculate the number of chunks needed to process this many tokens
                 // Each chunk processes chunk_size tokens, each position processes batch_size * chunk_size tokens
