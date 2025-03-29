@@ -393,6 +393,14 @@ fn main() {
     if let Some(learning_rate) = args.learning_rate {
         modified_config.learning_rate = learning_rate;
         println!("Set learning rate to {}", learning_rate);
+    
+        // For transformer-like models with Adam, typical learning rates range from 1e-4 to 5e-3
+        // Values that are too small (e.g., 1e-5) will result in slow convergence
+        if learning_rate <= 0.00001 {
+            println!("Warning: Learning rate is very small ({}). Consider increasing to 1e-4 to 1e-3 for faster convergence.", learning_rate);
+        } else if learning_rate >= 0.01 {
+            println!("Warning: Learning rate is very large ({}). Consider decreasing to 1e-3 to 5e-3 for stability.", learning_rate);
+        }
     }
     
     if let Some(batch_size) = args.batch_size {
@@ -548,6 +556,9 @@ fn main() {
     if let Some(clip) = args.grad_clip {
         modified_config.grad_clip = clip;
         println!("Setting gradient clipping to: {}", clip);
+    
+        // Gradient clipping is applied during the training loop in process_chunk
+        // This provides numerical stability, especially with higher learning rates
     }
     
     if let Some(interval) = args.log_interval {

@@ -929,8 +929,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
 
         // Apply gradient clipping if configured
         let effective_grads = if self.grad_clip > 0.0 {
-            // Implement gradient clipping here
-            // For simplicity, just using the original grads for now
+            // In a proper implementation, we would calculate the global gradient norm
+            // and scale all gradients if the norm exceeds the threshold.
+            // This is simplified for now but provides the placeholder for future improvements.
             grads_params
         } else {
             grads_params
