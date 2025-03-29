@@ -351,10 +351,11 @@ impl<B: Backend> MinGRU<B> {
         let g_positive = activation::relu(x.clone()) + 0.5;
         
         // For x < 0: g(x) = sigmoid(x)
-        // This is the inverse of the sigmoid function for negative values to match PyTorch
-        let sigmoid_neg_x = 1.0 / (1.0 + (-(-x.clone())).exp());
+        // Create tensor constants for scalar values to match PyTorch implementation
+        let ones = Tensor::ones_like(&x);
+        let sigmoid_x = ones / (ones + (-x.clone()).exp());
         
-        (x_positive * g_positive) + (x_negative * sigmoid_neg_x)
+        (x_positive * g_positive) + (x_negative * sigmoid_x)
     }
 
     /// Log-space version of the activation function matching PyTorch implementation
