@@ -353,7 +353,7 @@ impl<B: Backend> MinGRU<B> {
         // For x < 0: g(x) = sigmoid(x)
         // Create tensor constants for scalar values to match PyTorch implementation
         let ones = Tensor::ones_like(&x);
-        let sigmoid_x = ones / (ones + (-x.clone()).exp());
+        let sigmoid_x = ones.clone() / (ones + (-x.clone()).exp());
         
         (x_positive * g_positive) + (x_negative * sigmoid_x)
     }
