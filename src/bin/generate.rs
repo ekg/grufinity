@@ -333,12 +333,12 @@ fn load_model_config(config_path: &str, chunk_size: usize, vocab_size: usize) ->
     match MinGRULMConfig::load(config_path) {
         Ok(mut config) => {
             debug("Successfully loaded model configuration");
-            
+                
             // Update chunk size to match CLI argument
             if chunk_size != config.chunk_size() {
                 config = config.with_chunk_size(chunk_size);
             }
-            
+                
             Ok(config)
         },
         Err(e) => {

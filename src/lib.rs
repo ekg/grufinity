@@ -27,6 +27,9 @@ pub use burn::{
     record::{Record, Recorder, BinFileRecorder, FullPrecisionSettings}
 };
 
+// Export specialized softplus function
+pub use parallel_scan::specialized_softplus;
+
 // Import f16 type when feature is enabled
 #[cfg(feature = "f16")]
 pub use burn::tensor::f16;
