@@ -973,21 +973,33 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         loss_value
     }
 
-    /// Train the model for one epoch with continuous chunks
+    /// Train the model for one epoch with continuous chunks or random sampling
     pub fn train_epoch<O: Optimizer<MinGRULM<B>, B>>(
         &mut self,
         dataloader: &mut ContinuousChunkedTextDataset,
         batcher: &TextBatcher<B>,
         optimizer: &mut O,
         epoch: usize,
+        random_sampling: bool,
     ) -> f32 {
         println!("Training epoch {}", epoch);
+
+        if random_sampling {
+            println!("Using random sequence sampling mode");
+        } else {
+            println!("Using TBPTT with hidden state passing");
+        }
 
         // Initialize for the epoch
         let (mut accumulator, progress_bar, total_steps) = self.prepare_for_epoch::<O>(dataloader);
         let mut accumulation_current = 0;
         let mut total_loss = 0.0;
         let mut batch_count = 0;
+
+        // Reset hidden states if using random sampling - we don't preserve state between sequences
+        if random_sampling {
+            self.reset_hidden_states();
+        }
 
         // Process chunks using a definite counter to ensure we respect max_chunks_per_epoch
         let mut step = 0;
@@ -1002,7 +1014,7 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 total_steps, 
                 epoch, 
                 &progress_bar,
-                random_sampling
+                random_sampling,
             );
             
             // Handle batch result
@@ -1020,11 +1032,21 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
                 },
             }
 
-            // Move to next chunk and increment step counter
-            if !dataloader.next_chunk() {
-                // If we can't advance, reset and resample to get fresh chunks
+            // If using random sampling, resample for the next batch
+            if random_sampling {
+                // Always reset and resample for random sampling
                 dataloader.reset();
-                dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
+                dataloader.resample_positions(self.metrics.batch_count() as u64 + step as u64 + epoch as u64);
+                
+                // Clear hidden states between sequences when using random sampling
+                self.reset_hidden_states();
+            } else {
+                // For TBPTT, proceed to next chunk or reset if needed
+                if !dataloader.next_chunk() {
+                    // If we can't advance, reset and resample to get fresh chunks
+                    dataloader.reset();
+                    dataloader.resample_positions(self.metrics.batch_count() as u64 + epoch as u64);
+                }
             }
 
             step += 1;
