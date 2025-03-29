@@ -248,7 +248,7 @@ impl<B: Backend> MinGRU<B> {
         
         // Handle previous hidden state if it exists
         let (log_values_final, log_coeffs_final) = if let Some(prev_h) = prev_hidden.clone() {
-            let log_prev_h = self.log_g_function(prev_h.unsqueeze::<3>(1));
+            let log_prev_h = self.log_g_function(prev_h.unsqueeze::<3>());
             let log_values_with_prev = Tensor::cat(vec![log_prev_h, log_values], 1);
             
             // Pad log_coeffs with zeros for previous hidden state
