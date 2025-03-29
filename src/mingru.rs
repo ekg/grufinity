@@ -163,9 +163,11 @@ mod tests {
         let negative_result_data: Vec<f32> = negative_result.into_data().into_vec().unwrap();
         
         // For x < 0, log_g(x) = -softplus(-x) = log(sigmoid(x))
-        // Use the same activation function as in the implementation
-        let expected_log_sigmoid_neg1 = -activation::softplus(1.0f32, 1.0);  // -softplus(1) for input -1
-        let expected_log_sigmoid_neg2 = -activation::softplus(2.0f32, 1.0);  // -softplus(2) for input -2
+        // Calculate expected values manually
+        let expected_log_sigmoid_neg1 = (-1.0f32).exp() / (1.0 + (-1.0f32).exp()); // sigmoid(-1.0)
+        let expected_log_sigmoid_neg2 = (-2.0f32).exp() / (1.0 + (-2.0f32).exp()); // sigmoid(-2.0)
+        let expected_log_sigmoid_neg1 = expected_log_sigmoid_neg1.ln();
+        let expected_log_sigmoid_neg2 = expected_log_sigmoid_neg2.ln();
         
         // Print actual vs expected values for debugging
         println!("Negative log test: actual(log_g(-1.0)) = {}, expected = {}, diff = {}", 
