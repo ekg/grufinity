@@ -24,7 +24,7 @@ static mut VERBOSE: bool = false;
 #[cfg(feature = "tch")]
 fn create_device_for_libtorch<B: Backend>(device_id: usize) -> Option<B::Device> {
     use burn::backend::libtorch::LibTorchDevice;
-    use std::any::type_name;
+    // No need for type_name import
     
     // Get type name to check if it's LibTorch without using private Elem type
     let type_name = std::any::type_name::<B>();
