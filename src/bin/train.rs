@@ -67,6 +67,10 @@ struct TrainingArgs {
     /// Set context length in characters (supports k, m, g suffixes)
     #[arg(long)]
     context_length: Option<String>,
+    
+    /// Total tokens to process per epoch (supports k, m, g suffixes)
+    #[arg(long)]
+    epoch_tokens: Option<String>,
 
     /// Number of training epochs
     #[arg(long)]
@@ -446,6 +450,30 @@ fn main() {
             },
             Err(e) => {
                 eprintln!("Error parsing context length '{}': {}", context_length_str, e);
+                std::process::exit(1);
+            }
+        }
+    }
+    
+    if let Some(epoch_tokens_str) = args.epoch_tokens {
+        match parse_with_suffix::<usize>(&epoch_tokens_str) {
+            Ok(tokens) => {
+                // Calculate the number of chunks needed to process this many tokens
+                // Each chunk processes chunk_size tokens, each position processes batch_size * chunk_size tokens
+                let tokens_per_chunk = modified_config.chunk_size;
+                let chunks_needed = (tokens + tokens_per_chunk - 1) / tokens_per_chunk;
+                
+                modified_config.max_chunks_per_epoch = chunks_needed;
+                println!("Setting tokens per epoch to {} tokens", tokens);
+                println!("Using {} chunks with chunk size {}", chunks_needed, modified_config.chunk_size);
+                
+                // If context-length was also specified, note which one takes precedence
+                if args.context_length.is_some() {
+                    println!("Note: --epoch-tokens overrides --context-length");
+                }
+            },
+            Err(e) => {
+                eprintln!("Error parsing epoch tokens '{}': {}", epoch_tokens_str, e);
                 std::process::exit(1);
             }
         }
@@ -862,6 +890,8 @@ fn main() {
     println!("- Context length: {} characters ({} chunks)", 
              config.chunk_size * config.max_chunks_per_epoch,
              config.max_chunks_per_epoch);
+    println!("- Tokens per epoch: {} tokens", 
+             config.chunk_size * config.max_chunks_per_epoch);
     println!("- Batch size: {} parallel sequences", config.batch_size);
     println!("- Model dimension: {}", config.model.dim());
     println!("- Learning rate: {}", config.learning_rate);

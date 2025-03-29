@@ -1612,13 +1612,18 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
 
     // Calculate a reasonable number of chunks to process based on data size
     let input_length = input_data.len();
-    let tokens_per_epoch = config.max_chunks_per_epoch * config.chunk_size * config.batch_size;
-    let coverage_percentage = (tokens_per_epoch as f64 / input_length as f64) * 100.0;
+    let tokens_per_epoch = config.max_chunks_per_epoch * config.chunk_size;
+    let total_processed_tokens = tokens_per_epoch * config.batch_size;
+    let coverage_percentage = (total_processed_tokens as f64 / input_length as f64) * 100.0;
 
     println!("Input data size: {} characters", input_length);
     println!(
-        "Will process ~{} tokens per epoch ({:.2}% of dataset)",
-        tokens_per_epoch, coverage_percentage
+        "Will process {} tokens per epoch ({} chunks)",
+        tokens_per_epoch, config.max_chunks_per_epoch
+    );
+    println!(
+        "With batch size {}, processing ~{} total tokens per epoch ({:.2}% of dataset)",
+        config.batch_size, total_processed_tokens, coverage_percentage
     );
     println!("Training configuration:");
     println!("- Batch size: {} parallel sequences", config.batch_size);
