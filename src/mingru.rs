@@ -265,7 +265,9 @@ impl<B: Backend> MinGRU<B> {
         
         // Keep only the relevant sequence length
         let relevant_out = if prev_hidden.is_some() {
-            out.slice([0..batch_size, 1..seq_len+1, 0..out.dims()[2]])
+            // Clone out before using to avoid moving
+            let out_dims = out.dims()[2];
+            out.clone().slice([0..batch_size, 1..seq_len+1, 0..out_dims])
         } else {
             out
         };

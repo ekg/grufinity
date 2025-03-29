@@ -280,7 +280,7 @@ pub fn get_backend_name() -> &'static str {
 // Test-only backend implementations
 // These are only available when running tests and should be used preferentially over
 // feature-specific backends when testing
-#[cfg(all(test, not(any(
+#[cfg(all(test, feature = "ndarray", not(any(
     all(feature = "cuda", feature = "autodiff"),
     all(feature = "candle-cuda", feature = "autodiff", not(feature = "cuda")),
     all(feature = "vulkan", feature = "autodiff", not(feature = "cuda"), not(feature = "candle-cuda"), not(feature = "candle-metal"), not(feature = "candle")),
