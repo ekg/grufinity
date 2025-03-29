@@ -111,7 +111,7 @@ struct GenerateArgs {
 // Initialize appropriate device based on backend type
 fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
-    let device_initialized = false;
+    let mut device_initialized = false;
     
     // Create appropriate device based on backend type
     // Handle LibTorch devices with a separate specialized function
