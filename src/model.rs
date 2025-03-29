@@ -175,12 +175,8 @@ impl<B: Backend> FeedForward<B> {
         // Activation function based on feature flags
         #[cfg(feature = "g-func")]
         let activated = {
-            // Original g(x) function
-            let zeros = Tensor::zeros_like(&x2);
-            let x_positive = x2.clone().greater_equal(zeros.clone()).float();
-            let x_negative = x2.clone().lower(zeros).float();
-            
-            (x_positive * (x2.clone() + 0.5)) + (x_negative * activation::sigmoid(x2))
+            // In PyTorch MinGRU, FF actually uses GELU not g-func
+            activation::gelu(x2.clone())
         };
         
         #[cfg(feature = "gelu")]
@@ -233,17 +229,17 @@ pub struct MinGRULMConfig {
     dim: usize,
     
     /// Number of MinGRU layers in the model
-    #[config(default = "2")]
+    #[config(default = "6")]
     depth: usize,
     
     /// Multiplier for feed-forward layer dimension
     /// Controls the size of feed-forward networks as: dim * ff_mult
-    #[config(default = "2.0")]
+    #[config(default = "4.0")]
     ff_mult: f64,
     
     /// Expansion factor for MinGRU internal representations
     /// Higher values increase model capacity with minimal computational overhead
-    #[config(default = "1.2")]
+    #[config(default = "1.5")]
     expansion_factor: f64,
     
     /// Size of chunks (in tokens) for processing long sequences

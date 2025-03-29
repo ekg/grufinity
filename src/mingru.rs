@@ -485,8 +485,8 @@ impl<B: Backend> MinGRU<B> {
         let device = x.device();
         let zeros = Tensor::zeros(dims, &device);
         
-        // Implementation matching PyTorch's log_g function:
-        // torch.where(x >= 0, (F.relu(x) + 0.5).log(), -F.softplus(-x))
+        // Direct implementation of PyTorch's log_g function:
+        // return torch.where(x >= 0, (F.relu(x) + 0.5).log(), -F.softplus(-x))
         let x_positive = x.clone().greater_equal(zeros.clone()).float();
         let x_negative = x.clone().lower(zeros).float();
         
