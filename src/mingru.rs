@@ -74,14 +74,52 @@ mod tests {
         // Initialize the MinGRU module with the generic backend
         let mingru = config.init::<RawBackend>(&device);
         
-        // Verify module structure
-        assert_eq!(mingru.to_hidden_and_gate.weight.dims(), [10, 60]); // 2 * 20 * 1.5 = 60
+        // Verify module structure - check both projections separately
+        assert_eq!(mingru.to_hidden.weight.dims(), [10, 30]); // input_size=10, hidden_size=20 * 1.5 expansion = 30
+        assert_eq!(mingru.to_gate.weight.dims(), [10, 30]); // Same dimensions as to_hidden
         if mingru.proj_out {
             assert_eq!(mingru.to_out.weight.dims(), [30, 20]); // 20 * 1.5 = 30, 20
         }
         
         // Verify expansion factor is set
         assert!((mingru.expansion_factor - 1.5).abs() < 1e-6);
+    }
+    
+    #[test]
+    fn test_g_function() {
+        println!("Running test of g_function with backend: {}", get_backend_name());
+        let device = <RawBackend as Backend>::Device::default();
+        
+        // Create a MinGRU instance
+        let config = MinGRUConfig::new(2, 2);
+        let mingru = config.init::<RawBackend>(&device);
+        
+        // Test g_function with positive values
+        let positive_data = vec![1.0, 2.0];
+        let positive = Tensor::<RawBackend, 1, Float>::from_data(&positive_data, &device).reshape([1, 2]);
+        let positive_result = mingru.g_function(positive);
+        
+        // Extract result for checking
+        let positive_result_data: Vec<f32> = positive_result.into_data().into_vec().unwrap();
+        
+        // For x >= 0, g(x) = x + 0.5, so 1.0 -> 1.5, 2.0 -> 2.5
+        assert!((positive_result_data[0] - 1.5).abs() < 1e-5);
+        assert!((positive_result_data[1] - 2.5).abs() < 1e-5);
+        
+        // Test g_function with negative values
+        let negative_data = vec![-1.0, -2.0];
+        let negative = Tensor::<RawBackend, 1, Float>::from_data(&negative_data, &device).reshape([1, 2]);
+        let negative_result = mingru.g_function(negative);
+        
+        // Extract result for checking
+        let negative_result_data: Vec<f32> = negative_result.into_data().into_vec().unwrap();
+        
+        // For x < 0, g(x) = sigmoid(x), so expected results are sigmoid(-1.0) and sigmoid(-2.0)
+        let sigmoid_neg1 = 1.0 / (1.0 + (-1.0f32).exp());
+        let sigmoid_neg2 = 1.0 / (1.0 + (-2.0f32).exp());
+        
+        assert!((negative_result_data[0] - sigmoid_neg1).abs() < 1e-5);
+        assert!((negative_result_data[1] - sigmoid_neg2).abs() < 1e-5);
     }
     
     #[test]
@@ -94,18 +132,19 @@ mod tests {
         let mingru = config.init::<RawBackend>(&device);
         
         // Set weights manually for deterministic test
-        let to_hidden_and_gate_weight_data = vec![
-            0.1, 0.2, 0.3, 0.4, // input dim 0 -> hidden and gate
-            0.5, 0.6, 0.7, 0.8, // input dim 1 -> hidden and gate
+        let weight_data = vec![
+            0.1, 0.2, // input dim 0 -> hidden
+            0.5, 0.6, // input dim 1 -> hidden
         ];
         
-        let _to_hidden_and_gate_weight = Tensor::<RawBackend, 1, Float>::from_data(
-            &*to_hidden_and_gate_weight_data, &device
-        ).reshape([2, 4]);
+        let _weight = Tensor::<RawBackend, 1, Float>::from_data(
+            &*weight_data, &device
+        ).reshape([2, 2]);
         
         // Can't directly assign to weight as it's a Param<Tensor>
         // Instead, we can check that it has the expected shape for this test
-        assert_eq!(mingru.to_hidden_and_gate.weight.dims(), [2, 4]);
+        assert_eq!(mingru.to_hidden.weight.dims(), [2, 2]); // No expansion factor (1.0)
+        assert_eq!(mingru.to_gate.weight.dims(), [2, 2]); // Same as to_hidden
         
         // Create input tensor - single time step
         let x_data = vec![1.0, 2.0]; // batch=1, seq_len=1, input_size=2
