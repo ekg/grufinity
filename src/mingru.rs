@@ -143,8 +143,12 @@ impl MinGRUConfig {
         let dim_inner = (self.hidden_size as f64 * self.expansion_factor) as usize;
         let proj_out = self.proj_out || self.expansion_factor != 1.0;
         
-        // Hidden and gate projections
-        let to_hidden_and_gate = LinearConfig::new(self.input_size, dim_inner * 2)
+        // Separate projections for hidden state and gate 
+        let to_hidden = LinearConfig::new(self.input_size, dim_inner)
+            .with_bias(false)
+            .init(device);
+            
+        let to_gate = LinearConfig::new(self.input_size, dim_inner)
             .with_bias(false)
             .init(device);
         
@@ -161,7 +165,8 @@ impl MinGRUConfig {
         };
         
         MinGRU {
-            to_hidden_and_gate,
+            to_hidden,
+            to_gate,
             to_out,
             expansion_factor: self.expansion_factor,
             proj_out,
@@ -172,9 +177,9 @@ impl MinGRUConfig {
 /// MinGRU implementation following the parallel associative scan algorithm.
 ///
 /// Mathematical formulation of MinGRU:
-/// z_t = σ(W_z · [h_{t-1}, x_t] + b_z)         # Update gate
-/// h̃_t = W_h · [h_{t-1}, x_t] + b_h            # Candidate hidden state
-/// h_t = (1 - z_t) ⊙ h_{t-1} + z_t ⊙ g(h̃_t)    # New hidden state
+/// z_t = σ(W_z · x_t + b_z)                   # Update gate
+/// h̃_t = W_h · x_t + b_h                      # Candidate hidden state
+/// h_t = (1 - z_t) ⊙ h_{t-1} + z_t ⊙ g(h̃_t)   # New hidden state
 ///
 /// where g(x) is a custom activation function:
 /// g(x) = x + 0.5  for x ≥ 0
@@ -184,9 +189,12 @@ impl MinGRUConfig {
 /// the entire sequence in O(log n) parallel steps instead of O(n) sequential steps.
 #[derive(Module, Debug)]
 pub struct MinGRU<B: Backend> {
-    /// Combined projection for hidden state and gate computations
-    /// Shape: [input_size, 2 * hidden_size * expansion_factor]
-    to_hidden_and_gate: Linear<B>,
+    /// Projection for hidden state computation
+    /// Shape: [input_size, hidden_size * expansion_factor]
+    to_hidden: Linear<B>,
+    /// Projection for gate computation
+    /// Shape: [input_size, hidden_size * expansion_factor]
+    to_gate: Linear<B>,
     /// Optional projection layer to transform from expanded dimension back to hidden_size
     /// Shape: [hidden_size * expansion_factor, hidden_size]
     to_out: Linear<B>,
@@ -226,186 +234,91 @@ impl<B: Backend> MinGRU<B> {
     /// - next_hidden: [batch_size, hidden_size]
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
         let [batch_size, seq_len, _] = x.dims();
-        let _device = x.device();
+        let device = x.device();
     
         // Process input to get hidden and gate values
-
-        // Project input to get hidden and gate values
-        let projected = self.to_hidden_and_gate.forward(x);
-        let hidden_dim = projected.dims()[2] / 2;
+        let hidden = self.to_hidden.forward(x.clone());
+        let gate = self.to_gate.forward(x);
     
-        // Split into hidden and gate components
-        let hidden = projected.clone().slice([0..batch_size, 0..seq_len, 0..hidden_dim]);
-        let gate = projected.slice([0..batch_size, 0..seq_len, hidden_dim..(hidden_dim*2)]);
-    
-        let output = if seq_len == 1 && prev_hidden.is_some() {
-            // Sequential (recurrent) mode
-            self.forward_sequential(hidden, gate, prev_hidden.unwrap())
+        // Convert to log space for numerical stability
+        let log_coeffs = -activation::softplus(gate.clone(), 1.0);  // log(1 - σ(gate))
+        let log_z = -activation::softplus(-gate, 1.0);              // log(σ(gate))
+        let log_tilde_h = self.log_g_function(hidden);              // log(g(hidden))
+        let log_values = log_z + log_tilde_h;                       // log(z * h_tilde)
+        
+        // Handle previous hidden state if it exists
+        let (log_values_final, log_coeffs_final) = if let Some(prev_h) = prev_hidden.clone() {
+            let log_prev_h = self.log_g_function(prev_h.unsqueeze::<3>(1));
+            let log_values_with_prev = Tensor::cat(vec![log_prev_h, log_values], 1);
+            
+            // Pad log_coeffs with zeros for previous hidden state
+            let zeros_pad = Tensor::zeros([batch_size, 1, log_coeffs.dims()[2]], &device);
+            let log_coeffs_padded = Tensor::cat(vec![zeros_pad, log_coeffs], 1);
+            
+            (log_values_with_prev, log_coeffs_padded)
         } else {
-            // Parallel mode using log-space scan
-            self.forward_parallel(hidden, gate, prev_hidden)
+            (log_values, log_coeffs)
         };
-    
-        // Get the last hidden state for next iteration
-        let next_hidden = output.clone().slice([0..batch_size, seq_len-1..seq_len, 0..hidden_dim]).squeeze(1);
+        
+        // Apply parallel scan in log space
+        let out = parallel_scan_log(log_coeffs_final, log_values_final, None);
+        
+        // Keep only the relevant sequence length
+        let relevant_out = if prev_hidden.is_some() {
+            out.slice([0..batch_size, 1..seq_len+1, 0..out.dims()[2]])
+        } else {
+            out
+        };
+        
+        // Store last hidden state for potential return
+        let next_hidden = relevant_out.clone()
+            .slice([0..batch_size, seq_len-1..seq_len, 0..relevant_out.dims()[2]])
+            .squeeze(1);
     
         // Apply output projection if needed
         let output = if self.proj_out {
-            self.to_out.forward(output)
+            self.to_out.forward(relevant_out)
         } else {
-            output
+            relevant_out
         };
     
         (output, next_hidden)
     }
     
-    /// Forward pass in sequential mode (one step at a time)
-    fn forward_sequential(&self, hidden: Tensor<B, 3>, gate: Tensor<B, 3>, prev_hidden: Tensor<B, 2>) -> Tensor<B, 3> {
-        let [batch_size, _, hidden_dim] = hidden.dims();
-        let device = hidden.device();
-        
-        // Apply g and sigmoid functions
-        let hidden = self.g_function(hidden.squeeze(1));
-        let gate = activation::sigmoid(gate.squeeze(1));
-        
-        // h_t = (1 - z_t) * h_{t-1} + z_t * h_tilde
-        let output = (Tensor::ones([batch_size, hidden_dim], &device) - gate.clone()) * prev_hidden + gate * hidden;
-        
-        // Add sequence dimension back
-        output.unsqueeze()
+    
+    /// Forward pass to return next hidden state
+    pub fn forward_return_hidden(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
+        self.forward(x, prev_hidden)
     }
     
-    /// Forward pass in parallel mode using associative scan
-    fn forward_parallel(&self, hidden: Tensor<B, 3>, gate: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> Tensor<B, 3> {
-        // Log-space coefficients: log(1 - z_t) = -softplus(k_t)
-        // where k_t is the pre-activation value for the gate
-        let log_coeffs = -activation::softplus(gate.clone(), 1.0);
-    
-        // Log-space values: log(z_t) + log(g(h_tilde))
-        // log(z_t) = -softplus(-k_t)
-        let log_z = -activation::softplus(-gate, 1.0);
-    
-        // Apply log-g function to compute log(g(h_tilde))
-        let log_tilde_h = self.log_g_function(hidden);
-    
-        // Combined log values: log(z_t * g(h_tilde)) = log(z_t) + log(g(h_tilde))
-        let log_values = log_z + log_tilde_h;
-    
-        // Use the efficient parallel scan in log space
-        parallel_scan_log(log_coeffs, log_values, prev_hidden)
-    }
-    
-    /// Activation function based on feature flag
+    /// g(x) activation function matching PyTorch implementation
     fn g_function(&self, x: Tensor<B, 2>) -> Tensor<B, 2> {
-        #[cfg(feature = "g-func")]
-        {
-            // Original g(x) function from the paper: 
-            // g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0
-            let zeros = Tensor::zeros_like(&x);
-            let x_positive = x.clone().greater_equal(zeros.clone()).float();
-            let x_negative = x.clone().lower(zeros).float();
-            
-            (x_positive * (x.clone() + 0.5)) + (x_negative * activation::sigmoid(x))
-        }
+        let zeros = Tensor::zeros_like(&x);
+        let x_positive = x.clone().greater_equal(zeros.clone()).float();
+        let x_negative = x.clone().lower(zeros).float();
         
-        #[cfg(feature = "gelu")]
-        {
-            // GELU activation: x * Φ(x)
-            // Approximation: 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
-            let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
-            let coeff = 0.044715 as f32;
-            
-            let exponent = Tensor::full_like(&x, 3.0);
-            let x_cubed = x.clone().powf(exponent);
-            let inner = (x.clone() + x_cubed * coeff) * sqrt_2_div_pi;
-            let tanh_part = inner.tanh();
-            
-            x.clone() * 0.5 * (Tensor::ones_like(&x) + tanh_part)
-        }
-        
-        #[cfg(all(feature = "swish", not(any(feature = "g-func", feature = "gelu"))))]
-        {
-            // Swish/SiLU activation: f(x) = x * sigmoid(x)
-            x.clone() * activation::sigmoid(x)
-        }
-        
-        #[cfg(not(any(feature = "g-func", feature = "gelu", feature = "swish")))]
-        {
-            // Default to SiLU if no specific activation is selected
-            activation::silu(x)
-        }
+        // Original g(x) function from the paper: 
+        // g(x) = x + 0.5 for x >= 0, sigmoid(x) for x < 0
+        (x_positive * (x.clone() + 0.5)) + (x_negative * activation::sigmoid(x))
     }
 
-    /// Log-space version of the activation function
+    /// Log-space version of the activation function matching PyTorch implementation
     fn log_g_function(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
-        #[cfg(feature = "g-func")]
-        {
-            // Original log(g(x)) function from the paper:
-            // log(g(x)) = log(x + 0.5) for x >= 0, -softplus(-x) for x < 0
-            let [batch_size, seq_len, hidden_dim] = x.dims();
-            let device = x.device();
-            let zeros = Tensor::zeros([batch_size, seq_len, hidden_dim], &device);
+        let dims = x.dims();
+        let device = x.device();
+        let zeros = Tensor::zeros(dims, &device);
         
-            let x_positive = x.clone().greater_equal(zeros.clone()).float();
-            let x_negative = x.clone().lower(zeros).float();
+        // Implementation matching PyTorch's log_g function:
+        // torch.where(x >= 0, (F.relu(x) + 0.5).log(), -F.softplus(-x))
+        let x_positive = x.clone().greater_equal(zeros.clone()).float();
+        let x_negative = x.clone().lower(zeros).float();
         
-            // For x >= 0: log(x + 0.5)
-            // Using ReLU to ensure we don't take log of negative numbers
-            let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
+        // For x >= 0: log(relu(x) + 0.5)
+        let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
         
-            // For x < 0: log(sigmoid(x)) = -softplus(-x)
-            let log_g_neg = -activation::softplus(-x.clone(), 1.0);
+        // For x < 0: log(sigmoid(x)) = -softplus(-x)
+        let log_g_neg = -activation::softplus(-x.clone(), 1.0);
         
-            (x_positive * log_g_pos) + (x_negative * log_g_neg)
-        }
-        
-        #[cfg(feature = "gelu")]
-        {
-            // Log-space GELU: log(x * Φ(x))
-            // This is an approximation that preserves numerical stability
-            let sqrt_2_div_pi = 0.7978845608 as f32; // sqrt(2/π)
-            let coeff = 0.044715 as f32;
-            
-            // For practical log-space implementation, we compute
-            // log(x) + log(0.5 * (1 + tanh(...)))
-            
-            // First get log(x) with care for zeroes
-            let x_log = x.clone().clamp(1e-9, f32::MAX).log();
-            
-            // Then compute log(0.5 * (1 + tanh(...)))
-            let exponent = Tensor::full_like(&x, 3.0);
-            let x_cubed = x.clone().powf(exponent);
-            let inner = (x.clone() + x_cubed * coeff) * sqrt_2_div_pi;
-            let tanh_part = inner.tanh();
-            
-            // log(0.5) + log(1 + tanh_part)
-            // Using log1p approximation for log(1 + tanh_part)
-            // log(0.5) = -0.693
-            let log_half = Tensor::full_like(&tanh_part, -0.693);
-            let log_gelu_part = log_half + (Tensor::ones_like(&tanh_part) + tanh_part).log();
-            
-            // Combine the parts
-            x_log + log_gelu_part
-        }
-        
-        #[cfg(all(feature = "swish", not(any(feature = "g-func", feature = "gelu"))))]
-        {
-            // Log-space Swish: log(x * sigmoid(x))
-            // log(x) + log(sigmoid(x)) = log(x) - softplus(-x)
-            let x_log = x.clone().clamp(1e-9, f32::MAX).log();
-            let sigmoid_log = -activation::softplus(-x, 1.0);
-            
-            x_log + sigmoid_log
-        }
-        
-        #[cfg(not(any(feature = "g-func", feature = "gelu", feature = "swish")))]
-        {
-            // Default log-space SiLU if no specific activation is selected
-            // Using the same approximation as for Swish since they're the same
-            let x_log = x.clone().clamp(1e-9, f32::MAX).log();
-            let sigmoid_log = -activation::softplus(-x, 1.0);
-            
-            x_log + sigmoid_log
-        }
+        (x_positive * log_g_pos) + (x_negative * log_g_neg)
     }
 }
