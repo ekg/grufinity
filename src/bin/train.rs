@@ -557,8 +557,24 @@ fn main() {
         modified_config.grad_clip = clip;
         println!("Setting gradient clipping to: {}", clip);
     
-        // Gradient clipping is applied during the training loop in process_chunk
-        // This provides numerical stability, especially with higher learning rates
+        // Add gradient clipping to the optimizer following Burn's patterns
+        if clip > 0.0 {
+            #[cfg(feature = "optimizer-adam")]
+            {
+                use burn::grad_clipping::GradientClippingConfig;
+                modified_config.optimizer = modified_config.optimizer
+                    .with_grad_clipping(Some(GradientClippingConfig::Norm(clip)));
+                println!("Applied gradient norm clipping ({}) to Adam optimizer", clip);
+            }
+        
+            #[cfg(feature = "optimizer-sgd")]
+            {
+                use burn::grad_clipping::GradientClippingConfig;
+                modified_config.optimizer = modified_config.optimizer
+                    .with_grad_clipping(Some(GradientClippingConfig::Norm(clip)));
+                println!("Applied gradient norm clipping ({}) to SGD optimizer", clip);
+            }
+        }
     }
     
     if let Some(interval) = args.log_interval {

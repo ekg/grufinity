@@ -927,18 +927,9 @@ impl<B: AutodiffBackend> TBPTTTrainer<B> {
         let grads = loss.backward();
         let grads_params = GradientsParams::from_grads(grads, &self.model);
 
-        // Apply gradient clipping if configured
-        let effective_grads = if self.grad_clip > 0.0 {
-            // In a proper implementation, we would calculate the global gradient norm
-            // and scale all gradients if the norm exceeds the threshold.
-            // This is simplified for now but provides the placeholder for future improvements.
-            grads_params
-        } else {
-            grads_params
-        };
-
-        // Accumulate gradients
-        accumulator.accumulate(&self.model, effective_grads);
+        // Gradient clipping is now handled by the optimizer configuration
+        // Accumulate gradients directly
+        accumulator.accumulate(&self.model, grads_params);
         *accumulation_current += 1;
 
         // Apply gradients if needed
