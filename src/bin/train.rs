@@ -900,14 +900,14 @@ fn create_default_config() -> TBPTTConfig {
     // Chunk size for processing text
     let chunk_size = 64;
     
-    // Configure the model
+    // Configure the model to match MinGRU-pytorch.dame-cell defaults
     let model_config = MinGRULMConfig::new(
         256,           // num_tokens (all possible byte values)
-        1024           // dimension (power of 2 for optimal GPU performance)
+        512            // dimension (matching MinGRU-pytorch.dame-cell)
     )
-    .with_depth(3)     // testing with 3 layers
-    .with_ff_mult(3.0) // keeping ff_mult at 3.0
-    .with_expansion_factor(1.5) // keeping expansion_factor at 1.5
+    .with_depth(6)     // 6 layers (matching MinGRU-pytorch.dame-cell)
+    .with_ff_mult(4.0) // 4.0 (matching MinGRU-pytorch.dame-cell)
+    .with_expansion_factor(1.5) // 1.5 (matching MinGRU-pytorch.dame-cell)
     .with_chunk_size(chunk_size);
     
     #[cfg(feature = "optimizer-sgd")]
