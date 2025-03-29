@@ -61,7 +61,7 @@ pub struct MinGRUConfig {
 mod tests {
     use super::MinGRUConfig;
     use crate::{RawBackend, get_backend_name};
-    use burn::tensor::{backend::Backend, Float, Tensor};
+    use burn::tensor::{backend::Backend, Float, Tensor, activation};
     
     #[test]
     fn test_mingru_init() {
