@@ -120,13 +120,13 @@ mod tests {
         
         // Print actual vs expected values for debugging
         println!("Negative test: actual(-1.0) = {}, expected = {}, diff = {}", 
-            negative_result_data[0], sigmoid_pos1, (negative_result_data[0] - sigmoid_pos1).abs());
+            negative_result_data[0], sigmoid_neg1, (negative_result_data[0] - sigmoid_neg1).abs());
         println!("Negative test: actual(-2.0) = {}, expected = {}, diff = {}", 
-            negative_result_data[1], sigmoid_pos2, (negative_result_data[1] - sigmoid_pos2).abs());
+            negative_result_data[1], sigmoid_neg2, (negative_result_data[1] - sigmoid_neg2).abs());
         
         // Use a much larger epsilon for negative values due to potential differences in sigmoid implementation
-        assert!((negative_result_data[0] - sigmoid_pos1).abs() < 1e-3);
-        assert!((negative_result_data[1] - sigmoid_pos2).abs() < 1e-3);
+        assert!((negative_result_data[0] - sigmoid_neg1).abs() < 1e-3);
+        assert!((negative_result_data[1] - sigmoid_neg2).abs() < 1e-3);
     }
     
     #[test]
