@@ -1771,7 +1771,8 @@ pub fn train_with_tbptt<B: AutodiffBackend>(
             }
             #[cfg(feature = "optimizer-sgd")]
             {
-                trainer.train_epoch(&mut train_dataset, &train_batcher, &mut sgd_optimizer, epoch)
+                let loss = trainer.train_epoch(&mut train_dataset, &train_batcher, &mut sgd_optimizer, epoch);
+                loss
             }
             #[cfg(not(any(feature = "optimizer-adam", feature = "optimizer-sgd")))]
             {
