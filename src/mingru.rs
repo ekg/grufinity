@@ -114,9 +114,9 @@ mod tests {
         // Extract result for checking
         let negative_result_data: Vec<f32> = negative_result.into_data().into_vec().unwrap();
         
-        // For x < 0, g(x) = sigmoid(-x), so expected results are sigmoid(1.0) and sigmoid(2.0)
-        let sigmoid_pos1 = 1.0 / (1.0 + (-1.0f32).exp());
-        let sigmoid_pos2 = 1.0 / (1.0 + (-2.0f32).exp());
+        // For x < 0: g(x) = sigmoid(x), so expected results are sigmoid(-1.0) and sigmoid(-2.0)
+        let sigmoid_neg1 = 1.0 / (1.0 + (1.0f32).exp());
+        let sigmoid_neg2 = 1.0 / (1.0 + (2.0f32).exp());
         
         // Print actual vs expected values for debugging
         println!("Negative test: actual(-1.0) = {}, expected = {}, diff = {}", 
