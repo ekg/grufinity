@@ -372,8 +372,8 @@ impl<B: Backend> MinGRU<B> {
         // For x >= 0: log(relu(x) + 0.5)
         let log_g_pos = (activation::relu(x.clone()) + 0.5).log();
         
-        // For x < 0: log(sigmoid(-x)) = -softplus(x)
-        let log_g_neg = -activation::softplus(x.clone(), 1.0);
+        // For x < 0: log(sigmoid(x)) = -softplus(-x)
+        let log_g_neg = -activation::softplus(-x.clone(), 1.0);
         
         (x_positive * log_g_pos) + (x_negative * log_g_neg)
     }
