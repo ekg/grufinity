@@ -514,6 +514,7 @@ impl ContinuousChunkedTextDataset {
     /// Get chunks for the current position in the sequence
     pub fn get_current_chunks(&self) -> Vec<TextChunk> {
         let mut chunks = Vec::with_capacity(self.start_positions.len());
+        let mut rng = rand::thread_rng();
         
         for (doc_id, &start_pos) in self.start_positions.iter().enumerate() {
             let raw_chunk_start = start_pos + (self.current_chunk * self.chunk_size);
@@ -521,33 +522,53 @@ impl ContinuousChunkedTextDataset {
             
             // Ensure we're at valid UTF-8 character boundaries
             let chunk_start = self.find_char_boundary(raw_chunk_start);
-            let chunk_end = self.find_char_boundary(raw_chunk_end);
+            let chunk_end = self.find_char_boundary(raw_chunk_end).min(self.text.len());
             
             let is_last_chunk = self.current_chunk == self.max_chunks - 1;
             let mut is_padded = false;
             
-            // Create the chunk text, handling end-of-text with padding
-            let chunk_text = if chunk_end <= self.text.len() {
+            // Create the chunk text, handling end-of-text with null character + new sample
+            let chunk_text = if chunk_end <= self.text.len() && chunk_end - chunk_start >= self.chunk_size {
+                // Normal case - full chunk available
                 self.text[chunk_start..chunk_end].to_string()
-            } else if chunk_start < self.text.len() {
-                // Partial text + padding (just repeat the last char to reach chunk_size)
-                // Use a valid char boundary for the start
-                let safe_start = self.find_char_boundary(chunk_start);
-                let mut text = self.text[safe_start..].to_string();
-                let last_char = text.chars().last().unwrap_or(' ');
-                while text.len() < self.chunk_size + 1 {
-                    text.push(last_char);
+            } else {
+                // We've reached the end of the text or don't have a full chunk
+                // Start with whatever text is left
+                let mut text = if chunk_start < self.text.len() {
+                    self.text[chunk_start..self.text.len()].to_string()
+                } else {
+                    String::new()
+                };
+                
+                // Insert null character as a separator
+                text.push('\0');
+                
+                // Fill the rest with text from a different part of the corpus
+                let remaining_length = self.chunk_size + 1 - text.len();
+                if remaining_length > 0 {
+                    // Generate a new random starting position for the remaining text
+                    let new_start = rng.gen_range(0..self.text.len().saturating_sub(remaining_length));
+                    let new_start_safe = self.find_char_boundary(new_start);
+                    
+                    // Add text from the new position, ensuring we don't go past the end
+                    let new_end_safe = self.find_char_boundary(new_start_safe + remaining_length).min(self.text.len());
+                    let additional_text = &self.text[new_start_safe..new_end_safe];
+                    
+                    text.push_str(additional_text);
+                    
+                    // If we still need more (rare edge case), repeat until filled
+                    while text.len() < self.chunk_size + 1 {
+                        // Get another chunk from a different position
+                        let fill_start = rng.gen_range(0..self.text.len());
+                        let fill_start_safe = self.find_char_boundary(fill_start);
+                        let fill_char = self.text[fill_start_safe..].chars().next().unwrap_or(' ');
+                        text.push(fill_char);
+                    }
                 }
+                
+                // We've created a mixed chunk with null character, mark it as padded for tracking
                 is_padded = true;
                 text
-            } else {
-                // Completely beyond text - all padding
-                let padding_char = ' ';
-                let padding = std::iter::repeat(padding_char)
-                    .take(self.chunk_size + 1)
-                    .collect::<String>();
-                is_padded = true;
-                padding
             };
             
             chunks.push(TextChunk {
