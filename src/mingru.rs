@@ -375,7 +375,10 @@ impl<B: Backend> MinGRU<B> {
     /// - output: [batch_size, seq_len, hidden_size]
     /// - next_hidden: [batch_size, hidden_size]
     pub fn forward(&self, x: Tensor<B, 3>, prev_hidden: Option<Tensor<B, 2>>) -> (Tensor<B, 3>, Tensor<B, 2>) {
-        let [batch_size, seq_len, _] = x.dims();
+        // Safe extraction of dimensions with bounds checking
+        let batch_size = x.dims().get(0).copied().unwrap_or(1);
+        let seq_len = x.dims().get(1).copied().unwrap_or(1);
+        let input_dim = x.dims().get(2).copied().unwrap_or(1);
         let device = x.device();
     
         // Process input to get hidden and gate values
@@ -390,7 +393,29 @@ impl<B: Backend> MinGRU<B> {
         
         // Handle previous hidden state if it exists
         let (log_values_final, log_coeffs_final) = if let Some(prev_h) = prev_hidden.clone() {
-            let log_prev_h = self.log_g_function(prev_h.unsqueeze::<3>());
+            // Make sure prev_h has the right batch dimension - reshape if needed
+            let prev_h_batch_size = prev_h.dims()[0];
+            let prev_h_dim = prev_h.dims()[1];
+            
+            let prev_h_reshaped = if prev_h_batch_size != batch_size {
+                // Repeat the hidden state for each item in the batch
+                let repeated = prev_h.repeat([batch_size / prev_h_batch_size.max(1), 1]);
+                
+                // If sizes still don't match, broadcast to match batch_size
+                if repeated.dims()[0] != batch_size {
+                    Tensor::full([batch_size, prev_h_dim], 0.0f32, &device)
+                } else {
+                    repeated
+                }
+            } else {
+                prev_h
+            };
+            
+            // Reshape to 3D for log_g_function with proper batch dimension
+            let prev_h_3d = prev_h_reshaped.reshape([batch_size, 1, prev_h_dim]);
+            let log_prev_h = self.log_g_function(prev_h_3d);
+            
+            // Now both tensors should have matching batch dimensions
             let log_values_with_prev = Tensor::cat(vec![log_prev_h, log_values], 1);
             
             // Pad log_coeffs with zeros for previous hidden state
