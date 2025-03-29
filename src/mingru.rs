@@ -333,6 +333,7 @@ impl<B: Backend> MinGRU<B> {
     }
     
     /// g(x) activation function matching PyTorch implementation
+    #[cfg(test)]
     fn g_function(&self, x: Tensor<B, 2>) -> Tensor<B, 2> {
         let zeros = Tensor::zeros_like(&x);
         let x_positive = x.clone().greater_equal(zeros.clone()).float();
