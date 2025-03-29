@@ -24,7 +24,7 @@ static mut VERBOSE: bool = false;
 #[cfg(feature = "tch")]
 fn create_device_for_libtorch<B: Backend>(device_id: usize) -> Option<B::Device> {
     use burn::backend::libtorch::LibTorchDevice;
-    use std::any::{Any, TypeId};
+    use std::any::type_name;
     
     // Get type name to check if it's LibTorch without using private Elem type
     let type_name = std::any::type_name::<B>();
@@ -111,7 +111,7 @@ struct GenerateArgs {
 // Initialize appropriate device based on backend type
 fn initialize_device<B: Backend>(device_id: usize) -> B::Device {
     #[allow(unused_assignments)]
-    let mut device_initialized = false;
+    let device_initialized = false;
     
     // Create appropriate device based on backend type
     // Handle LibTorch devices with a separate specialized function
@@ -496,10 +496,10 @@ fn sample_with_top_k<B: Backend>(
         
         // Simple argmax for deterministic sampling (temperature=0 case)
         if temperature == 0.0 {
-            // Convert to Int tensor type to match expected type
+            // Convert to Int tensor type to match expected type (using i64 for compatibility)
             let indices_i32: Vec<i32> = probs.argmax(1).to_data().into_vec().unwrap();
-            // Use directly without conversion
-            let indices: Vec<i32> = indices_i32;
+            // Convert to i64 for LibTorch compatibility
+            let indices: Vec<i64> = indices_i32.into_iter().map(|x| x as i64).collect();
             return Tensor::<B, 1, Int>::from_data(&*indices, device);
         }
         
@@ -523,8 +523,8 @@ fn sample_with_top_k<B: Backend>(
             }
         }
         
-        // Create a tensor with the selected index - use i32 to match expected Int type
-        let indices: Vec<i32> = vec![selected_idx as i32];
+        // Create a tensor with the selected index - use i64 to match expected Int type
+        let indices: Vec<i64> = vec![selected_idx as i64];
         return Tensor::<B, 1, Int>::from_data(&*indices, device);
     }
     
@@ -547,7 +547,7 @@ fn sample_with_top_k<B: Backend>(
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx) 
         {
-            top_k_indices.push(max_idx as i32);
+            top_k_indices.push(max_idx as i64);
             top_k_values.push(logits_vec[max_idx]);
             // Set this value to negative infinity so it's not picked again
             logits_copy[max_idx] = f32::NEG_INFINITY;
@@ -588,8 +588,8 @@ fn sample_with_top_k<B: Backend>(
     // Get the original vocabulary index
     let final_idx = top_k_indices[selected_idx];
     
-    // Return as a tensor - convert explicitly to Vec<i32> to match expected Int type
-    let indices: Vec<i32> = vec![final_idx];
+    // Return as a tensor - convert explicitly to Vec<i64> to match expected Int type for LibTorch
+    let indices: Vec<i64> = vec![final_idx];
     Tensor::<B, 1, Int>::from_data(&*indices, device)
 }
 
