@@ -28,12 +28,12 @@ enum ValidationResult {
 }
 
 #[cfg(feature = "optimizer-sgd")]
-use burn::{optim::momentum::MomentumConfig, optim::SgdConfig};
+use burn::optim::SgdConfig;
 
 #[cfg(feature = "optimizer-adam")]
 use burn::{optim::decay::WeightDecayConfig, optim::AdamConfig};
 
-// Enable both features for testing
+// Enable Adam by default if no optimizer is specified
 #[cfg(not(any(feature = "optimizer-sgd", feature = "optimizer-adam")))]
 use burn::optim::AdamConfig;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -299,25 +299,33 @@ pub struct TBPTTConfig {
     /// Model configuration
     pub model: MinGRULMConfig,
 
+    // Use conditional compilation to ensure we only have one optimizer field
+    // based on which feature is enabled
     #[cfg(feature = "optimizer-sgd")]
     /// SGD Optimizer configuration
+    #[config(default = "SgdConfig::new()")]
     pub optimizer: SgdConfig,
 
-    #[cfg(feature = "optimizer-adam")]
+    #[cfg(all(feature = "optimizer-adam", not(feature = "optimizer-sgd")))]
     /// Adam Optimizer configuration
     #[config(default = "AdamConfig::new()")]
     pub optimizer: AdamConfig,
 
+    #[cfg(all(not(feature = "optimizer-sgd"), not(feature = "optimizer-adam")))]
+    /// Default optimizer (Adam) when no optimizer feature is specified
+    #[config(default = "AdamConfig::new()")]
+    pub optimizer: AdamConfig,
+
     // Store our own copies of Adam parameters (since they're private in AdamConfig)
-    #[cfg(feature = "optimizer-adam")]
+    #[cfg(any(feature = "optimizer-adam", not(feature = "optimizer-sgd")))]
     #[config(default = 0.9)]
     pub adam_beta1: f32,
 
-    #[cfg(feature = "optimizer-adam")]
+    #[cfg(any(feature = "optimizer-adam", not(feature = "optimizer-sgd")))]
     #[config(default = 0.999)]
     pub adam_beta2: f32,
 
-    #[cfg(feature = "optimizer-adam")]
+    #[cfg(any(feature = "optimizer-adam", not(feature = "optimizer-sgd")))]
     #[config(default = 1e-8)]
     pub adam_epsilon: f32,
 
