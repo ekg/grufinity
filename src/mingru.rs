@@ -378,7 +378,7 @@ impl<B: Backend> MinGRU<B> {
         // Safe extraction of dimensions with bounds checking
         let batch_size = x.dims().get(0).copied().unwrap_or(1);
         let seq_len = x.dims().get(1).copied().unwrap_or(1);
-        let input_dim = x.dims().get(2).copied().unwrap_or(1);
+        let _input_dim = x.dims().get(2).copied().unwrap_or(1);
         let device = x.device();
     
         // Process input to get hidden and gate values
