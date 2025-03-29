@@ -445,7 +445,7 @@ fn torch_cat_tokens<B: Backend>(
     let new_token = new_token.unsqueeze::<2>();
     
     // Copy existing tokens - manually create the tensor by concatenating
-    let mut token_data: Vec<i32> = Vec::with_capacity(batch_size * (seq_len + 1));
+    let mut token_data: Vec<i64> = Vec::with_capacity(batch_size * (seq_len + 1));
     
     // Extract data from existing tokens and new token
     let tokens_data = tokens.to_data().into_vec().unwrap();
