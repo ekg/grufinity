@@ -1,4 +1,4 @@
-use burn::tensor::{backend::Backend, Tensor}; 
+use burn::tensor::{backend::Backend, Tensor, activation}; 
 // Float imported in tests module where needed
 
 // No imports needed at this level for LibTorch
