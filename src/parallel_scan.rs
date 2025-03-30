@@ -445,7 +445,7 @@ pub fn specialized_softplus<B: Backend>(x: Tensor<B, 3>, beta: f32) -> Tensor<B,
     }
     
     // Default to standard activation::softplus
-    activation::softplus(x, beta)
+    activation::softplus(x, beta.into())
 }
 
 /// LibTorch-specific implementation of softplus for better performance
